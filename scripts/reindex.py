@@ -50,6 +50,12 @@ IGNORE_PATTERNS = {
     "logs",
     "coverage",
     ".nyc_output",
+    # Project-specific
+    "data",
+    "benchmark_data",
+    "benchmark_results",
+    "FlagEmbedding-temp",
+    "infinity-temp",
 }
 
 # File extensions to include
@@ -149,10 +155,17 @@ def read_file_content(path: Path) -> str | None:
 
 
 def index_files(
-    api_url: str, store: str, files: list[dict], force: bool = False
+    api_url: str,
+    store: str,
+    files: list[dict],
+    force: bool = False,
+    mode: str | None = None,
 ) -> dict:
     """Send files to API for indexing."""
     url = f"{api_url}/v1/stores/{store}/index"
+    if mode:
+        url = f"{url}?mode={mode}"
+
     data = json.dumps({"files": files, "force": force}).encode("utf-8")
 
     req = urllib.request.Request(
@@ -160,7 +173,7 @@ def index_files(
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=120) as response:
+        with urllib.request.urlopen(req, timeout=300) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8") if e.fp else str(e)
@@ -222,6 +235,12 @@ def main():
     parser.add_argument(
         "--stats", action="store_true", help="Show indexing statistics and exit"
     )
+    parser.add_argument(
+        "--mode",
+        choices=["mixedbread", "bge-m3"],
+        default=None,
+        help="Embedding mode: mixedbread (Infinity) or bge-m3 (BGE-M3)",
+    )
 
     args = parser.parse_args()
 
@@ -246,10 +265,12 @@ def main():
     print(f"Scanning: {root}")
     print(f"Store: {args.store}")
     print(f"API: {args.api_url}")
+    if args.mode:
+        print(f"Embedding mode: {args.mode}")
     if args.force:
-        print(f"Mode: FORCE (re-index all files)")
+        print(f"Indexing mode: FORCE (re-index all files)")
     else:
-        print(f"Mode: INCREMENTAL (only changed files)")
+        print(f"Indexing mode: INCREMENTAL (only changed files)")
     print()
 
     # Collect files
@@ -310,7 +331,9 @@ def main():
         )
 
         try:
-            result = index_files(args.api_url, args.store, batch, force=args.force)
+            result = index_files(
+                args.api_url, args.store, batch, force=args.force, mode=args.mode
+            )
             chunks = result.get("chunks_indexed", 0)
             skipped = result.get("skipped_unchanged", 0)
             errors = len(result.get("errors", []))

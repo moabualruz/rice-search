@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, Min, Max, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, IsIn, Min, Max, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -14,6 +14,8 @@ class SearchFiltersDto {
   languages?: string[];
 }
 
+export type SearchMode = 'mixedbread' | 'bge-m3';
+
 export class SearchRequestDto {
   @ApiProperty({ description: 'Search query' })
   @IsString()
@@ -25,6 +27,32 @@ export class SearchRequestDto {
   @Min(1)
   @Max(10000)
   top_k?: number = 20;
+
+  @ApiPropertyOptional({ 
+    description: 'Search mode: mixedbread (default) or bge-m3',
+    enum: ['mixedbread', 'bge-m3'],
+    default: 'mixedbread'
+  })
+  @IsOptional()
+  @IsIn(['mixedbread', 'bge-m3'])
+  mode?: SearchMode;
+
+  @ApiPropertyOptional({ description: 'Enable neural reranking', default: true })
+  @IsOptional()
+  @IsBoolean()
+  enable_reranking?: boolean;
+
+  @ApiPropertyOptional({ description: 'Number of candidates to rerank', default: 30 })
+  @IsOptional()
+  @IsNumber()
+  @Min(5)
+  @Max(100)
+  rerank_candidates?: number;
+
+  @ApiPropertyOptional({ description: 'Auto-optimize based on query type', default: true })
+  @IsOptional()
+  @IsBoolean()
+  auto_optimize?: boolean;
 
   @ApiPropertyOptional({ description: 'Search filters' })
   @IsOptional()

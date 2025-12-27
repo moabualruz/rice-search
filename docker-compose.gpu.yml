@@ -7,7 +7,8 @@
 #   - Docker configured with nvidia runtime
 #
 # GPU Memory Requirements (approximate):
-#   - TEI (embeddings): ~2GB VRAM for bge-base-en-v1.5
+#   - Infinity (embeddings + reranking): ~4-6GB VRAM
+#   - BGE-M3 (if using): ~4-6GB VRAM
 #   - Milvus: ~2-4GB VRAM depending on index size
 #   - Total recommended: 8GB+ VRAM
 
@@ -31,10 +32,10 @@ services:
       # Enable GPU for indexing and search
       KNOWHERE_GPU_MEM_POOL_SIZE: "2048:4096"
       # Performance tuning (inherited + GPU specific)
-      QUERY_NODE_MAX_CONCURRENT: "512"         # Higher with GPU
+      QUERY_NODE_MAX_CONCURRENT: "512"
       PROXY_MAX_TASK_NUM: "2048"
       QUERYNODE_CACHE_ENABLED: "true"
-      QUERYNODE_CACHE_SIZE: "2147483648"       # 2GB cache with GPU
+      QUERYNODE_CACHE_SIZE: "2147483648"  # 2GB cache with GPU
     deploy:
       resources:
         reservations:
@@ -44,18 +45,40 @@ services:
               capabilities: [gpu]
 
   # ============================================
-  # TEI with GPU acceleration  
-  # Accelerates embedding generation (~10x faster)
+  # Infinity with GPU acceleration
+  # Serves both mxbai-embed-large-v1 and mxbai-rerank-base-v2
+  # ~10x faster embedding generation with GPU
   # ============================================
-  embeddings:
-    image: ghcr.io/huggingface/text-embeddings-inference:1.7
-    command:
-      - "--model-id=BAAI/bge-base-en-v1.5"
-      # GPU can handle much larger batches
-      - "--max-batch-tokens=65536"       # 4x CPU default
-      - "--max-client-batch-size=128"    # 4x CPU default  
-      - "--max-concurrent-requests=1024" # 2x CPU default
-      - "--dtype=float16"                # Half precision for speed
+  infinity:
+    image: michaelf34/infinity:latest
+    command: >
+      v2
+      --model-id mixedbread-ai/mxbai-embed-large-v1
+      --model-id mixedbread-ai/mxbai-rerank-base-v2
+      --port 80
+      --batch-size 64
+      --device cuda
+    environment:
+      - HF_HOME=/app/.cache
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ============================================
+  # BGE-M3 with GPU acceleration (Phase 2)
+  # Dense + Sparse + ColBERT in one model
+  # ============================================
+  bge-m3:
+    environment:
+      - DEVICE=cuda
+      - USE_FP16=true
+      - CUDA_VISIBLE_DEVICES=0
     deploy:
       resources:
         reservations:

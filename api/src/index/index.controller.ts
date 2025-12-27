@@ -60,6 +60,7 @@ export class IndexController {
       request.files,
       request.force,
       request.async,
+      request.mode,
     );
   }
 
@@ -98,7 +99,7 @@ export class IndexController {
     @Param('store') store: string,
     @Body() request: IndexFilesRequestDto,
   ): Promise<IndexResponseDto> {
-    return this.indexService.reindex(store, request.files);
+    return this.indexService.reindex(store, request.files, request.mode);
   }
 
   @Post('sync')

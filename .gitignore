@@ -66,3 +66,7 @@ node_modules/
 jspm_packages/
 **/node_modules/
 **/jspm_packages/
+
+# Benchmark data
+benchmark_data/*
+!benchmark_data/docker-compose.benchmark.yml

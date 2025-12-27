@@ -9,11 +9,25 @@ export default () => ({
     port: parseInt(process.env.MILVUS_PORT || '19530', 10),
   },
 
-  // Embeddings service (TEI)
+  // Embeddings configuration
+  // Note: Uses Infinity service URL for embeddings (OpenAI-compatible format)
   embeddings: {
-    url: process.env.EMBEDDINGS_URL || 'http://localhost:8081',
-    model: process.env.EMBEDDING_MODEL || 'BAAI/bge-base-en-v1.5',
-    dim: parseInt(process.env.EMBEDDING_DIM || '768', 10),
+    url: process.env.EMBEDDINGS_URL || process.env.INFINITY_URL || 'http://infinity:80',
+    dim: parseInt(process.env.EMBEDDING_DIM || '1024', 10),
+  },
+
+  // Infinity service (Mixedbread AI models for embedding + reranking)
+  infinity: {
+    url: process.env.INFINITY_URL || 'http://infinity:80',
+    embedModel: process.env.INFINITY_EMBED_MODEL || 'mixedbread-ai/mxbai-embed-large-v1',
+    rerankModel: process.env.INFINITY_RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-base-v2',
+    timeout: parseInt(process.env.INFINITY_TIMEOUT_MS || '30000', 10),
+  },
+
+  // BGE-M3 service (alternative mode with dense + sparse + ColBERT)
+  bgeM3: {
+    url: process.env.BGE_M3_URL || 'http://bge-m3:80',
+    timeout: parseInt(process.env.BGE_M3_TIMEOUT_MS || '30000', 10),
   },
 
   // Data directories
@@ -24,8 +38,9 @@ export default () => ({
 
   // Search configuration
   search: {
-    sparseTopK: parseInt(process.env.SPARSE_TOPK || '200', 10),
-    denseTopK: parseInt(process.env.DENSE_TOPK || '80', 10),
+    mode: (process.env.SEARCH_MODE || 'mixedbread') as 'mixedbread' | 'bge-m3',
+    sparseTopK: parseInt(process.env.SPARSE_TOPK || '100', 10),
+    denseTopK: parseInt(process.env.DENSE_TOPK || '100', 10),
     finalTopK: parseInt(process.env.FINAL_TOPK || '20', 10),
     rrfK: parseInt(process.env.RRF_K || '60', 10),
   },
@@ -53,6 +68,14 @@ export default () => ({
   redis: {
     host: process.env.REDIS_HOST || 'localhost',
     port: parseInt(process.env.REDIS_PORT || '6379', 10),
+  },
+
+  // Reranking (neural reranker for improved result quality)
+  rerank: {
+    enabled: process.env.RERANK_ENABLED !== 'false', // Default: true
+    timeoutMs: parseInt(process.env.RERANK_TIMEOUT_MS || '100', 10),
+    candidates: parseInt(process.env.RERANK_CANDIDATES || '30', 10),
+    model: process.env.RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-base-v2',
   },
 });
 

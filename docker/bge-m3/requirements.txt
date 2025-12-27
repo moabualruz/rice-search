@@ -1,0 +1,18 @@
+# BGE-M3 Embedding Service Dependencies
+
+# Web framework
+fastapi==0.109.0
+uvicorn[standard]==0.27.0
+
+# BGE-M3 and dependencies
+FlagEmbedding==1.2.10
+torch==2.1.2
+transformers>=4.36.0
+sentence-transformers>=2.2.2
+
+# Data processing
+numpy>=1.24.0
+pydantic==2.5.3
+
+# Optional: for better performance
+# accelerate>=0.25.0  # For distributed/GPU optimization

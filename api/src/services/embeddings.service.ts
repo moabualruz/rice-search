@@ -196,15 +196,15 @@ export class EmbeddingsService implements OnModuleInit {
     }
 
     try {
-      const response = await fetch(`${this.baseUrl}/embed`, {
+      // Use OpenAI-compatible /embeddings endpoint (Infinity format)
+      const response = await fetch(`${this.baseUrl}/embeddings`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          inputs: uncachedTexts,
-          normalize,
-          truncate,
+          model: 'mixedbread-ai/mxbai-embed-large-v1',
+          input: uncachedTexts,
         }),
         signal: AbortSignal.timeout(this.timeout),
         // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
@@ -212,10 +212,12 @@ export class EmbeddingsService implements OnModuleInit {
       });
 
       if (!response.ok) {
-        throw new Error(`Embed request failed: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Embed request failed (${response.status}): ${errorText}`);
       }
 
-      const embeddings = (await response.json()) as number[][];
+      const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
+      const embeddings = data.data.map((item) => item.embedding);
 
       // Cache new embeddings and merge results
       for (let i = 0; i < uncachedIndices.length; i++) {
