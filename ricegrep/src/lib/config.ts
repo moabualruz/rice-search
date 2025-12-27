@@ -8,7 +8,7 @@ const LOCAL_CONFIG_FILES = [".ricegreprc.yaml", ".ricegreprc.yml"] as const;
 const GLOBAL_CONFIG_DIR = ".config/ricegrep";
 const GLOBAL_CONFIG_FILES = ["config.yaml", "config.yml"] as const;
 const ENV_PREFIX = "RICEGREP_";
-const DEFAULT_MAX_FILE_SIZE = 1 * 1024 * 1024;
+const DEFAULT_MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB - local traffic only
 const DEFAULT_MAX_FILE_COUNT = Infinity;
 
 const ConfigSchema = z.object({
@@ -31,7 +31,7 @@ export interface RicegrepConfig {
   /**
    * Maximum file size in bytes that is allowed to upload.
    * Files larger than this will be skipped during sync.
-   * @default 10485760 (10 MB)
+   * @default 1073741824 (1 GB)
    */
   maxFileSize: number;
 

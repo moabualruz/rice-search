@@ -1,5 +1,5 @@
 <div align="center">
-  <a href="https://github.com/rice-search/ricegrep">
+  <a href="https://github.com/moabualruz/rice-search">
     <img src="../.branding/logo.svg" alt="ricegrep" width="96" height="96" />
   </a>
   <h1>ricegrep</h1>
@@ -239,7 +239,7 @@ ricegrep can be configured via config files, environment variables, or CLI flags
 Create a `.ricegreprc.yaml` (or `.ricegreprc.yml`) in your project root for local configuration, or `~/.config/ricegrep/config.yaml` (or `config.yml`) for global configuration.
 
 ```yaml
-# Maximum file size in bytes to upload (default: 10MB)
+# Maximum file size in bytes to upload (default: 1GB)
 maxFileSize: 5242880
 
 # Maximum number of files to upload (default: unlimited)
@@ -283,7 +283,7 @@ searches.
 
 ### Sync Options
 
-- `RICEGREP_MAX_FILE_SIZE`: Maximum file size in bytes to upload (default: `10485760` / 10MB)
+- `RICEGREP_MAX_FILE_SIZE`: Maximum file size in bytes to upload (default: `1073741824` / 1GB)
 - `RICEGREP_MAX_FILE_COUNT`: Maximum number of files to upload (default: unlimited)
 
 **Examples:**

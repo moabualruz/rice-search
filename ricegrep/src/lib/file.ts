@@ -15,6 +15,15 @@ export const DEFAULT_IGNORE_PATTERNS: readonly string[] = [
   "*.safetensors",
   "*.sqlite",
   "*.pt",
+  // Video files
+  "*.mp4",
+  "*.avi",
+  "*.mov",
+  "*.mkv",
+  "*.webm",
+  "*.wmv",
+  "*.flv",
+  "*.m4v",
 ];
 
 /**
@@ -54,10 +63,7 @@ export class NodeFileSystem implements FileSystem {
   private customIgnoreFilter: ReturnType<typeof ignore>;
   private ignoreCache = new Map<string, ReturnType<typeof ignore>>();
 
-  constructor(
-    private git: Git,
-    options: FileSystemOptions,
-  ) {
+  constructor(private git: Git, options: FileSystemOptions) {
     this.customIgnoreFilter = ignore();
     this.customIgnoreFilter.add(options.ignorePatterns);
   }
@@ -69,7 +75,7 @@ export class NodeFileSystem implements FileSystem {
     const relativePath = path.relative(root, filePath);
     const parts = relativePath.split(path.sep);
     return parts.some(
-      (part) => part.startsWith(".") && part !== "." && part !== "..",
+      (part) => part.startsWith(".") && part !== "." && part !== ".."
     );
   }
 
