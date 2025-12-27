@@ -278,7 +278,8 @@ export const search: Command = new CommanderCommand("search")
     }
 
     try {
-      const store = await createStore();
+      // Only show backend URL when syncing (indexing), not for pure search
+      const store = await createStore({ silent: !options.sync });
 
       if (options.sync) {
         const shouldReturn = await syncFiles(

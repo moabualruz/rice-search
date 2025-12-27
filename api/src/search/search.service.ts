@@ -7,6 +7,14 @@ import { HybridRankerService } from '../services/hybrid-ranker.service';
 import { StoreManagerService } from '../services/store-manager.service';
 import { SearchRequestDto } from './dto/search-request.dto';
 
+/**
+ * Normalize path to use forward slashes consistently.
+ * Handles Windows paths (backslashes) for consistent filtering.
+ */
+function normalizePath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
 @Injectable()
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
@@ -29,6 +37,11 @@ export class SearchService {
     const startTime = Date.now();
     const { query, top_k = 20, filters, sparse_weight, dense_weight, group_by_file } = request;
 
+    // Normalize path filter for consistent matching (handles Windows paths)
+    const normalizedPathPrefix = filters?.path_prefix
+      ? normalizePath(filters.path_prefix)
+      : undefined;
+
     // Ensure store exists
     this.storeManager.ensureStore(store);
 
@@ -42,7 +55,7 @@ export class SearchService {
         store,
         query,
         this.sparseTopK,
-        filters?.path_prefix,
+        normalizedPathPrefix,
         filters?.languages?.[0],
       ),
       queryEmbedding
@@ -50,7 +63,7 @@ export class SearchService {
             store,
             queryEmbedding,
             this.denseTopK,
-            filters?.path_prefix,
+            normalizedPathPrefix,
             filters?.languages,
           )
         : Promise.resolve([]),

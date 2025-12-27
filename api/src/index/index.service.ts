@@ -17,6 +17,14 @@ import {
   DeleteResponseDto,
 } from './dto/index-request.dto';
 
+/**
+ * Normalize path to use forward slashes consistently.
+ * Handles Windows paths (backslashes) and ensures consistent storage/querying.
+ */
+function normalizePath(filePath: string): string {
+  return filePath.replace(/\\/g, '/');
+}
+
 @Injectable()
 export class IndexService {
   private readonly logger = new Logger(IndexService.name);
@@ -57,15 +65,21 @@ export class IndexService {
     // Ensure store exists
     this.storeManager.ensureStore(store);
 
+    // Normalize all paths to use forward slashes (handles Windows paths)
+    const normalizedFiles = files.map((f) => ({
+      ...f,
+      path: normalizePath(f.path),
+    }));
+
     // Incremental indexing: Check which files have changed
     let filesToProcess: FileToIndex[];
     if (force) {
-      filesToProcess = files;
-      this.logger.log(`Force re-index: processing all ${files.length} files`);
+      filesToProcess = normalizedFiles;
+      this.logger.log(`Force re-index: processing all ${normalizedFiles.length} files`);
     } else {
       const changeResult = this.fileTracker.checkFilesForChanges(
         store,
-        files.map((f) => ({ path: f.path, content: f.content })),
+        normalizedFiles.map((f) => ({ path: f.path, content: f.content })),
       );
       
       // Combine changed and new files for processing
@@ -265,9 +279,13 @@ export class IndexService {
     let sparseDeleted = 0;
     let denseDeleted = 0;
 
+    // Normalize paths for consistent matching
+    const normalizedPaths = paths?.map(normalizePath);
+    const normalizedPrefix = pathPrefix ? normalizePath(pathPrefix) : undefined;
+
     // Delete by specific paths
-    if (paths && paths.length > 0) {
-      for (const path of paths) {
+    if (normalizedPaths && normalizedPaths.length > 0) {
+      for (const path of normalizedPaths) {
         try {
           sparseDeleted += await this.tantivyQueue.delete(store, { path });
           // Untrack the file
@@ -277,23 +295,23 @@ export class IndexService {
         }
       }
       // Milvus delete by path is less efficient, use prefix for each path
-      for (const path of paths) {
+      for (const path of normalizedPaths) {
         denseDeleted += await this.milvus.deleteByPathPrefix(store, path);
       }
     }
 
     // Delete by path prefix
-    if (pathPrefix) {
+    if (normalizedPrefix) {
       try {
-        sparseDeleted += await this.tantivyQueue.delete(store, { path: pathPrefix });
+        sparseDeleted += await this.tantivyQueue.delete(store, { path: normalizedPrefix });
         // Untrack files by prefix
-        this.fileTracker.untrackByPrefix(store, pathPrefix);
+        this.fileTracker.untrackByPrefix(store, normalizedPrefix);
       } catch (error) {
         this.logger.warn(
-          `Failed to delete from Tantivy by prefix: ${pathPrefix}: ${error}`,
+          `Failed to delete from Tantivy by prefix: ${normalizedPrefix}: ${error}`,
         );
       }
-      denseDeleted += await this.milvus.deleteByPathPrefix(store, pathPrefix);
+      denseDeleted += await this.milvus.deleteByPathPrefix(store, normalizedPrefix);
     }
 
     // Update store timestamp
@@ -331,7 +349,9 @@ export class IndexService {
     store: string,
     currentPaths: string[],
   ): Promise<{ deleted: number }> {
-    const deletedPaths = this.fileTracker.findDeletedFiles(store, currentPaths);
+    // Normalize paths for consistent matching
+    const normalizedCurrentPaths = currentPaths.map(normalizePath);
+    const deletedPaths = this.fileTracker.findDeletedFiles(store, normalizedCurrentPaths);
     
     if (deletedPaths.length === 0) {
       return { deleted: 0 };
