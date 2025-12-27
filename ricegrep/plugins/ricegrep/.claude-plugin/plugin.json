@@ -1,0 +1,9 @@
+{
+  "name": "ricegrep",
+  "description": "Search your local files using Rice Search",
+  "version": "0.0.0",
+  "author": {
+    "name": "Mo Abualruz"
+  },
+  "hooks": "./hooks/hook.json"
+}

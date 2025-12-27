@@ -1,0 +1,338 @@
+import { join, normalize } from "node:path";
+import type { Command } from "commander";
+import { Command as CommanderCommand, InvalidArgumentError } from "commander";
+import {
+  type CliConfigOptions,
+  loadConfig,
+  type RicegrepConfig,
+} from "../lib/config.js";
+import { createFileSystem, createStore } from "../lib/context.js";
+import { DEFAULT_IGNORE_PATTERNS } from "../lib/file.js";
+import type {
+  AskResponse,
+  ChunkType,
+  FileMetadata,
+  SearchResponse,
+  Store,
+} from "../lib/store.js";
+import {
+  createIndexingSpinner,
+  formatDryRunSummary,
+} from "../lib/sync-helpers.js";
+import {
+  initialSync,
+  isAtOrAboveHomeDirectory,
+  QuotaExceededError,
+} from "../lib/utils.js";
+
+function extractSources(response: AskResponse): { [key: number]: ChunkType } {
+  const sources: { [key: number]: ChunkType } = {};
+  const answer = response.answer;
+
+  // Match ALL cite tags and capture the i="..."
+  const citeTags = answer.match(/<cite i="(\d+(?:-\d+)?)"/g) ?? [];
+
+  for (const tag of citeTags) {
+    // Extract the index or index range inside the tag.
+    const index = tag.match(/i="(\d+(?:-\d+)?)"/)?.[1];
+    if (!index) continue;
+
+    // Case 1: Single index
+    if (!index.includes("-")) {
+      const idx = Number(index);
+      if (!Number.isNaN(idx) && idx < response.sources.length) {
+        sources[idx] = response.sources[idx];
+      }
+      continue;
+    }
+
+    // Case 2: Range "start-end"
+    const [start, end] = index.split("-").map(Number);
+
+    if (
+      !Number.isNaN(start) &&
+      !Number.isNaN(end) &&
+      start >= 0 &&
+      end >= start &&
+      end < response.sources.length
+    ) {
+      for (let i = start; i <= end; i++) {
+        sources[i] = response.sources[i];
+      }
+    }
+  }
+
+  return sources;
+}
+
+function formatAskResponse(response: AskResponse, show_content: boolean) {
+  const sources = extractSources(response);
+  const sourceEntries = Object.entries(sources).map(
+    ([index, chunk]) => `${index}: ${formatChunk(chunk, show_content)}`,
+  );
+  return `${response.answer}\n\n${sourceEntries.join("\n")}`;
+}
+
+function formatSearchResponse(response: SearchResponse, show_content: boolean) {
+  return response.data
+    .map((chunk) => formatChunk(chunk, show_content))
+    .join("\n");
+}
+
+function isWebResult(chunk: ChunkType): boolean {
+  return (
+    "filename" in chunk &&
+    typeof chunk.filename === "string" &&
+    chunk.filename.startsWith("http")
+  );
+}
+
+function formatChunk(chunk: ChunkType, show_content: boolean) {
+  const pwd = process.cwd();
+
+  if (isWebResult(chunk) && chunk.type === "text") {
+    const url = "filename" in chunk ? chunk.filename : "Unknown URL";
+    const content = show_content ? chunk.text : "";
+    return `${url} (${(chunk.score * 100).toFixed(2)}% match)${content ? `\n${content}` : ""}`;
+  }
+
+  const path =
+    (chunk.metadata as FileMetadata)?.path?.replace(pwd, "") ?? "Unknown path";
+  let line_range = "";
+  let content = "";
+  
+  // Rice Search only handles text chunks (code files)
+  const start_line = (chunk.generated_metadata?.start_line ?? 0) + 1;
+  const end_line = start_line + (chunk.generated_metadata?.num_lines ?? 1);
+  line_range = `:${start_line}-${end_line}`;
+  content = show_content ? chunk.text : "";
+
+  return `.${path}${line_range} (${(chunk.score * 100).toFixed(2)}% match)${content ? `\n${content}` : ""}`;
+}
+
+function parseBooleanEnv(
+  envVar: string | undefined,
+  defaultValue: boolean,
+): boolean {
+  if (envVar === undefined) return defaultValue;
+  const lower = envVar.toLowerCase();
+  return lower === "1" || lower === "true" || lower === "yes" || lower === "y";
+}
+
+/**
+ * Syncs local files to the store with progress indication.
+ * @returns true if the caller should return early (dry-run mode), false otherwise
+ */
+async function syncFiles(
+  store: Store,
+  storeName: string,
+  root: string,
+  dryRun: boolean,
+  config?: RicegrepConfig,
+): Promise<boolean> {
+  const { spinner, onProgress } = createIndexingSpinner(root);
+
+  try {
+    const fileSystem = createFileSystem({
+      ignorePatterns: [...DEFAULT_IGNORE_PATTERNS],
+    });
+    const result = await initialSync(
+      store,
+      fileSystem,
+      storeName,
+      root,
+      dryRun,
+      onProgress,
+      config,
+    );
+
+    while (true) {
+      const info = await store.getInfo(storeName);
+      spinner.text = `Indexing ${info.counts.pending + info.counts.in_progress} file(s)`;
+      if (info.counts.pending === 0 && info.counts.in_progress === 0) {
+        break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
+
+    spinner.succeed("Indexing complete");
+
+    if (dryRun) {
+      console.log(
+        formatDryRunSummary(result, {
+          actionDescription: "would have indexed",
+        }),
+      );
+      return true;
+    }
+
+    return false;
+  } catch (error) {
+    spinner.stop();
+    throw error;
+  }
+}
+
+export const search: Command = new CommanderCommand("search")
+  .description("File pattern searcher")
+  .option("-i", "Makes the search case-insensitive", false)
+  .option("-r", "Recursive search", false)
+  .option(
+    "-m, --max-count <max_count>",
+    "The maximum number of results to return",
+    process.env.RICEGREP_MAX_COUNT || "10",
+  )
+  .option(
+    "-c, --content",
+    "Show content of the results",
+    parseBooleanEnv(process.env.RICEGREP_CONTENT, false),
+  )
+  .option(
+    "-a, --answer",
+    "Generate an answer to the question based on the results",
+    parseBooleanEnv(process.env.RICEGREP_ANSWER, false),
+  )
+  .option(
+    "-s, --sync",
+    "Syncs the local files to the store before searching",
+    parseBooleanEnv(process.env.RICEGREP_SYNC, false),
+  )
+  .option(
+    "-d, --dry-run",
+    "Dry run the search process (no actual file syncing)",
+    parseBooleanEnv(process.env.RICEGREP_DRY_RUN, false),
+  )
+  .option(
+    "--no-rerank",
+    "Disable reranking of search results",
+    parseBooleanEnv(process.env.RICEGREP_RERANK, true), // `true` here means that reranking is enabled by default
+  )
+  .option(
+    "--max-file-size <bytes>",
+    "Maximum file size in bytes to upload",
+    (value) => {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        throw new InvalidArgumentError("Must be a positive integer.");
+      }
+      return parsed;
+    },
+  )
+  .option(
+    "--max-file-count <count>",
+    "Maximum number of files to upload",
+    (value) => {
+      const parsed = Number.parseInt(value, 10);
+      if (Number.isNaN(parsed) || parsed <= 0) {
+        throw new InvalidArgumentError("Must be a positive integer.");
+      }
+      return parsed;
+    },
+  )
+  .option(
+    "-w, --web",
+    "Include web search results",
+    parseBooleanEnv(process.env.RICEGREP_WEB, false),
+  )
+  .argument("<pattern>", "The pattern to search for")
+  .argument("[path]", "The path to search in")
+  .allowUnknownOption(true)
+  .allowExcessArguments(true)
+  .action(async (pattern, exec_path, _options, cmd) => {
+    const options: {
+      store: string;
+      maxCount: string;
+      content: boolean;
+      answer: boolean;
+      sync: boolean;
+      dryRun: boolean;
+      rerank: boolean;
+      maxFileSize?: number;
+      maxFileCount?: number;
+      web: boolean;
+    } = cmd.optsWithGlobals();
+    if (exec_path?.startsWith("--")) {
+      exec_path = "";
+    }
+
+    const root = process.cwd();
+    const cliOptions: CliConfigOptions = {
+      maxFileSize: options.maxFileSize,
+      maxFileCount: options.maxFileCount,
+    };
+    const config = loadConfig(root, cliOptions);
+
+    const search_path = exec_path?.startsWith("/")
+      ? exec_path
+      : normalize(join(root, exec_path ?? ""));
+
+    if (options.sync && isAtOrAboveHomeDirectory(search_path)) {
+      console.error(
+        "Error: Cannot sync home directory or any parent directory.",
+      );
+      console.error(
+        "Please run this command from within a specific project subdirectory.",
+      );
+      process.exitCode = 1;
+      return;
+    }
+
+    try {
+      const store = await createStore();
+
+      if (options.sync) {
+        const shouldReturn = await syncFiles(
+          store,
+          options.store,
+          search_path,
+          options.dryRun,
+          config,
+        );
+        if (shouldReturn) {
+          return;
+        }
+      }
+
+      const storeIds = [options.store];
+
+      const filters = {
+        all: [
+          {
+            key: "path",
+            operator: "starts_with" as const,
+            value: search_path,
+          },
+        ],
+      };
+
+      let response: string;
+      if (!options.answer) {
+        const results = await store.search(
+          storeIds,
+          pattern,
+          parseInt(options.maxCount, 10),
+          { rerank: options.rerank },
+          filters,
+        );
+        response = formatSearchResponse(results, options.content);
+      } else {
+        const results = await store.ask(
+          storeIds,
+          pattern,
+          parseInt(options.maxCount, 10),
+          { rerank: options.rerank },
+          filters,
+        );
+        response = formatAskResponse(results, options.content);
+      }
+
+      console.log(response);
+    } catch (error) {
+      if (error instanceof QuotaExceededError) {
+        console.error(
+          "Storage limit exceeded. Please free up space or adjust your file count limits.\n",
+        );
+      }
+      process.exitCode = 1;
+    }
+  });
