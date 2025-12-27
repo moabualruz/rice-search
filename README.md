@@ -1,5 +1,12 @@
-# Rice Search Platform
+<div align="center">
 
+ <img src=".branding/logo.svg" alt="rice logo">
+
+# **🔍Rice Search Platform🔎**
+
+[![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
+
+</div>
 A fully local, production-ready code search platform with hybrid BM25 + semantic search. Self-hosted hybrid search for code with ricegrep CLI support.
 
 ## Features
