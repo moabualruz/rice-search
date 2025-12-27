@@ -24,6 +24,9 @@ FROM oven/bun:1 AS bun-builder
 
 WORKDIR /app
 
+# Install curl for WASM download
+RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+
 # Copy package files
 COPY package.json bun.lockb* bunfig.toml ./
 
@@ -33,6 +36,13 @@ RUN bun install --frozen-lockfile || bun install
 # Copy source code
 COPY tsconfig.json tsconfig.build.json nest-cli.json ./
 COPY src ./src
+
+# Copy WASM download script and any existing WASM files from repo
+COPY scripts/download-wasm.sh ./scripts/
+COPY wasm ./wasm
+
+# Download latest WASM files (overrides repo versions)
+RUN chmod +x ./scripts/download-wasm.sh && ./scripts/download-wasm.sh ./wasm --force
 
 # Build the application using NestJS CLI via Bun
 RUN bun run build
@@ -52,9 +62,10 @@ RUN apt-get update && apt-get install -y \
 # Copy Tantivy binary from rust-builder
 COPY --from=rust-builder /build/tantivy/target/release/tantivy-cli /usr/local/bin/
 
-# Copy node_modules and built application
+# Copy node_modules, built application, and WASM files
 COPY --from=bun-builder /app/node_modules ./node_modules
 COPY --from=bun-builder /app/dist ./dist
+COPY --from=bun-builder /app/wasm ./wasm
 COPY --from=bun-builder /app/package.json ./
 
 # Create data directories

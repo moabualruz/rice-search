@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingsService } from '../services/embeddings.service';
 import { MilvusService } from '../services/milvus.service';
-import { TantivyService } from '../services/tantivy.service';
+import { TantivyQueueService } from '../services/tantivy-queue.service';
 import { StoreManagerService } from '../services/store-manager.service';
 import { FileTrackerService } from '../services/file-tracker.service';
 import { EmbeddingQueueService } from '../services/embedding-queue.service';
@@ -27,7 +27,7 @@ export class IndexService {
     private configService: ConfigService,
     private embeddings: EmbeddingsService,
     private milvus: MilvusService,
-    private tantivy: TantivyService,
+    private tantivyQueue: TantivyQueueService,
     private storeManager: StoreManagerService,
     private fileTracker: FileTrackerService,
     private treeSitterChunker: TreeSitterChunkerService,
@@ -103,8 +103,9 @@ export class IndexService {
       };
     }
 
-    // Process files using Tree-sitter chunker - index each file separately
+    // Process files using Tree-sitter chunker
     const allChunks: TreeSitterChunk[] = [];
+    const fileChunkMap: Map<string, { file: FileToIndex; chunks: TreeSitterChunk[] }> = new Map();
 
     for (const file of filesToProcess) {
       try {
@@ -132,40 +133,41 @@ export class IndexService {
         if (chunks.length === 0) {
           continue;
         }
-        
-        // Index this file's chunks in Tantivy immediately (file by file)
-        try {
-          const tantivyDocs = chunks.map((chunk) => ({
-            doc_id: chunk.doc_id,
-            path: chunk.path,
-            language: chunk.language,
-            symbols: chunk.symbols,
-            content: chunk.content,
-            start_line: chunk.start_line,
-            end_line: chunk.end_line,
-          }));
 
-          await this.tantivy.index(store, tantivyDocs);
-        } catch (error) {
-          const errorMsg = `Tantivy indexing failed for ${file.path}: ${error}`;
-          this.logger.error(errorMsg);
-          errors.push(errorMsg);
-          continue; // Skip this file but continue with others
-        }
-
-        // Track file immediately after successful Tantivy index
-        this.fileTracker.trackFiles(store, [{
-          path: file.path,
-          content: file.content,
-          chunkIds: chunks.map((c) => c.doc_id),
-        }]);
-
+        fileChunkMap.set(file.path, { file, chunks });
         allChunks.push(...chunks);
       } catch (error) {
         const errorMsg = `Failed to process ${file.path}: ${error}`;
         this.logger.warn(errorMsg);
         errors.push(errorMsg);
       }
+    }
+
+    // Batch index all chunks to Tantivy (fire-and-forget)
+    // Tantivy processes in background via queue - don't block on completion
+    if (allChunks.length > 0) {
+      const tantivyDocs = allChunks.map((chunk) => ({
+        doc_id: chunk.doc_id,
+        path: chunk.path,
+        language: chunk.language,
+        symbols: chunk.symbols,
+        content: chunk.content,
+        start_line: chunk.start_line,
+        end_line: chunk.end_line,
+      }));
+
+      // Fire-and-forget: queue job but don't wait for completion
+      // Tantivy indexing happens in background, eventually catches up
+      const { jobId } = await this.tantivyQueue.index(store, tantivyDocs);
+      this.logger.debug(`Queued Tantivy job ${jobId} for ${tantivyDocs.length} chunks`);
+
+      // Track files immediately (before Tantivy completes)
+      const filesToTrack = Array.from(fileChunkMap.values()).map(({ file, chunks }) => ({
+        path: file.path,
+        content: file.content,
+        chunkIds: chunks.map((c) => c.doc_id),
+      }));
+      this.fileTracker.trackFiles(store, filesToTrack);
     }
 
     if (allChunks.length === 0) {
@@ -267,7 +269,7 @@ export class IndexService {
     if (paths && paths.length > 0) {
       for (const path of paths) {
         try {
-          sparseDeleted += await this.tantivy.delete(store, { path });
+          sparseDeleted += await this.tantivyQueue.delete(store, { path });
           // Untrack the file
           this.fileTracker.untrackFile(store, path);
         } catch (error) {
@@ -283,7 +285,7 @@ export class IndexService {
     // Delete by path prefix
     if (pathPrefix) {
       try {
-        sparseDeleted += await this.tantivy.delete(store, { path: pathPrefix });
+        sparseDeleted += await this.tantivyQueue.delete(store, { path: pathPrefix });
         // Untrack files by prefix
         this.fileTracker.untrackByPrefix(store, pathPrefix);
       } catch (error) {

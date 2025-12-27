@@ -25,34 +25,6 @@ export interface TantivySearchResult {
   rank: number;
 }
 
-/**
- * Simple async mutex for serializing write operations
- * Tantivy only allows one IndexWriter at a time per store
- */
-class AsyncMutex {
-  private locks: Map<string, Promise<void>> = new Map();
-
-  async acquire(key: string): Promise<() => void> {
-    // Wait for any existing lock on this key
-    while (this.locks.has(key)) {
-      await this.locks.get(key);
-    }
-
-    // Create a new lock
-    let release: () => void;
-    const lockPromise = new Promise<void>((resolve) => {
-      release = resolve;
-    });
-    this.locks.set(key, lockPromise);
-
-    // Return release function
-    return () => {
-      this.locks.delete(key);
-      release!();
-    };
-  }
-}
-
 @Injectable()
 export class TantivyService {
   private readonly logger = new Logger(TantivyService.name);
@@ -60,7 +32,6 @@ export class TantivyService {
   private readonly indexDir: string;
   private readonly useCargo: boolean;
   private readonly projectDir: string;
-  private readonly writeMutex = new AsyncMutex();
 
   constructor(private configService: ConfigService) {
     this.cliPath = this.configService.get<string>('tantivy.cliPath')!;
@@ -124,20 +95,17 @@ export class TantivyService {
   }
 
   /**
-   * Index documents using Tantivy
-   * Serialized per-store to prevent lock contention
+   * Index documents using Tantivy (direct CLI call).
+   * Use TantivyQueueService.index() for queued/serialized access.
    * @param store Store name
    * @param documents Documents to index
    * @returns Indexing result
    */
-  async index(
+  async indexDirect(
     store: string,
     documents: TantivyDocument[],
   ): Promise<{ indexed: number; errors: number }> {
     const indexPath = this.getIndexPath(store);
-
-    // Acquire write lock for this store
-    const release = await this.writeMutex.acquire(store);
 
     try {
       // Convert documents to JSON lines
@@ -157,9 +125,17 @@ export class TantivyService {
     } catch (error) {
       this.logger.error(`Indexing failed: ${error}`);
       throw error;
-    } finally {
-      release();
     }
+  }
+
+  /**
+   * Alias for backward compatibility - prefer TantivyQueueService.index()
+   */
+  async index(
+    store: string,
+    documents: TantivyDocument[],
+  ): Promise<{ indexed: number; errors: number }> {
+    return this.indexDirect(store, documents);
   }
 
   /**
@@ -217,20 +193,17 @@ export class TantivyService {
   }
 
   /**
-   * Delete documents from Tantivy index
-   * Serialized per-store to prevent lock contention
+   * Delete documents from Tantivy index (direct CLI call).
+   * Use TantivyQueueService.delete() for queued/serialized access.
    * @param store Store name
    * @param options Delete options
    * @returns Number of deleted documents
    */
-  async delete(
+  async deleteDirect(
     store: string,
     options: { path?: string; docId?: string },
   ): Promise<number> {
     const indexPath = this.getIndexPath(store);
-
-    // Acquire write lock for this store
-    const release = await this.writeMutex.acquire(store);
 
     try {
       const args = ['--index-path', indexPath, '--store', store];
@@ -249,9 +222,17 @@ export class TantivyService {
     } catch (error) {
       this.logger.error(`Delete failed: ${error}`);
       throw error;
-    } finally {
-      release();
     }
+  }
+
+  /**
+   * Alias for backward compatibility - prefer TantivyQueueService.delete()
+   */
+  async delete(
+    store: string,
+    options: { path?: string; docId?: string },
+  ): Promise<number> {
+    return this.deleteDirect(store, options);
   }
 
   /**

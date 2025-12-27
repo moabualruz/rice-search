@@ -23,7 +23,7 @@ export class SearchRequestDto {
   @IsOptional()
   @IsNumber()
   @Min(1)
-  @Max(100)
+  @Max(10000)
   top_k?: number = 20;
 
   @ApiPropertyOptional({ description: 'Search filters' })

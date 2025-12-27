@@ -34,6 +34,26 @@ services:
       - rice-network
 
   # ============================================
+  # Infrastructure: Redis (Job queue for BullMQ)
+  # ============================================
+  redis:
+    container_name: rice-redis
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - ./data/redis:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
   # Infrastructure: MinIO (Milvus object storage)
   # ============================================
   minio:
@@ -169,6 +189,8 @@ services:
       MILVUS_HOST: milvus
       MILVUS_PORT: "19530"
       EMBEDDINGS_URL: http://embeddings:80
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
       
       # Data directories
       DATA_DIR: /data
@@ -190,8 +212,9 @@ services:
       # Logging
       LOG_LEVEL: INFO
       
-      # Performance: Enable clustering for multi-core
-      CLUSTER_MODE: "true"
+      # Single process mode - Bun async I/O handles concurrency well
+      # Clustering disabled to simplify Tantivy queue serialization
+      CLUSTER_MODE: "false"
       NODE_ENV: production
       
       # Bun runtime tuning
@@ -212,6 +235,8 @@ services:
       milvus:
         condition: service_healthy
       embeddings:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     restart: unless-stopped
     deploy:

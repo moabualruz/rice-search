@@ -233,13 +233,14 @@ export class EmbeddingsService implements OnModuleInit {
   }
 
   /**
-   * Embed large batches with automatic chunking and MAXIMUM parallel processing
-   * All batches fire simultaneously - no concurrency limits
+   * Embed large batches with automatic chunking and controlled concurrency
+   * Limits parallel requests to avoid overwhelming the TEI service
    */
   async embedBatch(
     texts: string[],
     batchSize = 32,
     normalize = true,
+    maxConcurrent = 4, // Limit concurrent requests to TEI
   ): Promise<number[][]> {
     if (texts.length === 0) {
       return [];
@@ -251,13 +252,18 @@ export class EmbeddingsService implements OnModuleInit {
       batches.push(texts.slice(i, i + batchSize));
     }
 
-    // Fire ALL batches simultaneously - maximum concurrency
-    const batchResults = await Promise.all(
-      batches.map((batch) => this.embed(batch, normalize))
-    );
+    // Process batches with limited concurrency
+    const results: number[][][] = [];
+    for (let i = 0; i < batches.length; i += maxConcurrent) {
+      const chunk = batches.slice(i, i + maxConcurrent);
+      const chunkResults = await Promise.all(
+        chunk.map((batch) => this.embed(batch, normalize))
+      );
+      results.push(...chunkResults);
+    }
 
     // Flatten results
-    return batchResults.flat();
+    return results.flat();
   }
 
   /**

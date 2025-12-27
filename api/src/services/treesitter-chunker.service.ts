@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import * as path from 'path';
+import * as fs from 'fs';
 import { getLanguageFromExtension } from '../config/configuration';
 
 /**
@@ -34,57 +35,115 @@ export interface TreeSitterChunk {
  * Language-specific node types that define natural chunk boundaries
  */
 const CHUNK_BOUNDARY_NODES: Record<string, string[]> = {
-  python: [
-    'function_definition',
-    'class_definition',
-    'decorated_definition',
-    'module',
-  ],
+  // Web / Frontend
   javascript: [
-    'function_declaration',
-    'class_declaration',
-    'method_definition',
-    'arrow_function',
-    'export_statement',
+    'function_declaration', 'class_declaration', 'method_definition',
+    'arrow_function', 'export_statement', 'lexical_declaration',
   ],
   typescript: [
-    'function_declaration',
-    'class_declaration',
-    'method_definition',
-    'arrow_function',
-    'export_statement',
-    'interface_declaration',
-    'type_alias_declaration',
+    'function_declaration', 'class_declaration', 'method_definition',
+    'arrow_function', 'export_statement', 'interface_declaration',
+    'type_alias_declaration', 'enum_declaration', 'module',
+  ],
+  tsx: [
+    'function_declaration', 'class_declaration', 'method_definition',
+    'arrow_function', 'export_statement', 'interface_declaration',
+  ],
+  jsx: [
+    'function_declaration', 'class_declaration', 'method_definition',
+    'arrow_function', 'export_statement',
+  ],
+  html: ['element', 'script_element', 'style_element'],
+  css: ['rule_set', 'media_statement', 'keyframes_statement'],
+  vue: ['component', 'script_element', 'template_element', 'style_element'],
+  svelte: ['script', 'element', 'style_element'],
+
+  // Systems / Backend
+  python: [
+    'function_definition', 'class_definition', 'decorated_definition',
+    'async_function_definition', 'module',
   ],
   rust: [
-    'function_item',
-    'impl_item',
-    'struct_item',
-    'enum_item',
-    'trait_item',
-    'mod_item',
+    'function_item', 'impl_item', 'struct_item', 'enum_item',
+    'trait_item', 'mod_item', 'macro_definition',
   ],
   go: [
-    'function_declaration',
-    'method_declaration',
-    'type_declaration',
+    'function_declaration', 'method_declaration', 'type_declaration',
+    'type_spec', 'interface_type',
   ],
   java: [
-    'method_declaration',
-    'class_declaration',
-    'interface_declaration',
-    'constructor_declaration',
+    'method_declaration', 'class_declaration', 'interface_declaration',
+    'constructor_declaration', 'enum_declaration', 'annotation_type_declaration',
   ],
+  kotlin: [
+    'function_declaration', 'class_declaration', 'object_declaration',
+    'interface_declaration', 'property_declaration',
+  ],
+  scala: [
+    'function_definition', 'class_definition', 'object_definition',
+    'trait_definition', 'val_definition',
+  ],
+  c: ['function_definition', 'struct_specifier', 'enum_specifier', 'type_definition'],
   cpp: [
-    'function_definition',
-    'class_specifier',
-    'struct_specifier',
-    'namespace_definition',
+    'function_definition', 'class_specifier', 'struct_specifier',
+    'namespace_definition', 'template_declaration', 'enum_specifier',
   ],
-  c: [
-    'function_definition',
-    'struct_specifier',
+  csharp: [
+    'method_declaration', 'class_declaration', 'interface_declaration',
+    'struct_declaration', 'enum_declaration', 'namespace_declaration',
   ],
+  swift: [
+    'function_declaration', 'class_declaration', 'protocol_declaration',
+    'struct_declaration', 'enum_declaration', 'extension_declaration',
+  ],
+
+  // Scripting
+  ruby: [
+    'method', 'class', 'module', 'singleton_method', 'block',
+  ],
+  php: [
+    'function_definition', 'class_declaration', 'method_declaration',
+    'trait_declaration', 'interface_declaration',
+  ],
+  perl: ['subroutine_declaration', 'package_declaration'],
+  lua: ['function_declaration', 'local_function', 'function_definition'],
+  elixir: ['def', 'defp', 'defmodule', 'defmacro', 'defimpl'],
+  haskell: ['function', 'data', 'class', 'instance', 'type_signature'],
+
+  // Shell
+  shell: ['function_definition', 'compound_statement'],
+  bash: ['function_definition', 'compound_statement'],
+  powershell: ['function_definition', 'class_statement'],
+
+  // Data formats
+  json: ['object', 'array'],
+  yaml: ['block_mapping', 'block_sequence'],
+  toml: ['table', 'array'],
+  xml: ['element'],
+
+  // Query
+  sql: ['create_statement', 'select_statement', 'function_definition'],
+  graphql: ['definition', 'type_definition', 'operation_definition'],
+
+  // Documentation
+  markdown: ['section', 'heading', 'fenced_code_block'],
+
+  // Other
+  zig: ['fn_decl', 'struct_decl', 'enum_decl'],
+  dart: ['function_signature', 'class_definition', 'method_signature', 'function_body'],
+  solidity: ['function_definition', 'contract_declaration', 'struct_declaration', 'event_definition', 'modifier_definition'],
+  proto: ['message', 'service', 'enum'],
+  terraform: ['block', 'resource', 'module'],
+  nix: ['function', 'binding', 'attrset'],
+  
+  // Additional languages with WASM support
+  elm: ['function_declaration_left', 'type_declaration', 'type_alias_declaration', 'port_annotation'],
+  rescript: ['let_binding', 'type_declaration', 'module_declaration', 'external_declaration'],
+  elisp: ['defun', 'defvar', 'defconst', 'defmacro', 'defcustom'],
+  ocaml: ['value_definition', 'type_definition', 'module_definition', 'class_definition'],
+  tlaplus: ['operator_definition', 'function_definition', 'module'],
+  ql: ['predicate', 'class', 'module', 'select'],
+  systemrdl: ['component_def', 'field_def', 'enum_def'],
 };
 
 /**
@@ -158,16 +217,67 @@ export class TreeSitterChunkerService implements OnModuleInit {
     }
 
     // Map our language names to tree-sitter WASM files
+    // Complete list of all available parsers in tree-sitter-wasms@0.1.13
     const languageMap: Record<string, string> = {
-      python: 'tree-sitter-python',
+      // Web / Frontend
       javascript: 'tree-sitter-javascript',
       typescript: 'tree-sitter-typescript',
       tsx: 'tree-sitter-tsx',
+      jsx: 'tree-sitter-javascript', // Use JS parser for JSX
+      html: 'tree-sitter-html',
+      css: 'tree-sitter-css',
+      vue: 'tree-sitter-vue',
+      svelte: 'tree-sitter-html', // Use HTML parser for Svelte
+      
+      // Systems / Backend
+      python: 'tree-sitter-python',
       rust: 'tree-sitter-rust',
       go: 'tree-sitter-go',
       java: 'tree-sitter-java',
-      cpp: 'tree-sitter-cpp',
+      kotlin: 'tree-sitter-kotlin',
+      scala: 'tree-sitter-scala',
       c: 'tree-sitter-c',
+      cpp: 'tree-sitter-cpp',
+      csharp: 'tree-sitter-c_sharp',
+      swift: 'tree-sitter-swift',
+      objectivec: 'tree-sitter-objc',
+      dart: 'tree-sitter-dart',
+      
+      // Scripting
+      ruby: 'tree-sitter-ruby',
+      php: 'tree-sitter-php',
+      lua: 'tree-sitter-lua',
+      elixir: 'tree-sitter-elixir',
+      ocaml: 'tree-sitter-ocaml',
+      elm: 'tree-sitter-elm',
+      rescript: 'tree-sitter-rescript',
+      elisp: 'tree-sitter-elisp',
+      
+      // Shell / Config
+      shell: 'tree-sitter-bash',
+      bash: 'tree-sitter-bash',
+      zsh: 'tree-sitter-bash', // Use bash parser for zsh
+      
+      // Data / Config formats
+      json: 'tree-sitter-json',
+      jsonc: 'tree-sitter-json',
+      json5: 'tree-sitter-json',
+      yaml: 'tree-sitter-yaml',
+      toml: 'tree-sitter-toml',
+      
+      // Query / Database
+      ql: 'tree-sitter-ql',
+      codeql: 'tree-sitter-ql',
+      
+      // Embedded templates (EJS, ERB, etc.)
+      ejs: 'tree-sitter-embedded_template',
+      erb: 'tree-sitter-embedded_template',
+      
+      // Other languages with WASM support
+      zig: 'tree-sitter-zig',
+      solidity: 'tree-sitter-solidity',
+      tlaplus: 'tree-sitter-tlaplus',
+      systemrdl: 'tree-sitter-systemrdl',
     };
 
     const wasmName = languageMap[language];
@@ -177,11 +287,38 @@ export class TreeSitterChunkerService implements OnModuleInit {
 
     try {
       const parser = new this.Parser();
-      // Note: In production, WASM files should be pre-bundled
-      // For now, we'll catch the error and fall back
-      const Lang = await this.Parser.Language.load(`/wasm/${wasmName}.wasm`);
+      
+      // Resolve WASM path - check multiple locations
+      // Priority: Docker wasm dir > local wasm dir > node_modules
+      const possiblePaths = [
+        // Docker wasm directory (downloaded during build)
+        path.join('/app', 'wasm', `${wasmName}.wasm`),
+        // Local wasm directory (repo version)
+        path.join(process.cwd(), 'wasm', `${wasmName}.wasm`),
+        path.join(__dirname, '..', '..', 'wasm', `${wasmName}.wasm`),
+        // tree-sitter-wasms npm package (fallback)
+        path.join(process.cwd(), 'node_modules', 'tree-sitter-wasms', 'out', `${wasmName}.wasm`),
+        path.join(__dirname, '..', '..', 'node_modules', 'tree-sitter-wasms', 'out', `${wasmName}.wasm`),
+        path.join('/app', 'node_modules', 'tree-sitter-wasms', 'out', `${wasmName}.wasm`),
+      ];
+
+      let wasmPath: string | null = null;
+      for (const p of possiblePaths) {
+        if (fs.existsSync(p)) {
+          wasmPath = p;
+          break;
+        }
+      }
+
+      if (!wasmPath) {
+        this.logger.debug(`WASM file not found for ${language}: ${wasmName}.wasm`);
+        return null;
+      }
+
+      const Lang = await this.Parser.Language.load(wasmPath);
       parser.setLanguage(Lang);
       this.parsers.set(language, parser);
+      this.logger.debug(`Loaded parser for ${language} from ${wasmPath}`);
       return parser;
     } catch (error) {
       this.logger.debug(`Failed to load parser for ${language}: ${error}`);
@@ -301,7 +438,10 @@ export class TreeSitterChunkerService implements OnModuleInit {
       ],
     };
 
+    // Use JavaScript patterns as fallback for unknown languages
     const langPatterns = patterns[language] || patterns.javascript || [];
+    
+    // Common keywords to filter out
     const keywords = new Set([
       'if', 'else', 'for', 'while', 'return', 'import', 'from',
       'export', 'default', 'const', 'let', 'var', 'function',
@@ -325,24 +465,39 @@ export class TreeSitterChunkerService implements OnModuleInit {
 
   /**
    * Chunk code using Tree-sitter AST
+   * Always succeeds - falls back to line-based chunking if AST parsing unavailable
    */
   async chunkWithTreeSitter(
     filePath: string,
     content: string,
   ): Promise<TreeSitterChunk[]> {
     const ext = path.extname(filePath);
-    const language = getLanguageFromExtension(ext);
+    let language = getLanguageFromExtension(ext);
+    
+    // Use 'text' for unknown languages - still index them!
+    if (language === 'unknown') {
+      language = 'text';
+    }
+    
     const lines = content.split('\n');
 
-    // Skip if file too large
+    // Skip AST parsing for large files - use line-based
     if (content.length > this.MAX_FILE_SIZE) {
-      this.logger.debug(`File too large for AST parsing: ${filePath}`);
+      this.logger.debug(`File too large for AST parsing, using line-based: ${filePath}`);
       return this.chunkByLines(filePath, content, language);
     }
 
-    // Try to get parser
-    const parser = await this.getParser(language);
+    // Try to get parser - if unavailable, fall back gracefully
+    let parser: any = null;
+    try {
+      parser = await this.getParser(language);
+    } catch (error) {
+      // Parser loading failed - not a problem, use fallback
+      this.logger.debug(`Parser unavailable for ${language}, using line-based: ${filePath}`);
+    }
+    
     if (!parser) {
+      // No parser available - fall back to line-based (this is fine!)
       return this.chunkByLines(filePath, content, language);
     }
 
