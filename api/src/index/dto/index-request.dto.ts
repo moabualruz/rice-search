@@ -6,14 +6,13 @@ import {
   ValidateNested,
   IsBoolean,
   MaxLength,
-  ArrayMaxSize,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class FileToIndex {
   @ApiProperty({ description: 'Relative path to the file' })
   @IsString()
-  @MaxLength(1024)
+  @MaxLength(4096)
   path: string;
 
   @ApiProperty({ description: 'File content' })
@@ -26,13 +25,20 @@ export class IndexFilesRequestDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => FileToIndex)
-  @ArrayMaxSize(100)
-  files: FileToIndex[];
+  files: FileToIndex[]; // No limit - local traffic only
 
   @ApiPropertyOptional({ description: 'Force re-index even if unchanged' })
   @IsOptional()
   @IsBoolean()
   force?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Async mode: return immediately, process embeddings in background',
+    default: false,
+  })
+  @IsOptional()
+  @IsBoolean()
+  async?: boolean;
 }
 
 export class DeleteFilesRequestDto {
@@ -62,6 +68,29 @@ export class IndexResponseDto {
   skipped_unchanged?: number;
 
   @ApiPropertyOptional({ description: 'Errors encountered' })
+  errors?: string[];
+}
+
+export class AsyncIndexResponseDto {
+  @ApiProperty({ description: 'Job ID for tracking' })
+  job_id: string;
+
+  @ApiProperty({ description: 'Status: accepted, processing, completed, failed' })
+  status: 'accepted' | 'processing' | 'completed' | 'failed';
+
+  @ApiProperty({ description: 'Number of files accepted' })
+  files_accepted: number;
+
+  @ApiProperty({ description: 'Number of chunks queued for embedding' })
+  chunks_queued: number;
+
+  @ApiProperty({ description: 'Position in queue' })
+  queue_position: number;
+
+  @ApiPropertyOptional({ description: 'Number of unchanged files skipped' })
+  skipped_unchanged?: number;
+
+  @ApiPropertyOptional({ description: 'Sparse indexing errors' })
   errors?: string[];
 }
 

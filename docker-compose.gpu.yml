@@ -30,6 +30,11 @@ services:
       CUDA_VISIBLE_DEVICES: "0"
       # Enable GPU for indexing and search
       KNOWHERE_GPU_MEM_POOL_SIZE: "2048:4096"
+      # Performance tuning (inherited + GPU specific)
+      QUERY_NODE_MAX_CONCURRENT: "512"         # Higher with GPU
+      PROXY_MAX_TASK_NUM: "2048"
+      QUERYNODE_CACHE_ENABLED: "true"
+      QUERYNODE_CACHE_SIZE: "2147483648"       # 2GB cache with GPU
     deploy:
       resources:
         reservations:
@@ -46,9 +51,11 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:1.7
     command:
       - "--model-id=BAAI/bge-base-en-v1.5"
-      - "--max-batch-tokens=16384"
-      - "--max-client-batch-size=32"
-      - "--dtype=float16"
+      # GPU can handle much larger batches
+      - "--max-batch-tokens=65536"       # 4x CPU default
+      - "--max-client-batch-size=128"    # 4x CPU default  
+      - "--max-concurrent-requests=1024" # 2x CPU default
+      - "--dtype=float16"                # Half precision for speed
     deploy:
       resources:
         reservations:

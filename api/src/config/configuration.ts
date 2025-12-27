@@ -45,6 +45,8 @@ export default () => ({
   // Tantivy CLI
   tantivy: {
     cliPath: process.env.TANTIVY_CLI_PATH || '/usr/local/bin/tantivy-cli',
+    useCargo: process.env.TANTIVY_USE_CARGO === 'true',
+    projectDir: process.env.TANTIVY_PROJECT_DIR || '',
   },
 });
 

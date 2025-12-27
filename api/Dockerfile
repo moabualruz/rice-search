@@ -64,6 +64,10 @@ RUN mkdir -p /data /tantivy
 ENV NODE_ENV=production
 ENV PORT=8080
 
+# Bun performance tuning
+ENV BUN_CONFIG_MAX_HTTP_CONNECTIONS=1024
+ENV BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD=1
+
 # Expose port
 EXPOSE 8080
 

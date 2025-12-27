@@ -73,6 +73,18 @@ services:
       MINIO_SECRET_ACCESS_KEY: minioadmin
       MINIO_USE_SSL: "false"
       MINIO_REGION: us-east-1
+      # Performance tuning
+      QUERY_NODE_MAX_CONCURRENT: "256"         # Max concurrent queries
+      PROXY_MAX_TASK_NUM: "1024"               # Max queued tasks
+      COMMON_GRACEFUL_TIME: "5000"             # Faster shutdown
+      COMMON_GRACEFUL_STOP_TIMEOUT: "30"
+      # Query cache - cache search results
+      QUERYCOORD_ENABLE_ACTIVE_STANDBY: "false"
+      # Memory management
+      QUERYNODE_CACHE_ENABLED: "true"
+      QUERYNODE_CACHE_SIZE: "1073741824"       # 1GB query cache
+      # Connection handling
+      PROXY_MAX_CONNECTIONS: "65535"           # Max client connections
     volumes:
       - ./data/milvus:/var/lib/milvus
     ports:
@@ -119,14 +131,20 @@ services:
     image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.7
     command:
       - "--model-id=BAAI/bge-base-en-v1.5"
-      - "--max-batch-tokens=16384"
-      - "--max-client-batch-size=32"
+      # Performance tuning for maximum throughput
+      - "--max-batch-tokens=32768"       # 2x default - larger batches
+      - "--max-client-batch-size=64"     # 2x default - more items per request
+      - "--max-concurrent-requests=512"  # Handle many parallel requests
+      - "--tokenization-workers=4"       # Parallel tokenization
     volumes:
       - ./data/embeddings-cache:/data
     ports:
       - "8081:80"
     environment:
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      # CPU optimization
+      - OMP_NUM_THREADS=${OMP_NUM_THREADS:-4}
+      - RAYON_NUM_THREADS=${RAYON_NUM_THREADS:-4}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
@@ -171,6 +189,13 @@ services:
       
       # Logging
       LOG_LEVEL: INFO
+      
+      # Performance: Enable clustering for multi-core
+      CLUSTER_MODE: "true"
+      NODE_ENV: production
+      
+      # Bun runtime tuning
+      BUN_CONFIG_MAX_HTTP_CONNECTIONS: "1024"
     volumes:
       - ./data/api:/data
       - ./data/tantivy:/tantivy
@@ -189,6 +214,12 @@ services:
       embeddings:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 1G
     networks:
       - rice-network
 

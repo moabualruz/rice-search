@@ -12,10 +12,11 @@ import { ServicesModule } from './services/services.module';
 
 @Module({
   imports: [
-    // Configuration
+    // Configuration with caching for faster access
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
+      cache: true,
     }),
 
     // Health checks

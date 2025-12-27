@@ -9,6 +9,7 @@ import { StoreManagerService } from './store-manager.service';
 import { GitignoreService } from './gitignore.service';
 import { FileTrackerService } from './file-tracker.service';
 import { TreeSitterChunkerService } from './treesitter-chunker.service';
+import { EmbeddingQueueService } from './embedding-queue.service';
 
 @Global()
 @Module({
@@ -23,6 +24,7 @@ import { TreeSitterChunkerService } from './treesitter-chunker.service';
     GitignoreService,
     FileTrackerService,
     TreeSitterChunkerService,
+    EmbeddingQueueService,
   ],
   exports: [
     EmbeddingsService,
@@ -34,6 +36,7 @@ import { TreeSitterChunkerService } from './treesitter-chunker.service';
     GitignoreService,
     FileTrackerService,
     TreeSitterChunkerService,
+    EmbeddingQueueService,
   ],
 })
 export class ServicesModule {}

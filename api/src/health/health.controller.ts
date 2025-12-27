@@ -1,10 +1,6 @@
 import { Controller, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import {
-  HealthCheck,
-  HealthCheckService,
-  HttpHealthIndicator,
-} from '@nestjs/terminus';
+import { HealthCheck, HealthCheckService } from '@nestjs/terminus';
 import { ConfigService } from '@nestjs/config';
 
 @ApiTags('health')
@@ -12,7 +8,6 @@ import { ConfigService } from '@nestjs/config';
 export class HealthController {
   constructor(
     private health: HealthCheckService,
-    private http: HttpHealthIndicator,
     private configService: ConfigService,
   ) {}
 
@@ -44,10 +39,27 @@ export class HealthController {
     const embeddingsUrl = this.configService.get<string>('embeddings.url');
 
     return this.health.check([
-      () =>
-        this.http.pingCheck('embeddings', `${embeddingsUrl}/health`, {
-          timeout: 5000,
-        }),
+      async () => {
+        try {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 5000);
+          const response = await fetch(`${embeddingsUrl}/health`, {
+            signal: controller.signal,
+          });
+          clearTimeout(timeoutId);
+          return {
+            embeddings: {
+              status: response.ok ? 'up' : 'down',
+            },
+          };
+        } catch {
+          return {
+            embeddings: {
+              status: 'down',
+            },
+          };
+        }
+      },
     ]);
   }
 }

@@ -20,6 +20,11 @@ export class MilvusService implements OnModuleInit {
   private readonly COLLECTION_PREFIX = 'lcs_';
   private dim: number;
 
+  // Cache collection existence to avoid repeated checks
+  private readonly collectionCache = new Map<string, boolean>();
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private readonly collectionCacheTimestamps = new Map<string, number>();
+
   constructor(private configService: ConfigService) {
     const host = this.configService.get<string>('milvus.host')!;
     const port = this.configService.get<number>('milvus.port')!;
@@ -27,6 +32,10 @@ export class MilvusService implements OnModuleInit {
 
     this.client = new MilvusClient({
       address: `${host}:${port}`,
+      // Connection pool settings for high concurrency
+      maxRetries: 3,
+      retryDelay: 100,
+      timeout: 30000,
     });
   }
 
@@ -35,10 +44,63 @@ export class MilvusService implements OnModuleInit {
       const health = await this.client.checkHealth();
       if (health.isHealthy) {
         this.logger.log('Connected to Milvus');
+        // Pre-warm collection cache
+        await this.warmCollectionCache();
       }
     } catch (error) {
       this.logger.warn(`Milvus not available. Will retry on first request.`);
     }
+  }
+
+  /**
+   * Pre-warm the collection cache on startup
+   */
+  private async warmCollectionCache(): Promise<void> {
+    try {
+      const collections = await this.client.listCollections();
+      for (const col of collections.data) {
+        const colData = col as { name?: string } | string;
+        if (typeof colData === 'string' && colData.startsWith(this.COLLECTION_PREFIX)) {
+          const store = colData.replace(this.COLLECTION_PREFIX, '');
+          this.setCollectionCached(store, true);
+        } else if (typeof colData === 'object' && colData.name?.startsWith(this.COLLECTION_PREFIX)) {
+          const store = colData.name.replace(this.COLLECTION_PREFIX, '');
+          this.setCollectionCached(store, true);
+        }
+      }
+      this.logger.log(`Collection cache warmed with ${this.collectionCache.size} collections`);
+    } catch (error) {
+      this.logger.warn(`Failed to warm collection cache: ${error}`);
+    }
+  }
+
+  /**
+   * Check if collection exists (cached)
+   */
+  private isCollectionCached(store: string): boolean | null {
+    const cached = this.collectionCache.get(store);
+    const timestamp = this.collectionCacheTimestamps.get(store);
+    
+    if (cached !== undefined && timestamp && Date.now() - timestamp < this.CACHE_TTL_MS) {
+      return cached;
+    }
+    return null;
+  }
+
+  /**
+   * Update collection cache
+   */
+  private setCollectionCached(store: string, exists: boolean): void {
+    this.collectionCache.set(store, exists);
+    this.collectionCacheTimestamps.set(store, Date.now());
+  }
+
+  /**
+   * Invalidate collection cache entry
+   */
+  private invalidateCollectionCache(store: string): void {
+    this.collectionCache.delete(store);
+    this.collectionCacheTimestamps.delete(store);
   }
 
   private collectionName(store: string): string {
@@ -107,6 +169,9 @@ export class MilvusService implements OnModuleInit {
     // Load collection
     await this.client.loadCollection({ collection_name: name });
 
+    // Update cache
+    this.setCollectionCached(store, true);
+
     this.logger.log(`Created collection ${name} with HNSW index`);
     return true;
   }
@@ -117,6 +182,8 @@ export class MilvusService implements OnModuleInit {
 
     if (exists.value) {
       await this.client.dropCollection({ collection_name: name });
+      // Invalidate cache
+      this.invalidateCollectionCache(store);
       this.logger.log(`Dropped collection ${name}`);
       return true;
     }
@@ -124,10 +191,21 @@ export class MilvusService implements OnModuleInit {
   }
 
   async collectionExists(store: string): Promise<boolean> {
+    // Check cache first
+    const cached = this.isCollectionCached(store);
+    if (cached !== null) {
+      return cached;
+    }
+
+    // Query Milvus
     const result = await this.client.hasCollection({
       collection_name: this.collectionName(store),
     });
-    return Boolean(result.value);
+    const exists = Boolean(result.value);
+    
+    // Update cache
+    this.setCollectionCached(store, exists);
+    return exists;
   }
 
   async getCollectionStats(
@@ -252,16 +330,25 @@ export class MilvusService implements OnModuleInit {
     languages?: string[],
   ): Promise<MilvusSearchResult[]> {
     const name = this.collectionName(store);
-    const exists = await this.collectionExists(store);
-
-    if (!exists) {
+    
+    // Use cached collection check for hot path
+    const cached = this.isCollectionCached(store);
+    if (cached === false) {
       return [];
+    }
+    
+    // Only query Milvus if not cached or cache says exists
+    if (cached === null) {
+      const exists = await this.collectionExists(store);
+      if (!exists) {
+        return [];
+      }
     }
 
     // Build filter expression
     const filters: string[] = [];
     if (pathPrefix) {
-      filters.push(`path like "${pathPrefix}%"`);
+      filters.push(`path like "%${pathPrefix}%"`);
     }
     if (languages && languages.length > 0) {
       const langList = languages.map((l) => `"${l}"`).join(',');

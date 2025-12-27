@@ -405,36 +405,47 @@ python scripts/reindex.py ~/myproject
 
 ## Development
 
-### Build locally
+For detailed local development setup, see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**Using npm:**
-```bash
-cd api
-npm install
-npm run build
-npm run start:dev
-```
+### Quick Local Dev
 
-**Using bun (faster):**
 ```bash
+# 1. Start Docker services (Milvus, embeddings)
+docker-compose up -d milvus embeddings etcd minio
+
+# 2. Start API (Terminal 1)
 cd api
 bun install
-bun run build
-bun run start:dev
+bun run start:local    # Runs on :8088
+
+# 3. Start Web UI (Terminal 2)
+cd web-ui
+bun install
+bun run dev:local      # Runs on :3001
 ```
 
-### Run tests
+**Local Dev Ports:**
+- API: http://localhost:8088 (Swagger: http://localhost:8088/docs)
+- Web UI: http://localhost:3001
 
-**Using npm:**
+### Run Tests
+
 ```bash
-cd api
-npm test
+# API
+cd api && bun test
+
+# ricegrep CLI
+cd ricegrep && bun test
+
+# Smoke test (requires all services)
+bash scripts/smoke_test.sh
 ```
 
-**Using bun:**
+### Type Checking
+
 ```bash
-cd api
-bun test
+cd api && bun run typecheck
+cd ricegrep && bun run typecheck
 ```
 
 ## License

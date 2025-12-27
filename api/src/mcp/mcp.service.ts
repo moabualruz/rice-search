@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SearchService } from '../search/search.service';
 import { IndexService } from '../index/index.service';
-import {
+import type {
   McpToolDefinition,
   McpResponse,
   CodeSearchInput,
@@ -171,11 +171,15 @@ export class McpService {
   ): Promise<{ content: { indexed: number; errors?: string[] } }> {
     const store = input.store || 'default';
 
-    const result = await this.indexService.indexFiles(store, input.files);
+    // MCP always uses sync mode
+    const result = await this.indexService.indexFiles(store, input.files, false, false);
+
+    // Type guard for sync response
+    const indexed = 'chunks_indexed' in result ? result.chunks_indexed : result.chunks_queued;
 
     return {
       content: {
-        indexed: result.chunks_indexed,
+        indexed,
         errors: result.errors,
       },
     };

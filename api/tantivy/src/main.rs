@@ -279,9 +279,8 @@ fn search_index(
     query_parser.set_field_boost(code_schema.path, 2.0);
     query_parser.set_field_boost(code_schema.content, 1.0);
 
-    let query = query_parser
-        .parse_query(&query_str)
-        .context("Failed to parse query")?;
+    // Use lenient parsing to handle special characters in queries
+    let (query, _parse_errors) = query_parser.parse_query_lenient(&query_str);
 
     let top_docs = searcher
         .search(&query, &TopDocs::with_limit(top_k * 2)) // Get extra for filtering
@@ -323,9 +322,9 @@ fn search_index(
             .unwrap_or("")
             .to_string();
 
-        // Filter by path prefix
+        // Filter by path (contains match for flexibility)
         if let Some(ref prefix) = path_prefix {
-            if !path.starts_with(prefix) {
+            if !path.contains(prefix) {
                 continue;
             }
         }

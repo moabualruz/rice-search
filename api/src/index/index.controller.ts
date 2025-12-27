@@ -21,6 +21,7 @@ import {
   DeleteFilesRequestDto,
   SyncRequestDto,
   IndexResponseDto,
+  AsyncIndexResponseDto,
   DeleteResponseDto,
   SyncResponseDto,
   StatsResponseDto,
@@ -33,20 +34,33 @@ export class IndexController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Index files into the store' })
+  @ApiOperation({
+    summary: 'Index files into the store',
+    description: 'Set async=true to return immediately while embeddings process in background',
+  })
   @ApiParam({ name: 'store', description: 'Store name' })
   @ApiBody({ type: IndexFilesRequestDto })
   @ApiResponse({
     status: 200,
-    description: 'Files indexed successfully',
+    description: 'Files indexed successfully (sync mode)',
     type: IndexResponseDto,
+  })
+  @ApiResponse({
+    status: 202,
+    description: 'Files accepted for processing (async mode)',
+    type: AsyncIndexResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid request' })
   async indexFiles(
     @Param('store') store: string,
     @Body() request: IndexFilesRequestDto,
-  ): Promise<IndexResponseDto> {
-    return this.indexService.indexFiles(store, request.files, request.force);
+  ): Promise<IndexResponseDto | AsyncIndexResponseDto> {
+    return this.indexService.indexFiles(
+      store,
+      request.files,
+      request.force,
+      request.async,
+    );
   }
 
   @Delete()

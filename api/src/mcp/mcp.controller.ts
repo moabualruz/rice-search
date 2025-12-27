@@ -1,7 +1,8 @@
 import { Controller, Post, Get, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { McpService } from './mcp.service';
-import { McpRequestDto, McpResponse, McpToolDefinition } from './dto/mcp.dto';
+import { McpRequestDto } from './dto/mcp.dto';
+import type { McpResponse, McpToolDefinition } from './dto/mcp.dto';
 
 @ApiTags('mcp')
 @Controller('mcp')

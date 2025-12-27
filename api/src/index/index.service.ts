@@ -5,6 +5,7 @@ import { MilvusService } from '../services/milvus.service';
 import { TantivyService } from '../services/tantivy.service';
 import { StoreManagerService } from '../services/store-manager.service';
 import { FileTrackerService } from '../services/file-tracker.service';
+import { EmbeddingQueueService } from '../services/embedding-queue.service';
 import {
   TreeSitterChunkerService,
   TreeSitterChunk,
@@ -12,6 +13,7 @@ import {
 import {
   FileToIndex,
   IndexResponseDto,
+  AsyncIndexResponseDto,
   DeleteResponseDto,
 } from './dto/index-request.dto';
 
@@ -29,6 +31,7 @@ export class IndexService {
     private storeManager: StoreManagerService,
     private fileTracker: FileTrackerService,
     private treeSitterChunker: TreeSitterChunkerService,
+    private embeddingQueue: EmbeddingQueueService,
   ) {
     this.maxFileSizeMb = this.configService.get<number>(
       'indexing.maxFileSizeMb',
@@ -38,15 +41,17 @@ export class IndexService {
   /**
    * Index files into both sparse (Tantivy) and dense (Milvus) indexes
    * Supports incremental indexing - only re-indexes changed files
+   * 
+   * @param asyncMode - If true, queue embeddings in background and return immediately
    */
   async indexFiles(
     store: string,
     files: FileToIndex[],
     force = false,
-  ): Promise<IndexResponseDto> {
+    asyncMode = false,
+  ): Promise<IndexResponseDto | AsyncIndexResponseDto> {
     const startTime = Date.now();
     const errors: string[] = [];
-    let totalChunks = 0;
     let skippedUnchanged = 0;
 
     // Ensure store exists
@@ -80,6 +85,16 @@ export class IndexService {
     }
 
     if (filesToProcess.length === 0) {
+      if (asyncMode) {
+        return {
+          job_id: 'none',
+          status: 'completed',
+          files_accepted: files.length,
+          chunks_queued: 0,
+          queue_position: 0,
+          skipped_unchanged: skippedUnchanged,
+        };
+      }
       return {
         files_processed: files.length,
         chunks_indexed: 0,
@@ -88,9 +103,8 @@ export class IndexService {
       };
     }
 
-    // Process files using Tree-sitter chunker
+    // Process files using Tree-sitter chunker - index each file separately
     const allChunks: TreeSitterChunk[] = [];
-    const fileChunkMap: Map<string, { content: string; chunkIds: string[] }> = new Map();
 
     for (const file of filesToProcess) {
       try {
@@ -114,14 +128,39 @@ export class IndexService {
           file.path,
           file.content,
         );
+
+        if (chunks.length === 0) {
+          continue;
+        }
         
-        allChunks.push(...chunks);
-        
-        // Track chunk IDs for this file
-        fileChunkMap.set(file.path, {
+        // Index this file's chunks in Tantivy immediately (file by file)
+        try {
+          const tantivyDocs = chunks.map((chunk) => ({
+            doc_id: chunk.doc_id,
+            path: chunk.path,
+            language: chunk.language,
+            symbols: chunk.symbols,
+            content: chunk.content,
+            start_line: chunk.start_line,
+            end_line: chunk.end_line,
+          }));
+
+          await this.tantivy.index(store, tantivyDocs);
+        } catch (error) {
+          const errorMsg = `Tantivy indexing failed for ${file.path}: ${error}`;
+          this.logger.error(errorMsg);
+          errors.push(errorMsg);
+          continue; // Skip this file but continue with others
+        }
+
+        // Track file immediately after successful Tantivy index
+        this.fileTracker.trackFiles(store, [{
+          path: file.path,
           content: file.content,
           chunkIds: chunks.map((c) => c.doc_id),
-        });
+        }]);
+
+        allChunks.push(...chunks);
       } catch (error) {
         const errorMsg = `Failed to process ${file.path}: ${error}`;
         this.logger.warn(errorMsg);
@@ -130,6 +169,17 @@ export class IndexService {
     }
 
     if (allChunks.length === 0) {
+      if (asyncMode) {
+        return {
+          job_id: 'none',
+          status: 'completed',
+          files_accepted: files.length,
+          chunks_queued: 0,
+          queue_position: 0,
+          skipped_unchanged: skippedUnchanged,
+          errors: errors.length > 0 ? errors : undefined,
+        };
+      }
       return {
         files_processed: files.length,
         chunks_indexed: 0,
@@ -138,42 +188,43 @@ export class IndexService {
         errors: errors.length > 0 ? errors : undefined,
       };
     }
+    this.storeManager.touchStore(store);
 
-    // Index in Tantivy (sparse)
-    try {
-      const tantivyDocs = allChunks.map((chunk) => ({
+    // Prepare embedding data
+    const embeddingChunks = allChunks.map((chunk) => {
+      const symbolsStr = chunk.symbols.length > 0 ? chunk.symbols.join(' ') : '';
+      return {
         doc_id: chunk.doc_id,
         path: chunk.path,
         language: chunk.language,
-        symbols: chunk.symbols,
-        content: chunk.content,
+        chunk_index: chunk.chunk_index,
         start_line: chunk.start_line,
         end_line: chunk.end_line,
-      }));
+        text: `${chunk.path}\n${symbolsStr}\n${chunk.content}`.slice(0, 8000),
+      };
+    });
 
-      await this.tantivy.index(store, tantivyDocs);
-    } catch (error) {
-      const errorMsg = `Tantivy indexing failed: ${error}`;
-      this.logger.error(errorMsg);
-      errors.push(errorMsg);
+    // ASYNC MODE: Queue embeddings and return immediately
+    if (asyncMode) {
+      const { jobId, position } = this.embeddingQueue.enqueue(store, embeddingChunks);
+      
+      return {
+        job_id: jobId,
+        status: 'accepted',
+        files_accepted: files.length,
+        chunks_queued: allChunks.length,
+        queue_position: position,
+        skipped_unchanged: skippedUnchanged,
+        errors: errors.length > 0 ? errors : undefined,
+      };
     }
 
-    // Generate embeddings and index in Milvus (dense)
+    // SYNC MODE: Wait for embeddings (original behavior)
+    let totalChunks = 0;
     try {
-      const texts = allChunks.map((chunk) => {
-        // Create embedding text with context
-        const symbolsStr =
-          chunk.symbols.length > 0 ? chunk.symbols.join(' ') : '';
-        return `${chunk.path}\n${symbolsStr}\n${chunk.content}`.slice(0, 8000);
-      });
+      const texts = embeddingChunks.map((c) => c.text);
+      const embeddings = await this.embeddings.embedBatch(texts, this.embeddingBatchSize);
 
-      // Batch embedding generation
-      const embeddings = await this.embeddings.embedBatch(
-        texts,
-        this.embeddingBatchSize,
-      );
-
-      // Prepare Milvus data
       await this.milvus.upsert(store, {
         doc_ids: allChunks.map((c) => c.doc_id),
         embeddings,
@@ -190,21 +241,6 @@ export class IndexService {
       this.logger.error(errorMsg);
       errors.push(errorMsg);
     }
-
-    // Track successfully indexed files
-    if (totalChunks > 0) {
-      const trackedFiles = Array.from(fileChunkMap.entries()).map(
-        ([path, data]) => ({
-          path,
-          content: data.content,
-          chunkIds: data.chunkIds,
-        }),
-      );
-      this.fileTracker.trackFiles(store, trackedFiles);
-    }
-
-    // Update store timestamp
-    this.storeManager.touchStore(store);
 
     return {
       files_processed: files.length,
@@ -270,6 +306,7 @@ export class IndexService {
 
   /**
    * Re-index entire store (clear and rebuild)
+   * Always synchronous - waits for completion
    */
   async reindex(
     store: string,
@@ -281,8 +318,8 @@ export class IndexService {
     // Delete all existing data
     await this.deleteFiles(store, undefined, '');
 
-    // Re-index all files with force=true
-    return this.indexFiles(store, files, true);
+    // Re-index all files with force=true, asyncMode=false
+    return this.indexFiles(store, files, true, false) as Promise<IndexResponseDto>;
   }
 
   /**

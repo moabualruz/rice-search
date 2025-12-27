@@ -2,6 +2,8 @@
 
 import { useState, FormEvent } from 'react';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8088';
+
 interface SearchResult {
   doc_id: string;
   path: string;
@@ -25,7 +27,7 @@ const services = [
   {
     name: 'API Docs',
     description: 'Swagger API Documentation',
-    url: 'http://localhost:8080/docs',
+    url: `${API_URL}/docs`,
     icon: '📚',
   },
   {
@@ -43,7 +45,7 @@ const services = [
   {
     name: 'Health',
     description: 'API Health Status',
-    url: 'http://localhost:8080/healthz',
+    url: `${API_URL}/healthz`,
     icon: '💚',
   },
 ];
@@ -303,7 +305,7 @@ export default function Home() {
           Rice Search Platform • Hybrid BM25 + Semantic Code Search
         </p>
         <p className="footer-links">
-          <a href="http://localhost:8080/docs" target="_blank" rel="noopener noreferrer">
+          <a href={`${API_URL}/docs`} target="_blank" rel="noopener noreferrer">
             API Docs
           </a>
           <span className="footer-sep">•</span>

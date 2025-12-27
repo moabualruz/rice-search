@@ -2,29 +2,42 @@
 
 ## Build & Test Commands
 
-```bash
-# API (NestJS + Bun)
-cd api
-bun install && bun run build && bun run start:dev  # Dev server
-bun run lint && bun run typecheck                  # Quality checks
-bun test                                           # Run all tests
+### Local Development (Recommended)
 
-# ricegrep CLI (TypeScript + Bun)  
+```bash
+# 1. Start Docker backend services only
+docker-compose up -d milvus embeddings etcd minio
+
+# 2. API (NestJS + Bun) - uses cargo run for Tantivy auto-recompilation
+cd api
+bun install
+bun run start:local                               # Dev server on :8088
+
+# 3. Web UI (Next.js + Bun)
+cd web-ui
+bun install
+bun run dev:local                                 # Dev server on :3001
+
+# Quality checks
+cd api && bun run lint && bun run typecheck
+cd ricegrep && bun run format && bun run typecheck
+```
+
+### Docker (Full Platform)
+
+```bash
+docker-compose up -d                               # Start all services
+bash scripts/smoke_test.sh                         # End-to-end test
+```
+
+### ricegrep CLI
+
+```bash
 cd ricegrep
 bun install && bun run build                       # Build CLI
 bun run format && bun run typecheck                # Quality checks
 bun test                                           # Run all tests
 bun test --filter "Search"                         # Run specific test pattern
-
-# Web UI (Next.js + Bun)
-cd web-ui
-bun install && bun run build                       # Build for production
-bun run dev                                        # Dev server (http://localhost:3000)
-bun run lint                                       # ESLint checks
-
-# Full Platform
-docker-compose up -d                               # Start all services
-bash scripts/smoke_test.sh                         # End-to-end test
 ```
 
 ## Code Style & Standards
@@ -43,21 +56,21 @@ Run `bun run typecheck` before any significant changes. Never commit without cle
 
 ## Service Ports (Default)
 
-| Service | Port | Description |
-|---------|------|-------------|
-| API | 8080 | Rice Search REST API |
-| Web UI | 3000 | Next.js frontend |
-| Attu | 8000 | Milvus admin UI |
-| Embeddings | 8081 | Text embeddings inference |
-| Milvus | 19530 | Vector database |
-| Milvus Metrics | 9091 | Milvus health/metrics |
-| MinIO | 9000 | Object storage |
-| MinIO Console | 9001 | MinIO admin UI |
+| Service | Local Dev | Docker | Description |
+|---------|-----------|--------|-------------|
+| API | 8088 | 8080 | Rice Search REST API |
+| Web UI | 3001 | 3000 | Next.js frontend |
+| Attu | 8000 | 8000 | Milvus admin UI |
+| Embeddings | 8081 | 8081 | Text embeddings inference |
+| Milvus | 19530 | 19530 | Vector database |
+| Milvus Metrics | 9091 | 9091 | Milvus health/metrics |
+| MinIO | 9000 | 9000 | Object storage |
+| MinIO Console | 9001 | 9001 | MinIO admin UI |
 
 ## API Endpoints
 
-Base URL: `http://localhost:8080`  
-Swagger Docs: `http://localhost:8080/docs`
+Base URL: `http://localhost:8080` (Docker) or `http://localhost:8088` (Local Dev)  
+Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
 
 ### Health
 

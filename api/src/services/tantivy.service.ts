@@ -25,15 +25,52 @@ export interface TantivySearchResult {
   rank: number;
 }
 
+/**
+ * Simple async mutex for serializing write operations
+ * Tantivy only allows one IndexWriter at a time per store
+ */
+class AsyncMutex {
+  private locks: Map<string, Promise<void>> = new Map();
+
+  async acquire(key: string): Promise<() => void> {
+    // Wait for any existing lock on this key
+    while (this.locks.has(key)) {
+      await this.locks.get(key);
+    }
+
+    // Create a new lock
+    let release: () => void;
+    const lockPromise = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.locks.set(key, lockPromise);
+
+    // Return release function
+    return () => {
+      this.locks.delete(key);
+      release!();
+    };
+  }
+}
+
 @Injectable()
 export class TantivyService {
   private readonly logger = new Logger(TantivyService.name);
   private readonly cliPath: string;
   private readonly indexDir: string;
+  private readonly useCargo: boolean;
+  private readonly projectDir: string;
+  private readonly writeMutex = new AsyncMutex();
 
   constructor(private configService: ConfigService) {
     this.cliPath = this.configService.get<string>('tantivy.cliPath')!;
     this.indexDir = this.configService.get<string>('data.tantivyDir')!;
+    this.useCargo = this.configService.get<boolean>('tantivy.useCargo') || false;
+    this.projectDir = this.configService.get<string>('tantivy.projectDir') || '';
+
+    if (this.useCargo) {
+      this.logger.log(`Using cargo run from ${this.projectDir}`);
+    }
   }
 
   private async runCommand(
@@ -42,7 +79,15 @@ export class TantivyService {
     stdin?: string,
   ): Promise<string> {
     return new Promise((resolve, reject) => {
-      const proc = spawn(this.cliPath, [command, ...args]);
+      let proc;
+      if (this.useCargo) {
+        // Use cargo run -- <command> <args>
+        proc = spawn('cargo', ['run', '--release', '--', command, ...args], {
+          cwd: this.projectDir,
+        });
+      } else {
+        proc = spawn(this.cliPath, [command, ...args]);
+      }
 
       let stdout = '';
       let stderr = '';
@@ -80,6 +125,7 @@ export class TantivyService {
 
   /**
    * Index documents using Tantivy
+   * Serialized per-store to prevent lock contention
    * @param store Store name
    * @param documents Documents to index
    * @returns Indexing result
@@ -90,10 +136,13 @@ export class TantivyService {
   ): Promise<{ indexed: number; errors: number }> {
     const indexPath = this.getIndexPath(store);
 
-    // Convert documents to JSON lines
-    const jsonLines = documents.map((doc) => JSON.stringify(doc)).join('\n');
+    // Acquire write lock for this store
+    const release = await this.writeMutex.acquire(store);
 
     try {
+      // Convert documents to JSON lines
+      const jsonLines = documents.map((doc) => JSON.stringify(doc)).join('\n');
+
       const output = await this.runCommand(
         'index',
         ['--index-path', indexPath, '--store', store],
@@ -108,6 +157,8 @@ export class TantivyService {
     } catch (error) {
       this.logger.error(`Indexing failed: ${error}`);
       throw error;
+    } finally {
+      release();
     }
   }
 
@@ -167,6 +218,7 @@ export class TantivyService {
 
   /**
    * Delete documents from Tantivy index
+   * Serialized per-store to prevent lock contention
    * @param store Store name
    * @param options Delete options
    * @returns Number of deleted documents
@@ -177,23 +229,28 @@ export class TantivyService {
   ): Promise<number> {
     const indexPath = this.getIndexPath(store);
 
-    const args = ['--index-path', indexPath, '--store', store];
-
-    if (options.path) {
-      args.push('--path', options.path);
-    }
-
-    if (options.docId) {
-      args.push('--doc-id', options.docId);
-    }
+    // Acquire write lock for this store
+    const release = await this.writeMutex.acquire(store);
 
     try {
+      const args = ['--index-path', indexPath, '--store', store];
+
+      if (options.path) {
+        args.push('--path', options.path);
+      }
+
+      if (options.docId) {
+        args.push('--doc-id', options.docId);
+      }
+
       const output = await this.runCommand('delete', args);
       const result = JSON.parse(output);
       return result.deleted;
     } catch (error) {
       this.logger.error(`Delete failed: ${error}`);
       throw error;
+    } finally {
+      release();
     }
   }
 

@@ -32,8 +32,12 @@ export class SearchService {
     // Ensure store exists
     this.storeManager.ensureStore(store);
 
+    // Get embedding once (cached after first call)
+    const queryEmbeddings = await this.embeddings.embed([query]);
+    const queryEmbedding = queryEmbeddings[0];
+
     // Run sparse and dense search in parallel
-    const [sparseResults, denseResults, queryEmbedding] = await Promise.all([
+    const [sparseResults, denseResults] = await Promise.all([
       this.tantivy.search(
         store,
         query,
@@ -41,17 +45,15 @@ export class SearchService {
         filters?.path_prefix,
         filters?.languages?.[0],
       ),
-      this.embeddings.embed([query]).then(async (embeddings) => {
-        if (embeddings.length === 0) return [];
-        return this.milvus.search(
-          store,
-          embeddings[0],
-          this.denseTopK,
-          filters?.path_prefix,
-          filters?.languages,
-        );
-      }),
-      this.embeddings.embed([query]),
+      queryEmbedding
+        ? this.milvus.search(
+            store,
+            queryEmbedding,
+            this.denseTopK,
+            filters?.path_prefix,
+            filters?.languages,
+          )
+        : Promise.resolve([]),
     ]);
 
     // Build content map for hybrid ranking
