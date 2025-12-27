@@ -52,7 +52,7 @@ const execAsync = promisify(exec);
 
 async function installPlugin() {
   try {
-    await execAsync("codex mcp add ricegrep ricegrep watch-mcp", {
+    await execAsync("codex mcp add ricegrep ricegrep mcp", {
       shell,
       env: process.env,
     });

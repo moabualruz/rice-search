@@ -334,7 +334,7 @@ npm install -g .     # npm (recommended)
 # pnpm install -g .  # pnpm
 
 # Start MCP server mode (used by AI assistants)
-ricegrep watch-mcp
+ricegrep mcp
 
 # Or use ricegrep's assisted installation for popular AI assistants:
 ricegrep install-claude-code   # Claude Code integration

@@ -99,7 +99,7 @@ async function installPlugin() {
     }
     mcpJson.mcp.ricegrep = {
       type: "local",
-      command: ["ricegrep", "watch-mcp"],
+      command: ["ricegrep", "mcp"],
       enabled: true,
     };
     fs.writeFileSync(MCP_PATH, JSON.stringify(mcpJson, null, 2));
