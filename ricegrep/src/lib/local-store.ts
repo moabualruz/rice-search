@@ -185,7 +185,7 @@ export class LocalStore implements Store {
     }
 
     const response = await this.fetch<LocalSearchResponse>(
-      `/v1/search/${storeId}`,
+      `/v1/stores/${storeId}/search`,
       {
         method: "POST",
         body: JSON.stringify({
