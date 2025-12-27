@@ -10,6 +10,7 @@ import { startWatch } from "./watch.js";
 export const watchMcp = new Command("mcp")
   .description("Start MCP server for ricegrep")
   .option("--no-watch", "Disable automatic file watching")
+  .option("--force-reindex", "Force full reindex instead of incremental sync", false)
   .action(async (options, cmd) => {
     process.on("SIGINT", () => {
       console.error("Received SIGINT, shutting down gracefully...");
@@ -76,13 +77,16 @@ export const watchMcp = new Command("mcp")
     await server.connect(transport);
 
     if (watchEnabled) {
+      // MCP uses incremental sync by default (unless --force-reindex)
+      const incremental = !options.forceReindex;
+      
       const startBackgroundSync = async () => {
-        console.log("[SYNC] Scheduling initial sync in 5 seconds...");
+        console.log(`[SYNC] Scheduling initial sync in 5 seconds... (${incremental ? "incremental" : "full reindex"})`);
 
         setTimeout(async () => {
           console.log("[SYNC] Starting file sync...");
           try {
-            await startWatch({ store: globalOpts.store, dryRun: false });
+            await startWatch({ store: globalOpts.store, dryRun: false, incremental });
           } catch (error) {
             const errorMessage =
               error instanceof Error ? error.message : String(error);

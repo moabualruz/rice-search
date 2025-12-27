@@ -20,6 +20,7 @@ import {
 export interface WatchOptions {
   store: string;
   dryRun: boolean;
+  incremental: boolean;
   maxFileSize?: number;
   maxFileCount?: number;
 }
@@ -89,6 +90,7 @@ export async function startWatch(options: WatchOptions): Promise<void> {
         options.dryRun,
         onProgress,
         config,
+        options.incremental,
       );
       const deletedInfo =
         result.deleted > 0 ? ` • deleted ${result.deleted}` : "";
@@ -188,6 +190,11 @@ export const watch = new Command("watch")
   .option(
     "-d, --dry-run",
     "Dry run the watch process (no actual file syncing)",
+    false,
+  )
+  .option(
+    "-i, --incremental",
+    "Incremental sync (only upload changed files, let server decide)",
     false,
   )
   .option(

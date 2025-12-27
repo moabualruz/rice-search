@@ -182,6 +182,7 @@ export async function uploadFile(
   filePath: string,
   fileName: string,
   config?: RicegrepConfig,
+  incremental = false,
 ): Promise<boolean> {
   if (config && exceedsMaxFileSize(filePath, config.maxFileSize)) {
     return false;
@@ -195,7 +196,9 @@ export async function uploadFile(
   const hash = await computeBufferHash(buffer);
   const options = {
     external_id: filePath,
-    overwrite: true,
+    // When incremental=true, let server decide if file changed (force=false)
+    // When incremental=false, force reindex (force=true)
+    overwrite: !incremental,
     metadata: {
       path: filePath,
       hash,
@@ -249,6 +252,7 @@ export async function initialSync(
   dryRun?: boolean,
   onProgress?: (info: InitialSyncProgress) => void,
   config?: RicegrepConfig,
+  incremental = false,
 ): Promise<InitialSyncResult> {
   const storeHashes = await listStoreFileHashes(store, storeId, repoRoot);
   const allFiles = Array.from(fileSystem.getFiles(repoRoot));
@@ -317,6 +321,7 @@ export async function initialSync(
               filePath,
               path.basename(filePath),
               config,
+              incremental,
             );
             if (didUpload) {
               uploaded += 1;
