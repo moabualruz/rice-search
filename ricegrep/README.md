@@ -64,7 +64,9 @@ docker-compose up -d
    **Using bun (faster alternative):**
    ```bash
    cd ricegrep
-   bun install -g .
+   bun install
+   bun run build
+   bun link
    ```
 
    **Using pnpm:**

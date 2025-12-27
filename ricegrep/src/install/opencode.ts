@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { Command } from "commander";
+import * as jsonc from "jsonc-parser";
 
 
 const TOOL_PATH = path.join(
@@ -89,7 +90,7 @@ async function installPlugin() {
       fs.writeFileSync(MCP_PATH, JSON.stringify({}, null, 2));
     }
     const mcpContent = fs.readFileSync(MCP_PATH, "utf-8");
-    const mcpJson = JSON.parse(mcpContent);
+    const mcpJson = jsonc.parse(mcpContent);
     if (!mcpJson.$schema) {
       mcpJson.$schema = "https://opencode.ai/config.json";
     }
@@ -124,7 +125,7 @@ async function uninstallPlugin() {
 
     if (fs.existsSync(MCP_PATH)) {
       const mcpContent = fs.readFileSync(MCP_PATH, "utf-8");
-      const mcpJson = JSON.parse(mcpContent);
+      const mcpJson = jsonc.parse(mcpContent);
       delete mcpJson.mcp.ricegrep;
       fs.writeFileSync(MCP_PATH, JSON.stringify(mcpJson, null, 2));
       console.log("Successfully removed the ricegrep from the OpenCode agent");

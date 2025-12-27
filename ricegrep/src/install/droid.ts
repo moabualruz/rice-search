@@ -3,6 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
+import * as jsonc from "jsonc-parser";
 
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,11 +62,7 @@ function readPluginAsset(assetPath: string): string {
 }
 
 function parseJsonWithComments(content: string): Record<string, unknown> {
-  const stripped = content
-    .split("\n")
-    .map((line) => line.replace(/^\s*\/\/.*$/, ""))
-    .join("\n");
-  const parsed: unknown = JSON.parse(stripped);
+  const parsed: unknown = jsonc.parse(content);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error("Factory Droid settings must be a JSON object");
   }
