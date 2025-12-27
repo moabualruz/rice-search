@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Local Code Search',
-  description: 'Hybrid semantic and keyword code search',
+  title: 'Rice Search',
+  description: 'Hybrid semantic + keyword code search platform',
 };
 
 export default function RootLayout({

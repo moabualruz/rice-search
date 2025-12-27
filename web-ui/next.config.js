@@ -2,10 +2,11 @@
 const nextConfig = {
   output: 'standalone',
   async rewrites() {
+    const apiUrl = process.env.API_URL || 'http://api:8080';
     return [
       {
         source: '/api/:path*',
-        destination: process.env.API_URL || 'http://unified-api:8080/:path*',
+        destination: `${apiUrl}/:path*`,
       },
     ];
   },

@@ -1,4 +1,4 @@
-# Local Code Search - Web UI (Next.js with Bun)
+# Rice Search - Web UI (Next.js with Bun)
 # Multi-stage build for optimized production image
 
 # ============================================
