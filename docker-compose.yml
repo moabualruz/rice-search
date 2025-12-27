@@ -1,0 +1,219 @@
+# Rice Search Platform - Docker Compose
+# Cross-platform: Windows+WSL2, Linux, macOS (CPU)
+# All data persisted to ./data via bind mounts
+
+services:
+  # ============================================
+  # Infrastructure: etcd (Milvus metadata store)
+  # ============================================
+  etcd:
+    container_name: rice-etcd
+    image: quay.io/coreos/etcd:v3.5.25
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - ./data/etcd:/etcd
+    command: >
+      etcd
+      --data-dir=/etcd
+      --listen-client-urls=http://0.0.0.0:2379
+      --advertise-client-urls=http://etcd:2379
+      --listen-peer-urls=http://0.0.0.0:2380
+      --initial-advertise-peer-urls=http://etcd:2380
+      --initial-cluster=default=http://etcd:2380
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
+  # Infrastructure: MinIO (Milvus object storage)
+  # ============================================
+  minio:
+    container_name: rice-minio
+    image: minio/minio:RELEASE.2024-05-28T17-19-04Z
+    environment:
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+    volumes:
+      - ./data/minio:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
+  # Milvus: Vector database (standalone mode)
+  # ============================================
+  milvus:
+    container_name: rice-milvus
+    image: milvusdb/milvus:v2.4.13
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+      MINIO_USE_SSL: "false"
+      MINIO_REGION: us-east-1
+    volumes:
+      - ./data/milvus:/var/lib/milvus
+    ports:
+      - "19530:19530"
+      - "9091:9091"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 5
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
+  # Attu: Milvus admin UI
+  # ============================================
+  attu:
+    container_name: rice-attu
+    image: zilliz/attu:v2.4
+    environment:
+      MILVUS_URL: milvus:19530
+    ports:
+      - "8000:3000"
+    depends_on:
+      milvus:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
+  # Text Embeddings Inference (TEI) - CPU version
+  # For GPU, use docker-compose.gpu.yml override
+  # ============================================
+  embeddings:
+    container_name: rice-embeddings
+    image: ghcr.io/huggingface/text-embeddings-inference:cpu-1.7
+    command:
+      - "--model-id=BAAI/bge-base-en-v1.5"
+      - "--max-batch-tokens=16384"
+      - "--max-client-batch-size=32"
+    volumes:
+      - ./data/embeddings-cache:/data
+    ports:
+      - "8081:80"
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 30s
+      start_period: 120s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
+  # API: Main integration point
+  # All clients connect here (8080)
+  # ============================================
+  api:
+    container_name: rice-api
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    environment:
+      # Service connections
+      MILVUS_HOST: milvus
+      MILVUS_PORT: "19530"
+      EMBEDDINGS_URL: http://embeddings:80
+      
+      # Data directories
+      DATA_DIR: /data
+      TANTIVY_INDEX_DIR: /tantivy
+      
+      # Model configuration
+      EMBEDDING_MODEL: BAAI/bge-base-en-v1.5
+      EMBEDDING_DIM: "768"
+      
+      # Search configuration
+      SPARSE_TOPK: "200"
+      DENSE_TOPK: "80"
+      FINAL_TOPK: "20"
+      RRF_K: "60"
+      
+      # Auth (disabled by default)
+      AUTH_MODE: none
+      
+      # Logging
+      LOG_LEVEL: INFO
+    volumes:
+      - ./data/api:/data
+      - ./data/tantivy:/tantivy
+      # Mount repos for server-side indexing (optional)
+      - ${REPOS_PATH:-./repos}:/repos:ro
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      interval: 15s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      milvus:
+        condition: service_healthy
+      embeddings:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
+  # Web UI: Simple search interface
+  # Commented out for initial testing - can access API directly
+  # ============================================
+  web-ui:
+    container_name: rice-web-ui
+    build:
+      context: ./web-ui
+      dockerfile: Dockerfile
+    environment:
+      # For server-side proxying within Docker network
+      API_URL: http://api:8080
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+          condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+networks:
+  rice-network:
+    driver: bridge
+    name: rice-search

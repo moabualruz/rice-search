@@ -1,0 +1,58 @@
+# GPU Override for Rice Search Platform
+# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+# Requirements:
+#   - NVIDIA GPU with CUDA support
+#   - nvidia-container-toolkit installed
+#   - Docker configured with nvidia runtime
+#
+# GPU Memory Requirements (approximate):
+#   - TEI (embeddings): ~2GB VRAM for bge-base-en-v1.5
+#   - Milvus: ~2-4GB VRAM depending on index size
+#   - Total recommended: 8GB+ VRAM
+
+services:
+  # ============================================
+  # Milvus with GPU acceleration
+  # Accelerates vector similarity search
+  # ============================================
+  milvus:
+    image: milvusdb/milvus:v2.4.13-gpu
+    command: ["milvus", "run", "standalone"]
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY_ID: minioadmin
+      MINIO_SECRET_ACCESS_KEY: minioadmin
+      MINIO_USE_SSL: "false"
+      MINIO_REGION: us-east-1
+      # GPU Configuration
+      CUDA_VISIBLE_DEVICES: "0"
+      # Enable GPU for indexing and search
+      KNOWHERE_GPU_MEM_POOL_SIZE: "2048:4096"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # ============================================
+  # TEI with GPU acceleration  
+  # Accelerates embedding generation (~10x faster)
+  # ============================================
+  embeddings:
+    image: ghcr.io/huggingface/text-embeddings-inference:1.7
+    command:
+      - "--model-id=BAAI/bge-base-en-v1.5"
+      - "--max-batch-tokens=16384"
+      - "--max-client-batch-size=32"
+      - "--dtype=float16"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
