@@ -1,0 +1,13 @@
+# Bun configuration for Local Code Search API
+
+[install]
+# Use faster installation
+peer = false
+
+[install.lockfile]
+# Save the lockfile
+save = true
+
+[run]
+# Bun runtime settings
+bun = true

@@ -69,7 +69,30 @@ docker-compose up -d
 docker-compose ps
 ```
 
-### 2. Index Your Code
+### 2. Install ricegrep CLI (Optional)
+
+For the best search experience, install the ricegrep CLI:
+
+```bash
+# Navigate to ricegrep directory
+cd ricegrep
+
+# Choose your preferred package manager:
+npm install -g .     # npm (recommended)
+bun install -g .     # bun (fastest)  
+pnpm install -g .    # pnpm
+
+# Verify installation
+ricegrep --help
+```
+
+**Benefits of ricegrep CLI:**
+- 🔍 Natural language search: `ricegrep "auth middleware"`
+- 🔄 Auto-indexing: `ricegrep watch` keeps your index fresh
+- 🤖 AI agent integration: MCP server mode for coding assistants
+- ⚡ Faster than API calls for interactive use
+
+### 3. Index Your Code
 
 ```bash
 # Using the reindex script (incremental by default)
@@ -94,7 +117,7 @@ curl -X POST http://localhost:8080/v1/stores/default/index \
   }'
 ```
 
-### 3. Search
+### 4. Search
 
 **Web UI**: Open http://localhost:3000
 
@@ -304,9 +327,11 @@ Add to your MCP client configuration:
 **ricegrep** includes built-in MCP server support for local AI assistant integration. The CLI can act as an MCP server, allowing coding assistants to use Rice Search directly:
 
 ```bash
-# Install ricegrep CLI
+# Install ricegrep CLI (choose your preferred package manager)
 cd ricegrep
-npm install -g .
+npm install -g .     # npm (recommended)
+# bun install -g .   # bun (faster alternative)
+# pnpm install -g .  # pnpm
 
 # Start MCP server mode (used by AI assistants)
 ricegrep watch-mcp
@@ -376,23 +401,40 @@ python scripts/reindex.py ~/myproject
    ```
 
 2. Try a simpler query
-3. Check index logs: `docker-compose logs unified-api`
+3. Check index logs: `docker-compose logs api`
 
 ## Development
 
 ### Build locally
 
+**Using npm:**
 ```bash
-cd unified-api
+cd api
 npm install
 npm run build
 npm run start:dev
 ```
 
+**Using bun (faster):**
+```bash
+cd api
+bun install
+bun run build
+bun run start:dev
+```
+
 ### Run tests
 
+**Using npm:**
 ```bash
+cd api
 npm test
+```
+
+**Using bun:**
+```bash
+cd api
+bun test
 ```
 
 ## License

@@ -50,6 +50,7 @@ Thumbs.db
 # Build artifacts
 dist/
 build/
+target/
 *.whl
 
 # my prompts

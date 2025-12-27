@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "module": "commonjs",
+    "target": "ES2022",
+    "moduleResolution": "node",
+    "allowImportingTsExtensions": false
+  },
+  "exclude": ["node_modules", "dist", "tantivy", "**/*.spec.ts", "test"]
+}

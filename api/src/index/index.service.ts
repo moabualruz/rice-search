@@ -1,0 +1,317 @@
+import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EmbeddingsService } from '../services/embeddings.service';
+import { MilvusService } from '../services/milvus.service';
+import { TantivyService } from '../services/tantivy.service';
+import { StoreManagerService } from '../services/store-manager.service';
+import { FileTrackerService } from '../services/file-tracker.service';
+import {
+  TreeSitterChunkerService,
+  TreeSitterChunk,
+} from '../services/treesitter-chunker.service';
+import {
+  FileToIndex,
+  IndexResponseDto,
+  DeleteResponseDto,
+} from './dto/index-request.dto';
+
+@Injectable()
+export class IndexService {
+  private readonly logger = new Logger(IndexService.name);
+  private readonly maxFileSizeMb: number;
+  private readonly embeddingBatchSize = 32;
+
+  constructor(
+    private configService: ConfigService,
+    private embeddings: EmbeddingsService,
+    private milvus: MilvusService,
+    private tantivy: TantivyService,
+    private storeManager: StoreManagerService,
+    private fileTracker: FileTrackerService,
+    private treeSitterChunker: TreeSitterChunkerService,
+  ) {
+    this.maxFileSizeMb = this.configService.get<number>(
+      'indexing.maxFileSizeMb',
+    )!;
+  }
+
+  /**
+   * Index files into both sparse (Tantivy) and dense (Milvus) indexes
+   * Supports incremental indexing - only re-indexes changed files
+   */
+  async indexFiles(
+    store: string,
+    files: FileToIndex[],
+    force = false,
+  ): Promise<IndexResponseDto> {
+    const startTime = Date.now();
+    const errors: string[] = [];
+    let totalChunks = 0;
+    let skippedUnchanged = 0;
+
+    // Ensure store exists
+    this.storeManager.ensureStore(store);
+
+    // Incremental indexing: Check which files have changed
+    let filesToProcess: FileToIndex[];
+    if (force) {
+      filesToProcess = files;
+      this.logger.log(`Force re-index: processing all ${files.length} files`);
+    } else {
+      const changeResult = this.fileTracker.checkFilesForChanges(
+        store,
+        files.map((f) => ({ path: f.path, content: f.content })),
+      );
+      
+      // Combine changed and new files for processing
+      filesToProcess = [
+        ...changeResult.changed,
+        ...changeResult.newFiles,
+      ] as FileToIndex[];
+      
+      skippedUnchanged = changeResult.unchanged.length;
+      
+      if (skippedUnchanged > 0) {
+        this.logger.log(
+          `Incremental indexing: ${skippedUnchanged} unchanged, ` +
+          `${changeResult.changed.length} changed, ${changeResult.newFiles.length} new`,
+        );
+      }
+    }
+
+    if (filesToProcess.length === 0) {
+      return {
+        files_processed: files.length,
+        chunks_indexed: 0,
+        time_ms: Date.now() - startTime,
+        skipped_unchanged: skippedUnchanged,
+      };
+    }
+
+    // Process files using Tree-sitter chunker
+    const allChunks: TreeSitterChunk[] = [];
+    const fileChunkMap: Map<string, { content: string; chunkIds: string[] }> = new Map();
+
+    for (const file of filesToProcess) {
+      try {
+        // Skip binary files
+        if (this.treeSitterChunker.isBinary(file.content)) {
+          this.logger.debug(`Skipping binary file: ${file.path}`);
+          continue;
+        }
+
+        // Skip large files
+        const sizeMb = Buffer.byteLength(file.content, 'utf8') / (1024 * 1024);
+        if (sizeMb > this.maxFileSizeMb) {
+          this.logger.debug(
+            `Skipping large file (${sizeMb.toFixed(1)}MB): ${file.path}`,
+          );
+          continue;
+        }
+
+        // Use Tree-sitter for AST-aware chunking
+        const chunks = await this.treeSitterChunker.chunkWithTreeSitter(
+          file.path,
+          file.content,
+        );
+        
+        allChunks.push(...chunks);
+        
+        // Track chunk IDs for this file
+        fileChunkMap.set(file.path, {
+          content: file.content,
+          chunkIds: chunks.map((c) => c.doc_id),
+        });
+      } catch (error) {
+        const errorMsg = `Failed to process ${file.path}: ${error}`;
+        this.logger.warn(errorMsg);
+        errors.push(errorMsg);
+      }
+    }
+
+    if (allChunks.length === 0) {
+      return {
+        files_processed: files.length,
+        chunks_indexed: 0,
+        time_ms: Date.now() - startTime,
+        skipped_unchanged: skippedUnchanged,
+        errors: errors.length > 0 ? errors : undefined,
+      };
+    }
+
+    // Index in Tantivy (sparse)
+    try {
+      const tantivyDocs = allChunks.map((chunk) => ({
+        doc_id: chunk.doc_id,
+        path: chunk.path,
+        language: chunk.language,
+        symbols: chunk.symbols,
+        content: chunk.content,
+        start_line: chunk.start_line,
+        end_line: chunk.end_line,
+      }));
+
+      await this.tantivy.index(store, tantivyDocs);
+    } catch (error) {
+      const errorMsg = `Tantivy indexing failed: ${error}`;
+      this.logger.error(errorMsg);
+      errors.push(errorMsg);
+    }
+
+    // Generate embeddings and index in Milvus (dense)
+    try {
+      const texts = allChunks.map((chunk) => {
+        // Create embedding text with context
+        const symbolsStr =
+          chunk.symbols.length > 0 ? chunk.symbols.join(' ') : '';
+        return `${chunk.path}\n${symbolsStr}\n${chunk.content}`.slice(0, 8000);
+      });
+
+      // Batch embedding generation
+      const embeddings = await this.embeddings.embedBatch(
+        texts,
+        this.embeddingBatchSize,
+      );
+
+      // Prepare Milvus data
+      await this.milvus.upsert(store, {
+        doc_ids: allChunks.map((c) => c.doc_id),
+        embeddings,
+        paths: allChunks.map((c) => c.path),
+        languages: allChunks.map((c) => c.language),
+        chunk_ids: allChunks.map((c) => c.chunk_index),
+        start_lines: allChunks.map((c) => c.start_line),
+        end_lines: allChunks.map((c) => c.end_line),
+      });
+
+      totalChunks = allChunks.length;
+    } catch (error) {
+      const errorMsg = `Milvus indexing failed: ${error}`;
+      this.logger.error(errorMsg);
+      errors.push(errorMsg);
+    }
+
+    // Track successfully indexed files
+    if (totalChunks > 0) {
+      const trackedFiles = Array.from(fileChunkMap.entries()).map(
+        ([path, data]) => ({
+          path,
+          content: data.content,
+          chunkIds: data.chunkIds,
+        }),
+      );
+      this.fileTracker.trackFiles(store, trackedFiles);
+    }
+
+    // Update store timestamp
+    this.storeManager.touchStore(store);
+
+    return {
+      files_processed: files.length,
+      chunks_indexed: totalChunks,
+      time_ms: Date.now() - startTime,
+      skipped_unchanged: skippedUnchanged,
+      errors: errors.length > 0 ? errors : undefined,
+    };
+  }
+
+  /**
+   * Delete files from both indexes and remove from tracking
+   */
+  async deleteFiles(
+    store: string,
+    paths?: string[],
+    pathPrefix?: string,
+  ): Promise<DeleteResponseDto> {
+    const startTime = Date.now();
+    let sparseDeleted = 0;
+    let denseDeleted = 0;
+
+    // Delete by specific paths
+    if (paths && paths.length > 0) {
+      for (const path of paths) {
+        try {
+          sparseDeleted += await this.tantivy.delete(store, { path });
+          // Untrack the file
+          this.fileTracker.untrackFile(store, path);
+        } catch (error) {
+          this.logger.warn(`Failed to delete from Tantivy: ${path}: ${error}`);
+        }
+      }
+      // Milvus delete by path is less efficient, use prefix for each path
+      for (const path of paths) {
+        denseDeleted += await this.milvus.deleteByPathPrefix(store, path);
+      }
+    }
+
+    // Delete by path prefix
+    if (pathPrefix) {
+      try {
+        sparseDeleted += await this.tantivy.delete(store, { path: pathPrefix });
+        // Untrack files by prefix
+        this.fileTracker.untrackByPrefix(store, pathPrefix);
+      } catch (error) {
+        this.logger.warn(
+          `Failed to delete from Tantivy by prefix: ${pathPrefix}: ${error}`,
+        );
+      }
+      denseDeleted += await this.milvus.deleteByPathPrefix(store, pathPrefix);
+    }
+
+    // Update store timestamp
+    this.storeManager.touchStore(store);
+
+    return {
+      sparse_deleted: sparseDeleted,
+      dense_deleted: denseDeleted,
+      time_ms: Date.now() - startTime,
+    };
+  }
+
+  /**
+   * Re-index entire store (clear and rebuild)
+   */
+  async reindex(
+    store: string,
+    files: FileToIndex[],
+  ): Promise<IndexResponseDto> {
+    // Clear file tracking for this store
+    this.fileTracker.clearStore(store);
+
+    // Delete all existing data
+    await this.deleteFiles(store, undefined, '');
+
+    // Re-index all files with force=true
+    return this.indexFiles(store, files, true);
+  }
+
+  /**
+   * Sync index with current files - remove deleted files from index
+   */
+  async syncDeletedFiles(
+    store: string,
+    currentPaths: string[],
+  ): Promise<{ deleted: number }> {
+    const deletedPaths = this.fileTracker.findDeletedFiles(store, currentPaths);
+    
+    if (deletedPaths.length === 0) {
+      return { deleted: 0 };
+    }
+
+    this.logger.log(`Syncing: removing ${deletedPaths.length} deleted files`);
+    await this.deleteFiles(store, deletedPaths);
+    
+    return { deleted: deletedPaths.length };
+  }
+
+  /**
+   * Get indexing statistics for a store
+   */
+  getStoreStats(store: string): {
+    tracked_files: number;
+    total_size: number;
+    last_updated: string;
+  } {
+    return this.fileTracker.getStoreStats(store);
+  }
+}
