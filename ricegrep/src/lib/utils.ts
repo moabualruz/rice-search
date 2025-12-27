@@ -256,7 +256,7 @@ export async function initialSync(
     (filePath) => !fileSystem.isIgnored(filePath, repoRoot),
   );
 
-  if (config && repoFiles.length > config.maxFileCount) {
+  if (config && Number.isFinite(config.maxFileCount) && repoFiles.length > config.maxFileCount) {
     throw new MaxFileCountExceededError(repoFiles.length, config.maxFileCount);
   }
 

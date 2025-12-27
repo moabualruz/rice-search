@@ -9,7 +9,7 @@ const GLOBAL_CONFIG_DIR = ".config/ricegrep";
 const GLOBAL_CONFIG_FILES = ["config.yaml", "config.yml"] as const;
 const ENV_PREFIX = "RICEGREP_";
 const DEFAULT_MAX_FILE_SIZE = 1 * 1024 * 1024;
-const DEFAULT_MAX_FILE_COUNT = 1000;
+const DEFAULT_MAX_FILE_COUNT = Infinity;
 
 const ConfigSchema = z.object({
   maxFileSize: z.number().positive().optional(),
@@ -38,7 +38,7 @@ export interface RicegrepConfig {
   /**
    * Maximum number of files that can be uploaded in a single sync operation.
    * If the folder contains more files than this limit, an error will be thrown.
-   * @default 10000
+   * @default Infinity (unlimited)
    */
   maxFileCount: number;
 }

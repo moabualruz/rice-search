@@ -242,7 +242,7 @@ Create a `.ricegreprc.yaml` (or `.ricegreprc.yml`) in your project root for loca
 # Maximum file size in bytes to upload (default: 10MB)
 maxFileSize: 5242880
 
-# Maximum number of files to upload (default: 10000)
+# Maximum number of files to upload (default: unlimited)
 maxFileCount: 5000
 ```
 
@@ -284,7 +284,7 @@ searches.
 ### Sync Options
 
 - `RICEGREP_MAX_FILE_SIZE`: Maximum file size in bytes to upload (default: `10485760` / 10MB)
-- `RICEGREP_MAX_FILE_COUNT`: Maximum number of files to upload (default: `10000`)
+- `RICEGREP_MAX_FILE_COUNT`: Maximum number of files to upload (default: unlimited)
 
 **Examples:**
 ```bash

@@ -9,7 +9,8 @@ import { startWatch } from "./watch.js";
 
 export const watchMcp = new Command("mcp")
   .description("Start MCP server for ricegrep")
-  .action(async (_options, cmd) => {
+  .option("--no-watch", "Disable automatic file watching")
+  .action(async (options, cmd) => {
     process.on("SIGINT", () => {
       console.error("Received SIGINT, shutting down gracefully...");
       process.exit(0);
@@ -43,9 +44,10 @@ export const watchMcp = new Command("mcp")
       process.stderr.write(`[DEBUG] ${args.join(" ")}\n`);
     };
 
-    const options: {
+    const globalOpts: {
       store: string;
     } = cmd.optsWithGlobals();
+    const watchEnabled = options.watch !== false;
 
     const transport = new StdioServerTransport();
     const server = new Server(
@@ -73,22 +75,26 @@ export const watchMcp = new Command("mcp")
 
     await server.connect(transport);
 
-    const startBackgroundSync = async () => {
-      console.log("[SYNC] Scheduling initial sync in 5 seconds...");
+    if (watchEnabled) {
+      const startBackgroundSync = async () => {
+        console.log("[SYNC] Scheduling initial sync in 5 seconds...");
 
-      setTimeout(async () => {
-        console.log("[SYNC] Starting file sync...");
-        try {
-          await startWatch({ store: options.store, dryRun: false });
-        } catch (error) {
-          const errorMessage =
-            error instanceof Error ? error.message : String(error);
-          console.error("[SYNC] Sync failed:", errorMessage);
-        }
-      }, 1000);
-    };
+        setTimeout(async () => {
+          console.log("[SYNC] Starting file sync...");
+          try {
+            await startWatch({ store: globalOpts.store, dryRun: false });
+          } catch (error) {
+            const errorMessage =
+              error instanceof Error ? error.message : String(error);
+            console.error("[SYNC] Sync failed:", errorMessage);
+          }
+        }, 1000);
+      };
 
-    startBackgroundSync().catch((error) => {
-      console.error("[SYNC] Background sync setup failed:", error);
-    });
+      startBackgroundSync().catch((error) => {
+        console.error("[SYNC] Background sync setup failed:", error);
+      });
+    } else {
+      console.log("[MCP] File watching disabled (--no-watch)");
+    }
   });
