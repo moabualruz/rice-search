@@ -1,8 +1,11 @@
 'use client';
 
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
+import Image from 'next/image';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8088';
+
+type TabType = 'search' | 'admin';
 
 // ============================================================================
 // Type Definitions (Phases 0-5)
@@ -105,6 +108,40 @@ interface SearchResponse {
   postrank?: PostrankInfo;
 }
 
+// Admin types
+interface StoreInfo {
+  name: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+  doc_count?: number;
+}
+
+interface StoreStats {
+  store: string;
+  sparse_index: {
+    doc_count: number;
+    segment_count: number;
+  };
+  dense_index: {
+    doc_count: number;
+    exists: boolean;
+  };
+  last_updated: string;
+}
+
+interface IndexStats {
+  tracked_files: number;
+  total_size: number;
+  last_updated: string;
+}
+
+interface TrackedFile {
+  path: string;
+  size: number;
+  indexed_at: string;
+}
+
 // ============================================================================
 // Constants
 // ============================================================================
@@ -118,15 +155,9 @@ const services = [
   },
   {
     name: 'Metrics',
-    description: 'Observability Dashboard',
-    url: `${API_URL}/v1/observability/stats`,
+    description: 'Prometheus Metrics Endpoint',
+    url: `${API_URL}/metrics`,
     icon: '📊',
-  },
-  {
-    name: 'Attu',
-    description: 'Milvus Vector DB Admin',
-    url: 'http://localhost:8000',
-    icon: '🗄️',
   },
   {
     name: 'MinIO',
@@ -162,11 +193,29 @@ const difficultyColors: Record<string, string> = {
   hard: 'var(--accent-red)',
 };
 
+// Utility functions
+const formatBytes = (bytes: number): string => {
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
+
+const formatDate = (dateStr: string): string => {
+  if (!dateStr) return 'Never';
+  const date = new Date(dateStr);
+  return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+};
+
 // ============================================================================
 // Main Component
 // ============================================================================
 
 export default function Home() {
+  // Tab state
+  const [activeTab, setActiveTab] = useState<TabType>('search');
+
   // Basic search state
   const [query, setQuery] = useState('');
   const [pathPrefix, setPathPrefix] = useState('');
@@ -183,6 +232,16 @@ export default function Home() {
 
   // Advanced options (collapsed by default)
   const [showAdvanced, setShowAdvanced] = useState(false);
+
+  // Admin state
+  const [stores, setStores] = useState<StoreInfo[]>([]);
+  const [selectedStore, setSelectedStore] = useState<string | null>(null);
+  const [storeStats, setStoreStats] = useState<StoreStats | null>(null);
+  const [indexStats, setIndexStats] = useState<IndexStats | null>(null);
+  const [adminLoading, setAdminLoading] = useState(false);
+  const [adminError, setAdminError] = useState<string | null>(null);
+  const [newStoreName, setNewStoreName] = useState('');
+  const [newStoreDescription, setNewStoreDescription] = useState('');
 
   // Phase 1 options
   const [enableReranking, setEnableReranking] = useState(true);
@@ -254,13 +313,150 @@ export default function Home() {
     }
   };
 
+  // Admin API functions
+  const fetchStores = async () => {
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      const response = await fetch(`${API_URL}/v1/stores`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch stores: ${response.statusText}`);
+      }
+      const data = await response.json();
+      const storeList: StoreInfo[] = data.stores || data || [];
+      setStores(storeList);
+      
+      // Update selected store if current doesn't exist in list
+      if (storeList.length > 0) {
+        const storeNames = storeList.map((s) => s.name);
+        if (!storeNames.includes(store)) {
+          setStore(storeList[0].name);
+        }
+      }
+    } catch (err) {
+      setAdminError(err instanceof Error ? err.message : 'Failed to fetch stores');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const fetchStoreStats = async (storeName: string) => {
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      const [statsRes, indexRes] = await Promise.all([
+        fetch(`${API_URL}/v1/stores/${storeName}/stats`),
+        fetch(`${API_URL}/v1/stores/${storeName}/index/stats`),
+      ]);
+
+      if (statsRes.ok) {
+        const stats = await statsRes.json();
+        setStoreStats(stats);
+      }
+
+      if (indexRes.ok) {
+        const index = await indexRes.json();
+        setIndexStats(index);
+      }
+    } catch (err) {
+      setAdminError(err instanceof Error ? err.message : 'Failed to fetch store stats');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleCreateStore = async () => {
+    if (!newStoreName.trim()) return;
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      const response = await fetch(`${API_URL}/v1/stores`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newStoreName.trim(),
+          description: newStoreDescription.trim() || undefined,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to create store: ${response.statusText}`);
+      }
+      setNewStoreName('');
+      setNewStoreDescription('');
+      await fetchStores();
+    } catch (err) {
+      setAdminError(err instanceof Error ? err.message : 'Failed to create store');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleDeleteStore = async (storeName: string) => {
+    if (!confirm(`Are you sure you want to delete store "${storeName}"? This cannot be undone.`)) {
+      return;
+    }
+    setAdminLoading(true);
+    setAdminError(null);
+    try {
+      const response = await fetch(`${API_URL}/v1/stores/${storeName}`, {
+        method: 'DELETE',
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to delete store: ${response.statusText}`);
+      }
+      if (selectedStore === storeName) {
+        setSelectedStore(null);
+        setStoreStats(null);
+        setIndexStats(null);
+      }
+      await fetchStores();
+    } catch (err) {
+      setAdminError(err instanceof Error ? err.message : 'Failed to delete store');
+    } finally {
+      setAdminLoading(false);
+    }
+  };
+
+  const handleSelectStore = (storeName: string) => {
+    setSelectedStore(storeName);
+    fetchStoreStats(storeName);
+  };
+
+  // Load stores on mount
+  useEffect(() => {
+    fetchStores();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Refresh stores when switching to admin tab
+  useEffect(() => {
+    if (activeTab === 'admin') {
+      fetchStores();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
   return (
     <div className='app'>
       {/* Navigation */}
       <nav className='navbar'>
         <div className='nav-brand'>
-          <span className='brand-icon'>🍚</span>
+          <Image src='/logo.png' alt='Rice Search' width={28} height={28} className='brand-logo' />
           <span className='brand-text'>Rice Search</span>
+        </div>
+        <div className='nav-tabs'>
+          <button
+            className={`nav-tab ${activeTab === 'search' ? 'active' : ''}`}
+            onClick={() => setActiveTab('search')}
+          >
+            🔍 Search
+          </button>
+          <button
+            className={`nav-tab ${activeTab === 'admin' ? 'active' : ''}`}
+            onClick={() => setActiveTab('admin')}
+          >
+            ⚙️ Admin
+          </button>
         </div>
         <div className='nav-links'>
           {services.map((service) => (
@@ -279,28 +475,33 @@ export default function Home() {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <header className='hero'>
-        <h1 className='hero-title'>
-          <span className='hero-icon'>🍚</span>
-          Rice Search
-        </h1>
-        <p className='hero-subtitle'>
-          Intelligent hybrid semantic + keyword search across your codebase
-        </p>
-        <div className='hero-badges'>
-          <span className='badge'>BM25</span>
-          <span className='badge-plus'>+</span>
-          <span className='badge'>Semantic</span>
-          <span className='badge-plus'>+</span>
-          <span className='badge'>Reranking</span>
-          <span className='badge-plus'>=</span>
-          <span className='badge badge-highlight'>Intelligent Search</span>
-        </div>
-      </header>
+      {/* Hero Section - Search Tab Only */}
+      {activeTab === 'search' && (
+        <header className='hero'>
+          <h1 className='hero-title'>
+            <Image src='/logo.png' alt='Rice Search' width={56} height={56} className='hero-logo' />
+            Rice Search
+          </h1>
+          <p className='hero-subtitle'>
+            Intelligent hybrid semantic + keyword search across your codebase
+          </p>
+          <div className='hero-badges'>
+            <span className='badge'>BM25</span>
+            <span className='badge-plus'>+</span>
+            <span className='badge'>Semantic</span>
+            <span className='badge-plus'>+</span>
+            <span className='badge'>Reranking</span>
+            <span className='badge-plus'>=</span>
+            <span className='badge badge-highlight'>Intelligent Search</span>
+          </div>
+        </header>
+      )}
 
       {/* Main Content */}
       <main className='main'>
+        {/* Search Tab */}
+        {activeTab === 'search' && (
+          <>
         {/* Search Section */}
         <section className='search-section'>
           <form onSubmit={handleSearch} className='search-form'>
@@ -327,13 +528,21 @@ export default function Home() {
           <div className='filters'>
             <div className='filter-group'>
               <label className='filter-label'>Store</label>
-              <input
-                type='text'
+              <select
                 className='filter-input'
-                placeholder='default'
                 value={store}
-                onChange={(e) => setStore(e.target.value || 'default')}
-              />
+                onChange={(e) => setStore(e.target.value)}
+              >
+                {stores.length === 0 ? (
+                  <option value='default'>default</option>
+                ) : (
+                  stores.map((s) => (
+                    <option key={s.name} value={s.name}>
+                      {s.name}
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
             <div className='filter-group'>
               <label className='filter-label'>Path Filter</label>
@@ -702,6 +911,173 @@ export default function Home() {
             ))}
           </div>
         </section>
+        </>
+        )}
+
+        {/* Admin Tab */}
+        {activeTab === 'admin' && (
+          <div className='admin-panel'>
+            {/* Admin Header */}
+            <div className='admin-header'>
+              <h2>🗄️ Store Management</h2>
+              <p className='admin-subtitle'>Manage your search indexes and view statistics</p>
+            </div>
+
+            {/* Admin Error */}
+            {adminError && (
+              <div className='error-banner'>
+                <span className='error-icon'>⚠️</span>
+                {adminError}
+              </div>
+            )}
+
+            {/* Create Store Form */}
+            <div className='admin-card'>
+              <h3 className='admin-card-title'>➕ Create New Store</h3>
+              <div className='create-store-form'>
+                <div className='form-row'>
+                  <div className='form-group'>
+                    <label className='form-label'>Store Name</label>
+                    <input
+                      type='text'
+                      className='form-input'
+                      placeholder='my-project'
+                      value={newStoreName}
+                      onChange={(e) => setNewStoreName(e.target.value)}
+                    />
+                  </div>
+                  <div className='form-group'>
+                    <label className='form-label'>Description (optional)</label>
+                    <input
+                      type='text'
+                      className='form-input'
+                      placeholder='My project codebase'
+                      value={newStoreDescription}
+                      onChange={(e) => setNewStoreDescription(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    type='button'
+                    className='btn-primary'
+                    onClick={handleCreateStore}
+                    disabled={adminLoading || !newStoreName.trim()}
+                  >
+                    {adminLoading ? 'Creating...' : 'Create Store'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Stores List */}
+            <div className='admin-grid'>
+              <div className='admin-card stores-list'>
+                <h3 className='admin-card-title'>📚 Stores</h3>
+                {adminLoading && stores.length === 0 ? (
+                  <div className='loading-state'>
+                    <div className='loading-spinner'></div>
+                  </div>
+                ) : stores.length === 0 ? (
+                  <div className='empty-state'>
+                    <span className='empty-icon'>📭</span>
+                    <p>No stores yet. Create one to get started!</p>
+                  </div>
+                ) : (
+                  <ul className='store-list'>
+                    {stores.map((s) => (
+                      <li
+                        key={s.name}
+                        className={`store-item ${selectedStore === s.name ? 'selected' : ''}`}
+                        onClick={() => handleSelectStore(s.name)}
+                      >
+                        <div className='store-info'>
+                          <span className='store-name'>{s.name}</span>
+                          {s.description && (
+                            <span className='store-desc'>{s.description}</span>
+                          )}
+                        </div>
+                        <div className='store-actions'>
+                          <button
+                            className='btn-icon btn-danger'
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeleteStore(s.name);
+                            }}
+                            title='Delete store'
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Store Details */}
+              <div className='admin-card store-details'>
+                <h3 className='admin-card-title'>📊 Store Details</h3>
+                {!selectedStore ? (
+                  <div className='empty-state'>
+                    <span className='empty-icon'>👈</span>
+                    <p>Select a store to view details</p>
+                  </div>
+                ) : adminLoading ? (
+                  <div className='loading-state'>
+                    <div className='loading-spinner'></div>
+                  </div>
+                ) : (
+                  <div className='stats-grid'>
+                    <h4 className='stats-section-title'>Selected: {selectedStore}</h4>
+                    
+                    {storeStats && (
+                      <div className='stats-section'>
+                        <h5>Index Statistics</h5>
+                        <div className='stat-row'>
+                          <span className='stat-name'>Sparse (BM25) Docs:</span>
+                          <span className='stat-value'>{storeStats.sparse_index?.doc_count ?? 0}</span>
+                        </div>
+                        <div className='stat-row'>
+                          <span className='stat-name'>Sparse Segments:</span>
+                          <span className='stat-value'>{storeStats.sparse_index?.segment_count ?? 0}</span>
+                        </div>
+                        <div className='stat-row'>
+                          <span className='stat-name'>Dense (Vector) Docs:</span>
+                          <span className='stat-value'>{storeStats.dense_index?.doc_count ?? 0}</span>
+                        </div>
+                        <div className='stat-row'>
+                          <span className='stat-name'>Dense Index Exists:</span>
+                          <span className='stat-value'>{storeStats.dense_index?.exists ? 'Yes' : 'No'}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {indexStats && (
+                      <div className='stats-section'>
+                        <h5>File Tracking</h5>
+                        <div className='stat-row'>
+                          <span className='stat-name'>Tracked Files:</span>
+                          <span className='stat-value'>{indexStats.tracked_files}</span>
+                        </div>
+                        <div className='stat-row'>
+                          <span className='stat-name'>Total Size:</span>
+                          <span className='stat-value'>{formatBytes(indexStats.total_size)}</span>
+                        </div>
+                        <div className='stat-row'>
+                          <span className='stat-name'>Last Updated:</span>
+                          <span className='stat-value'>{formatDate(indexStats.last_updated)}</span>
+                        </div>
+                      </div>
+                    )}
+
+                    {!storeStats && !indexStats && (
+                      <p className='text-muted'>No statistics available for this store.</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </main>
 
       {/* Footer */}

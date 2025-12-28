@@ -1,323 +1,193 @@
 <div align="center">
 
- <img src=".branding/logo.svg" alt="rice logo">
+<img src=".branding/logo.svg" alt="Rice Search" width="120">
 
 # **🔍Rice Search Platform🔎**
 
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
+**Intelligent hybrid code search with adaptive retrieval**
+
 </div>
-A fully local, production-ready code search platform with hybrid BM25 + semantic search. Self-hosted hybrid search for code with ricegrep CLI support.
 
-## Features
+## Overview
 
-- **Hybrid Search**: Combines BM25 (keyword) + semantic embeddings for best-of-both-worlds results
-- **Fully Local**: All components run locally - no external API calls
-- **GPU Optional**: Works on CPU, with optional GPU acceleration
-- **Cross-Platform**: Windows (WSL2), Linux, macOS
-- **MCP Compatible**: Model Context Protocol support for AI assistant integration
-- **Persistent Storage**: All data stored in `./data/` via bind mounts
+Rice Search is a fully local, self-hosted code search platform combining BM25 keyword search with semantic embeddings. Unlike static hybrid search, Rice Search uses **retrieval intelligence** to adapt its search strategy based on query characteristics.
+
+## Key Features
+
+### Intelligent Retrieval
+- **Intent Classification** - Detects query type (navigational, factual, exploratory, analytical)
+- **Adaptive Strategy** - Routes queries to optimal retrieval path:
+  - `sparse-only` - Fast BM25 for exact lookups
+  - `balanced` - Standard hybrid for general queries
+  - `dense-heavy` - Semantic-focused for concept searches
+  - `deep-rerank` - Multi-pass reranking for complex queries
+- **Multi-Pass Reranking** - Two-stage neural reranking with early exit for efficiency
+- **Query Expansion** - Automatic synonym expansion for better recall
+
+### Post-Processing Pipeline
+- **Semantic Deduplication** - Removes near-duplicate chunks (configurable threshold)
+- **MMR Diversity** - Maximal Marginal Relevance ensures varied results
+- **File Aggregation** - Groups chunks by file with representative selection
+
+### Infrastructure
+- **Fully Local** - No external API calls, all data stays on your machine
+- **GPU Optional** - CPU by default, GPU acceleration available
+- **MCP Support** - Model Context Protocol for AI assistant integration
+- **ricegrep CLI** - Fast command-line search with watch mode
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│                         Clients                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐  │
-│  │ Web UI   │  │ ricegrep │  │ MCP Tools│  │ REST API         │  │
-│  │ :3000    │  │   CLI    │  │          │  │ curl/scripts     │  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────────┬─────────┘  │
-└───────┼─────────────┼─────────────┼─────────────────┼────────────┘
-        │             │             │                 │
-        └─────────────┴─────────────┴─────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  Clients: Web UI (:3000) | ricegrep CLI | MCP | REST API    │
+└─────────────────────────────┬───────────────────────────────┘
                               │
-                     ┌─────────▼─────────┐
+                    ┌─────────▼─────────┐
                     │    Rice API       │
-                    │   (NestJS :8080)  │
-                    │   + MCP Server    │
+                    │  (NestJS :8080)   │
+                    │                   │
+                    │ ┌───────────────┐ │
+                    │ │  Intelligence │ │  ← Intent + Strategy
+                    │ │    Layer      │ │
+                    │ └───────────────┘ │
+                    │ ┌───────────────┐ │
+                    │ │   Retrieval   │ │  ← Hybrid Search
+                    │ │    Layer      │ │
+                    │ └───────────────┘ │
+                    │ ┌───────────────┐ │
+                    │ │   PostRank    │ │  ← Dedup + Diversity
+                    │ │   Pipeline    │ │
+                    │ └───────────────┘ │
                     └─────────┬─────────┘
                               │
         ┌─────────────────────┼─────────────────────┐
         │                     │                     │
-┌───────▼───────┐   ┌─────────▼─────────┐   ┌──────▼──────┐
-│   Tantivy     │   │      Milvus       │   │    TEI      │
-│   (BM25)      │   │   (Vectors)       │   │ (Embeddings)│
-│   Rust CLI    │   │   :19530          │   │    :8081    │
-└───────────────┘   └─────────┬─────────┘   └─────────────┘
-                              │
-              ┌───────────────┼───────────────┐
-              │               │               │
-        ┌─────▼─────┐   ┌─────▼─────┐   ┌─────▼─────┐
-        │   etcd    │   │   MinIO   │   │   Attu    │
-        │ (metadata)│   │ (storage) │   │  (Admin)  │
-        │           │   │ :9000     │   │  :8000    │
-        └───────────┘   └───────────┘   └───────────┘
+  ┌─────▼─────┐       ┌───────▼───────┐     ┌──────▼──────┐
+  │  Tantivy  │       │    Milvus     │     │  Infinity   │
+  │  (BM25)   │       │  (Vectors)    │     │ (Embed/Rank)│
+  └───────────┘       └───────────────┘     └─────────────┘
 ```
 
 ## Quick Start
 
 ### Prerequisites
-
 - Docker & Docker Compose
-- 8GB+ RAM recommended
-- For Windows: WSL2 with Docker Desktop
+- 8GB+ RAM (16GB recommended)
 
-### 1. Start the Platform
+### 1. Start Services
 
 ```bash
-# Clone and start
-git clone <repo>
-cd rice-search
-
-# Start all services (first run downloads ~5GB of images)
+git clone <repo> && cd rice-search
 docker-compose up -d
-
-# Wait for services to be healthy (~2-3 minutes)
-docker-compose ps
+# Wait ~3 minutes for model downloads on first run
 ```
 
-### 2. Install ricegrep CLI (Optional)
-
-For the best search experience, install the ricegrep CLI:
+### 2. Index Your Code
 
 ```bash
-# Navigate to ricegrep directory
-cd ricegrep
-
-# Choose your preferred package manager:
-npm install -g .     # npm (recommended)
-bun install -g .     # bun (fastest)  
-pnpm install -g .    # pnpm
-
-# Verify installation
-ricegrep --help
-```
-
-**Benefits of ricegrep CLI:**
-- 🔍 Natural language search: `ricegrep "auth middleware"`
-- 🔄 Auto-indexing: `ricegrep watch` keeps your index fresh
-- 🤖 AI agent integration: MCP server mode for coding assistants
-- ⚡ Faster than API calls for interactive use
-
-### 3. Index Your Code
-
-```bash
-# Using the reindex script (incremental by default)
+# Using Python script
 python scripts/reindex.py /path/to/your/repo
-
-# Force re-index all files
-python scripts/reindex.py /path/to/your/repo --force
-
-# Sync deleted files (remove from index files no longer on disk)
-python scripts/reindex.py /path/to/your/repo --sync
-
-# Show indexing statistics
-python scripts/reindex.py /path/to/your/repo --stats
 
 # Or via API
 curl -X POST http://localhost:8080/v1/stores/default/index \
   -H "Content-Type: application/json" \
-  -d '{
-    "files": [
-      {"path": "src/main.py", "content": "def hello():\n    print(\"world\")"}
-    ]
-  }'
+  -d '{"files": [{"path": "src/main.py", "content": "..."}]}'
 ```
 
-### 4. Search
+### 3. Search
 
-**Web UI**: Open http://localhost:3000
+**Web UI**: http://localhost:3000
 
 **API**:
 ```bash
-curl -X POST http://localhost:8080/v1/search/default \
+curl -X POST http://localhost:8080/v1/stores/default/search \
   -H "Content-Type: application/json" \
-  -d '{"query": "hello world function", "top_k": 10}'
+  -d '{"query": "authentication handler"}'
 ```
 
-**MCP Tool Call**:
+**ricegrep CLI**:
 ```bash
-curl -X POST http://localhost:8080/mcp/tools/call \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "code_search",
-    "arguments": {"query": "authentication handler", "top_k": 5}
-  }'
+cd ricegrep && npm install -g .
+ricegrep "auth middleware"
 ```
 
-### 4. Verify Installation
-
-```bash
-bash scripts/smoke_test.sh
-```
-
-## API Reference
-
-### Search
+## Search API
 
 ```
-POST /v1/search/{store}
+POST /v1/stores/{store}/search
 ```
 
-Request body:
 ```json
 {
-  "query": "search query",
+  "query": "search text",
   "top_k": 20,
-  "include_content": true,
   "filters": {
     "path_prefix": "src/",
-    "languages": ["python", "typescript"]
+    "languages": ["typescript"]
   },
+  
   "sparse_weight": 0.5,
-  "dense_weight": 0.5
+  "dense_weight": 0.5,
+  "enable_reranking": true,
+  
+  "enable_dedup": true,
+  "dedup_threshold": 0.85,
+  "enable_diversity": true,
+  "diversity_lambda": 0.7,
+  "group_by_file": false,
+  "enable_expansion": true
 }
 ```
 
-### Index Files
-
-```
-POST /v1/stores/{store}/index
-```
-
-Request body:
+Response includes intelligence metadata:
 ```json
 {
-  "files": [
-    {"path": "relative/path.py", "content": "file content..."}
-  ],
-  "force": false
+  "results": [...],
+  "intelligence": {
+    "intent": "exploratory",
+    "difficulty": "medium", 
+    "strategy": "dense-heavy",
+    "confidence": 0.85
+  },
+  "reranking": {
+    "pass1_applied": true,
+    "pass2_applied": false,
+    "early_exit": true
+  },
+  "postrank": {
+    "dedup": { "removed": 5 },
+    "diversity": { "avg_diversity": 0.72 }
+  }
 }
 ```
 
-Response:
-```json
-{
-  "files_processed": 100,
-  "chunks_indexed": 45,
-  "skipped_unchanged": 55,
-  "time_ms": 1234
-}
-```
-
-**Incremental Indexing**: By default, only changed files are re-indexed. Use `"force": true` to re-index all files.
-
-### Sync Deleted Files
-
-Remove files from index that no longer exist on disk:
-
-```
-POST /v1/stores/{store}/index/sync
-```
-
-Request body:
-```json
-{
-  "current_paths": ["src/main.py", "src/utils.py", ...]
-}
-```
-
-### Get Index Stats
-
-```
-GET /v1/stores/{store}/index/stats
-```
-
-Response:
-```json
-{
-  "tracked_files": 150,
-  "total_size": 1048576,
-  "last_updated": "2025-12-27T02:30:00.000Z"
-}
-```
-
-### MCP Endpoints
-
-Rice Search provides native Model Context Protocol (MCP) support for AI assistant integration:
-
-```
-GET  /mcp/tools           # List available MCP tools
-POST /mcp/tools/call      # Call an MCP tool directly
-POST /mcp                 # JSON-RPC 2.0 endpoint for MCP protocol
-```
-
-**Available MCP Tools:**
-- `code_search` - Hybrid semantic + keyword code search
-- `index_files` - Index code files into a store
-- `list_stores` - List available search indexes
-
-**MCP Protocol Support:**
-- Full JSON-RPC 2.0 compliance
-- Tool discovery via `/mcp/tools`
-- Direct tool execution via `/mcp/tools/call`
-- Standard MCP server interface via `/mcp`
-
-## Configuration
-
-### Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MILVUS_HOST` | `milvus` | Milvus server host |
-| `MILVUS_PORT` | `19530` | Milvus server port |
-| `EMBEDDINGS_URL` | `http://embeddings:80` | TEI service URL |
-| `EMBEDDING_DIM` | `768` | Embedding dimension |
-| `SPARSE_TOPK` | `200` | BM25 candidates |
-| `DENSE_TOPK` | `80` | Vector search candidates |
-| `DATA_DIR` | `/data` | Data directory |
-
-### GPU Acceleration
-
-For NVIDIA GPU support:
+## ricegrep CLI
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-```
-
-Requirements:
-- NVIDIA GPU with CUDA support
-- nvidia-container-toolkit installed
-
-## Data Persistence
-
-All data is stored in `./data/`:
-
-```
-./data/
-├── etcd/           # Milvus metadata
-├── minio/          # Milvus object storage
-├── milvus/         # Milvus data files
-├── tantivy/        # BM25 index
-├── api/            # Store metadata
-└── embeddings-cache/  # Model cache
-```
-
-To reset: `rm -rf ./data && docker-compose down -v`
-
-## Stores
-
-Stores are isolated search indexes. Default store is `default`.
-
-```bash
-# Create a new store
-python scripts/init_store.py my-project --description "My Project"
-
-# List stores
-python scripts/init_store.py --list
-
-# Index into specific store
-python scripts/reindex.py /path/to/repo --store my-project
+ricegrep "query"              # Basic search
+ricegrep -k 50 "query"        # More results
+ricegrep --no-rerank "query"  # Skip reranking
+ricegrep --no-dedup "query"   # Keep duplicates
+ricegrep --group-by-file      # Group results by file
+ricegrep -v "query"           # Verbose with stats
+ricegrep watch                # Watch mode for indexing
+ricegrep mcp                  # MCP server mode
 ```
 
 ## MCP Integration
 
-Rice Search provides full Model Context Protocol (MCP) support, allowing AI assistants to search and index code directly.
+Rice Search supports the Model Context Protocol for AI assistant integration.
 
-### Using with MCP Clients
+**Available Tools:**
+- `code_search` - Hybrid search with all options
+- `index_files` - Index code files
+- `delete_files` - Remove files from index
+- `list_stores` - List search indexes
+- `get_store_stats` - Index statistics
 
-Add to your MCP client configuration:
-
+**Configuration:**
 ```json
 {
   "mcpServers": {
@@ -329,139 +199,81 @@ Add to your MCP client configuration:
 }
 ```
 
-### Using with ricegrep CLI
+Or use ricegrep as MCP server:
+```bash
+ricegrep install-claude-code   # Auto-configure for Claude
+ricegrep install-opencode      # Auto-configure for OpenCode
+```
 
-**ricegrep** includes built-in MCP server support for local AI assistant integration. The CLI can act as an MCP server, allowing coding assistants to use Rice Search directly:
+## GPU Acceleration
 
 ```bash
-# Install ricegrep CLI (choose your preferred package manager)
-cd ricegrep
-npm install -g .     # npm (recommended)
-# bun install -g .   # bun (faster alternative)
-# pnpm install -g .  # pnpm
-
-# Start MCP server mode (used by AI assistants)
-ricegrep mcp
-
-# Or use ricegrep's assisted installation for popular AI assistants:
-ricegrep install-claude-code   # Claude Code integration
-ricegrep install-opencode       # OpenCode integration
-ricegrep install-codex          # Codex integration
-ricegrep install-droid          # Factory Droid integration
+docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 ```
 
-When running in MCP mode, ricegrep provides:
-- **Real-time indexing** - Automatically indexes files as you code
-- **Semantic search** - AI assistants can search using natural language
-- **Local-first** - All data stays on your machine
-- **Zero configuration** - Works out of the box with Rice Search backend
+Requires NVIDIA GPU with nvidia-container-toolkit.
 
-### MCP Tools Available
+## Configuration
 
-All MCP tools (whether via HTTP API or ricegrep CLI):
-
-- **`code_search`** - Hybrid search combining BM25 + semantic embeddings
-  - Parameters: `query`, `top_k`, `store`, `filters`
-  - Returns: Ranked code chunks with paths, line numbers, and snippets
-
-- **`index_files`** - Index code files for search
-  - Parameters: `files[]`, `store`, `force`
-  - Returns: Indexing statistics
-
-- **`list_stores`** - List available code search indexes
-  - Returns: Array of store names and metadata
-
-## Troubleshooting
-
-### Services not starting
+### Models (via .env)
 
 ```bash
-# Check logs
-docker-compose logs milvus
-docker-compose logs embeddings
+# Embeddings (1536d, code-optimized)
+EMBED_MODEL=jinaai/jina-code-embeddings-1.5b
 
-# Restart services
-docker-compose restart
+# Reranker (fast, code-aware)
+RERANK_MODEL=jinaai/jina-reranker-v2-base-multilingual
+
+# Dimension must match embedding model
+EMBEDDING_DIM=1536
 ```
 
-### Out of memory
+### Service Ports
 
-Reduce embedding batch size in `.env`:
+| Service | Port | Description |
+|---------|------|-------------|
+| API | 8080 | REST API + MCP |
+| Web UI | 3000 | Search interface |
+| Milvus | 19530 | Vector database |
+| MinIO | 9001 | Storage console |
+
+## Data Persistence
+
+All data in `./data/`:
 ```
-MAX_FILES_PER_BATCH=20
+./data/
+├── milvus/         # Vector index
+├── tantivy/        # BM25 index  
+├── api/            # Store metadata
+└── infinity-cache/ # Model cache
 ```
 
-### WSL2 Performance
-
-Mount your code inside WSL2 for best performance:
-```bash
-# Inside WSL2
-cp -r /mnt/c/code/myproject ~/myproject
-python scripts/reindex.py ~/myproject
-```
-
-### Search returns no results
-
-1. Check if files were indexed:
-   ```bash
-   curl http://localhost:8080/v1/stores/default/stats
-   ```
-
-2. Try a simpler query
-3. Check index logs: `docker-compose logs api`
+Reset: `rm -rf ./data && docker-compose down -v`
 
 ## Development
 
-For detailed local development setup, see [CONTRIBUTING.md](CONTRIBUTING.md).
-
-### Quick Local Dev
-
 ```bash
-# 1. Start Docker services (Milvus, embeddings)
-docker-compose up -d milvus embeddings etcd minio
+# Start infrastructure only
+docker-compose up -d milvus infinity etcd minio redis
 
-# 2. Start API (Terminal 1)
-cd api
-bun install
-bun run start:local    # Runs on :8088
+# Run API locally
+cd api && bun install && bun run start:local  # :8088
 
-# 3. Start Web UI (Terminal 2)
-cd web-ui
-bun install
-bun run dev:local      # Runs on :3001
-```
+# Run Web UI locally  
+cd web-ui && bun install && bun run dev:local # :3001
 
-**Local Dev Ports:**
-- API: http://localhost:8088 (Swagger: http://localhost:8088/docs)
-- Web UI: http://localhost:3001
-
-### Run Tests
-
-```bash
-# API
-cd api && bun test
-
-# ricegrep CLI
-cd ricegrep && bun test
-
-# Smoke test (requires all services)
-bash scripts/smoke_test.sh
-```
-
-### Type Checking
-
-```bash
+# Type checking
 cd api && bun run typecheck
 cd ricegrep && bun run typecheck
 ```
 
 ## License
 
-MIT
+CC BY-NC-SA 4.0
 
 ## Credits
 
-- [Tantivy](https://github.com/quickwit-oss/tantivy) - BM25 search engine
+- [Tantivy](https://github.com/quickwit-oss/tantivy) - BM25 search
 - [Milvus](https://milvus.io/) - Vector database
-- [TEI](https://github.com/huggingface/text-embeddings-inference) - Embedding service
-- [NestJS](https://nestjs.com/) - API framework
+- [Infinity](https://github.com/michaelfeil/infinity) - Embedding/reranking server
+- [Jina AI](https://jina.ai/) - Code-optimized models

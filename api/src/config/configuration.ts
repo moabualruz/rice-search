@@ -9,17 +9,19 @@ export default () => ({
     port: parseInt(process.env.MILVUS_PORT || '19530', 10),
   },
 
-  // Embeddings configuration (Infinity service with Mixedbread AI models)
+  // Embeddings configuration
+  // Default: Jina Code Embeddings 1.5B (1536d, Rust/Kotlin/15+ languages)
   embeddings: {
     url: process.env.EMBEDDINGS_URL || process.env.INFINITY_URL || 'http://infinity:80',
-    dim: parseInt(process.env.EMBEDDING_DIM || '1024', 10),
+    dim: parseInt(process.env.EMBEDDING_DIM || '1536', 10),
   },
 
   // Infinity service (embedding + reranking)
+  // Default models optimized for code search (Dec 2025)
   infinity: {
     url: process.env.INFINITY_URL || 'http://infinity:80',
-    embedModel: process.env.INFINITY_EMBED_MODEL || 'mixedbread-ai/mxbai-embed-large-v1',
-    rerankModel: process.env.INFINITY_RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-xsmall-v1',
+    embedModel: process.env.INFINITY_EMBED_MODEL || 'jinaai/jina-code-embeddings-1.5b',
+    rerankModel: process.env.INFINITY_RERANK_MODEL || 'jinaai/jina-reranker-v2-base-multilingual',
     timeout: parseInt(process.env.INFINITY_TIMEOUT_MS || '30000', 10),
   },
 
@@ -63,11 +65,12 @@ export default () => ({
   },
 
   // Reranking (neural reranker for improved result quality)
+  // Default: Jina Reranker v2 (60-80ms on CPU, code-optimized)
   rerank: {
     enabled: process.env.RERANK_ENABLED !== 'false', // Default: true
     timeoutMs: parseInt(process.env.RERANK_TIMEOUT_MS || '100', 10),
     candidates: parseInt(process.env.RERANK_CANDIDATES || '30', 10),
-    model: process.env.RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-xsmall-v1',
+    model: process.env.RERANK_MODEL || 'jinaai/jina-reranker-v2-base-multilingual',
   },
 });
 

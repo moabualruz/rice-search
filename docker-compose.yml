@@ -93,24 +93,59 @@ services:
       MINIO_SECRET_ACCESS_KEY: minioadmin
       MINIO_USE_SSL: "false"
       MINIO_REGION: us-east-1
-      # Performance tuning
-      QUERY_NODE_MAX_CONCURRENT: "256"         # Max concurrent queries
-      PROXY_MAX_TASK_NUM: "1024"               # Max queued tasks
-      COMMON_GRACEFUL_TIME: "5000"             # Faster shutdown
-      COMMON_GRACEFUL_STOP_TIMEOUT: "30"
-      # Query cache - cache search results
-      QUERYCOORD_ENABLE_ACTIVE_STANDBY: "false"
-      # Memory management
-      QUERYNODE_CACHE_ENABLED: "true"
-      QUERYNODE_CACHE_SIZE: "2147483648"       # 2GB query cache
-      # Connection handling
+      
+      # ========== PROXY (Connection Layer) ==========
       PROXY_MAX_CONNECTIONS: "65535"           # Max client connections
-      # gRPC message size limits (fixes RESOURCE_EXHAUSTED on large batches)
-      GRPC_SERVERMAXTOKENPERSET: "1073741824"  # 1GB max tokens
+      PROXY_MAX_TASK_NUM: "2048"               # Max queued tasks (doubled)
       PROXY_MAXMSGSIZE: "268435456"            # 256MB max message size
-      COMMON_MAXMSGSIZE: "268435456"           # 256MB max message size
-      # Insert buffer tuning
-      DATANODE_FLUSH_INSERT_BUFFER_SIZE: "268435456"  # 256MB insert buffer
+      PROXY_GINLOGGING: "false"                # Disable verbose logging
+      
+      # ========== QUERY NODE (Search Performance) ==========
+      QUERYNODE_SCHEDULER_MAXREADCONCURRENCY: "256"     # Parallel read ops
+      QUERYNODE_SCHEDULER_SCHEDULETIMEOUT: "10000"      # 10s schedule timeout
+      QUERYNODE_GROUPING_ENABLED: "true"                # Group similar queries
+      QUERYNODE_GROUPING_MAXNQ: "1000"                  # Max queries per group
+      QUERYNODE_SEGCORE_CHUNKROWS: "1024"               # Rows per chunk
+      QUERYNODE_CACHE_ENABLED: "true"
+      QUERYNODE_CACHE_SIZE: "2147483648"                # 2GB query cache
+      QUERYNODE_LOADMEMORYLIMIT: "6442450944"           # 6GB memory limit
+      
+      # ========== DATA NODE (Indexing Performance) ==========
+      DATANODE_FLUSH_INSERT_BUFFER_SIZE: "268435456"    # 256MB insert buffer
+      DATANODE_FLOWGRAPH_MAXQUEUELEN: "16"              # Queue length
+      DATANODE_FLOWGRAPH_MAXPARALLELISM: "8"            # Parallel flush ops
+      DATANODE_SEGMENT_INSERTBUFFERSIZE: "16777216"     # 16MB per segment buffer
+      
+      # ========== INDEX NODE (Index Building) ==========
+      INDEXNODE_SCHEDULER_BUILDPARALLEL: "4"            # Parallel index builds
+      INDEXNODE_ENABLEDISK: "true"                      # Enable disk index
+      
+      # ========== COORD (Coordination) ==========
+      QUERYCOORD_TASK_MERGEIDX: "16"                    # Merge task parallelism
+      QUERYCOORD_SCHEDULERTASKQUEUECAP: "10000"         # Task queue capacity
+      DATACOORD_SEGMENT_MAXSIZE: "1024"                 # 1GB max segment
+      DATACOORD_SEGMENT_SEALEDMAXSIZE: "2048"           # 2GB sealed segment
+      DATACOORD_COMPACTION_ENABLED: "true"              # Auto compaction
+      
+      # ========== gRPC PERFORMANCE ==========
+      GRPC_SERVERMAXTOKENPERSET: "1073741824"           # 1GB max tokens
+      COMMON_MAXMSGSIZE: "268435456"                    # 256MB max message
+      GRPC_CLIENTMAXSENDSIZE: "268435456"               # 256MB client send
+      GRPC_CLIENTMAXRECVSIZE: "268435456"               # 256MB client recv
+      GRPC_SERVERMAXSENDSIZE: "268435456"               # 256MB server send
+      GRPC_SERVERMAXRECVSIZE: "268435456"               # 256MB server recv
+      
+      # ========== MEMORY & STORAGE ==========
+      COMMON_STORAGETYPE: "local"                       # Local storage mode
+      QUOTAANDLIMITS_ENABLED: "true"                    # Enable resource quotas
+      QUOTAANDLIMITS_DDLENABLED: "false"                # No DDL rate limit
+      QUOTAANDLIMITS_INDEXRATEENABLED: "false"          # No index rate limit
+      QUOTAANDLIMITS_FLUSHRATEENABLED: "false"          # No flush rate limit
+      
+      # ========== GENERAL ==========
+      COMMON_GRACEFUL_TIME: "5000"                      # Faster shutdown
+      COMMON_GRACEFUL_STOP_TIMEOUT: "30"
+      LOG_LEVEL: "warn"                                 # Reduce log noise
     volumes:
       - ./data/milvus:/var/lib/milvus
     ports:
@@ -138,28 +173,20 @@ services:
       - rice-network
 
   # ============================================
-  # Attu: Milvus admin UI
-  # ============================================
-  attu:
-    container_name: rice-attu
-    image: zilliz/attu:v2.4
-    environment:
-      MILVUS_URL: milvus:19530
-    ports:
-      - "8000:3000"
-    depends_on:
-      milvus:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - rice-network
-
-  # ============================================
   # Infinity: Embedding + Reranking Server (CPU)
   # 
-  # Models (Dec 2025):
-  # - mixedbread-ai/mxbai-embed-large-v1 (1024d embeddings, SOTA quality)
-  # - mixedbread-ai/mxbai-rerank-xsmall-v1 (officially supported reranker)
+  # Default Models (Dec 2025 - optimized for code search):
+  # - jinaai/jina-code-embeddings-1.5b (1536d, Rust/Kotlin/15+ languages)
+  # - jinaai/jina-reranker-v2-base-multilingual (code-optimized, 60-80ms)
+  #
+  # Alternative models (set via .env or environment):
+  # Embeddings:
+  #   - jinaai/jina-code-embeddings-0.5b (smaller, 1536d)
+  #   - nomic-ai/nomic-embed-code (896d, no Rust/Kotlin)
+  #   - mixedbread-ai/mxbai-embed-large-v1 (1024d, general purpose)
+  # Rerankers:
+  #   - BAAI/bge-reranker-v2-m3 (multilingual)
+  #   - mixedbread-ai/mxbai-rerank-xsmall-v1 (general purpose)
   #
   # For GPU, use docker-compose.gpu.yml override
   # ============================================
@@ -168,11 +195,11 @@ services:
     image: michaelf34/infinity:latest-cpu
     command: >
       v2
-      --model-id mixedbread-ai/mxbai-embed-large-v1
-      --model-id mixedbread-ai/mxbai-rerank-xsmall-v1
-      --engine torch
+      --model-id ${EMBED_MODEL:-jinaai/jina-code-embeddings-1.5b}
+      --model-id ${RERANK_MODEL:-jinaai/jina-reranker-v2-base-multilingual}
+      --engine ${INFINITY_ENGINE:-torch}
       --port 80
-      --batch-size 32
+      --batch-size ${INFINITY_BATCH_SIZE:-32}
     volumes:
       - ./data/infinity-cache:/app/.cache
     ports:
@@ -180,7 +207,6 @@ services:
     environment:
       - HF_HOME=/app/.cache
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
-      - INFINITY_ENGINE=torch
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
@@ -208,16 +234,18 @@ services:
       REDIS_PORT: "6379"
       
       # Infinity (embedding + reranking)
+      # Models are configured in infinity service, these are for API reference
       INFINITY_URL: http://infinity:80
-      INFINITY_EMBED_MODEL: mixedbread-ai/mxbai-embed-large-v1
-      INFINITY_RERANK_MODEL: mixedbread-ai/mxbai-rerank-xsmall-v1
+      INFINITY_EMBED_MODEL: ${EMBED_MODEL:-jinaai/jina-code-embeddings-1.5b}
+      INFINITY_RERANK_MODEL: ${RERANK_MODEL:-jinaai/jina-reranker-v2-base-multilingual}
       
       # Data directories
       DATA_DIR: /data
       TANTIVY_INDEX_DIR: /tantivy
       
       # Model configuration
-      EMBEDDING_DIM: "1024"
+      # Jina Code: 1536d | Nomic Code: 896d | mxbai: 1024d
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
       
       # Search configuration
       SPARSE_TOPK: "100"
@@ -226,8 +254,7 @@ services:
       RRF_K: "60"
       
       # Reranking configuration
-      # Neural reranking improves NL query results by 20-35%
-      # Uses mixedbread-ai/mxbai-rerank-xsmall-v1 (Mixedbread mode) or ColBERT (BGE-M3 mode)
+      # Jina Reranker v2: 60-80ms on CPU (code-optimized)
       RERANK_ENABLED: "true"
       RERANK_CANDIDATES: "30"
       RERANK_TIMEOUT_MS: "100"
