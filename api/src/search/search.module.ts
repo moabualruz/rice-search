@@ -2,9 +2,11 @@ import { Module } from '@nestjs/common';
 import { SearchController } from './search.controller';
 import { SearchService } from './search.service';
 import { ServicesModule } from '../services/services.module';
+import { IntelligenceModule } from '../intelligence/intelligence.module';
+import { RankingModule } from '../ranking/ranking.module';
 
 @Module({
-  imports: [ServicesModule],
+  imports: [ServicesModule, IntelligenceModule, RankingModule],
   controllers: [SearchController],
   providers: [SearchService],
   exports: [SearchService],

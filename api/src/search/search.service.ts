@@ -6,10 +6,11 @@ import { MilvusService, MilvusSearchResult } from "../services/milvus.service";
 import { TantivyService, TantivySearchResult } from "../services/tantivy.service";
 import { HybridRankerService, HybridSearchResult } from "../services/hybrid-ranker.service";
 import { StoreManagerService } from "../services/store-manager.service";
-import { RerankerService } from "../services/reranker.service";
-import { QueryClassifierService, QueryClassification } from "../services/query-classifier.service";
 import { QueryNormalizerService } from "../services/query-normalizer.service";
 import { TelemetryService, SearchTelemetryRecord } from "../services/telemetry.service";
+import { IntentClassifierService, IntentClassification } from "../intelligence/intent-classifier.service";
+import { StrategySelectorService, RetrievalConfig } from "../intelligence/strategy-selector.service";
+import { MultiPassRerankerService, RerankStats } from "../ranking/multi-pass-reranker.service";
 import { SearchRequestDto } from "./dto/search-request.dto";
 
 /**
@@ -23,9 +24,6 @@ function normalizePath(filePath: string): string {
 @Injectable()
 export class SearchService {
   private readonly logger = new Logger(SearchService.name);
-  private readonly sparseTopK: number;
-  private readonly denseTopK: number;
-  private readonly defaultRerankCandidates: number;
 
   constructor(
     private configService: ConfigService,
@@ -34,33 +32,21 @@ export class SearchService {
     private tantivy: TantivyService,
     private hybridRanker: HybridRankerService,
     private storeManager: StoreManagerService,
-    private reranker: RerankerService,
-    private queryClassifier: QueryClassifierService,
     private queryNormalizer: QueryNormalizerService,
     private telemetry: TelemetryService,
+    private intentClassifier: IntentClassifierService,
+    private strategySelector: StrategySelectorService,
+    private multiPassReranker: MultiPassRerankerService,
   ) {
-    this.sparseTopK = this.configService.get<number>("search.sparseTopK")!;
-    this.denseTopK = this.configService.get<number>("search.denseTopK")!;
-    this.defaultRerankCandidates = this.configService.get<number>("rerank.candidates") ?? 30;
-    
-    this.logger.log("Search service initialized (Tantivy BM25 + Milvus vectors)");
+    this.logger.log("Search service initialized (Intelligence Pipeline v1)");
   }
 
   async search(store: string, request: SearchRequestDto) {
     const requestId = randomUUID();
     const startTime = Date.now();
     const { query, top_k = 20, filters, group_by_file } = request;
-    
-    // Timing trackers
-    let sparseLatencyMs = 0;
-    let denseLatencyMs = 0;
-    let fusionLatencyMs = 0;
-    let rerankLatencyMs = 0;
-    let rerankTimedOut = false;
-    let rerankSkipped = false;
-    let rerankSkipReason: string | undefined;
 
-    // Normalize query for consistent caching
+    // 1. Normalize query for consistent caching
     const normalized = this.queryNormalizer.normalize(query);
 
     // Normalize path filter for consistent matching (handles Windows paths)
@@ -71,47 +57,43 @@ export class SearchService {
     // Ensure store exists
     this.storeManager.ensureStore(store);
 
-    // Classify query for adaptive behavior
-    const classification = this.queryClassifier.classify(normalized.normalized);
+    // 2. Classify intent (Phase 1 - Task 1.1)
+    const intent = this.intentClassifier.classify(normalized.normalized);
 
-    // Auto-optimize weights based on query type if enabled
-    let sparseWeight = request.sparse_weight;
-    let denseWeight = request.dense_weight;
+    // 3. Select strategy (Phase 1 - Task 1.2)
+    let config = this.strategySelector.selectStrategy(intent);
 
-    if (request.auto_optimize !== false) {
-      const optimizedWeights = this.getOptimizedWeights(classification.type);
-      
-      // Only override if not explicitly set
-      if (sparseWeight === undefined) {
-        sparseWeight = optimizedWeights.sparse;
-      }
-      if (denseWeight === undefined) {
-        denseWeight = optimizedWeights.dense;
-      }
+    // 4. Adjust candidates based on difficulty (Phase 1 - Task 1.3)
+    config = this.strategySelector.adjustCandidates(config, intent);
 
-      this.logger.debug(
-        `Query "${query.substring(0, 30)}..." classified as ${classification.type} ` +
-        `(confidence: ${classification.confidence.toFixed(2)}), ` +
-        `weights: sparse=${sparseWeight}, dense=${denseWeight}`
-      );
-    }
+    // 5. Apply user overrides if provided
+    config = this.strategySelector.applyOverrides(config, {
+      sparseWeight: request.sparse_weight,
+      denseWeight: request.dense_weight,
+      rerankCandidates: request.rerank_candidates,
+      enableReranking: request.enable_reranking,
+    });
 
-    // Determine adaptive rerank candidates based on query classification (Task 0.3)
-    const rerankCandidates = this.getAdaptiveRerankCandidates(
-      classification,
-      request.rerank_candidates,
+    this.logger.debug(
+      `Query "${query.substring(0, 30)}..." intent=${intent.intent} ` +
+      `(difficulty=${intent.difficulty}), strategy=${config.strategy}`
     );
 
-    // Execute hybrid search: Tantivy (BM25) + Milvus (vectors)
+    // Timing trackers
+    let sparseLatencyMs = 0;
+    let denseLatencyMs = 0;
+    let fusionLatencyMs = 0;
+    let rerankStats: RerankStats | undefined;
+
+    // 6. Execute hybrid search with strategy config
     const hybridStartTime = Date.now();
-    const { fusedResults, sparseResults, denseResults, sparseTime, denseTime } = 
-      await this.executeHybridSearchWithTiming(
+    const { fusedResults, sparseResults, denseResults, sparseTime, denseTime } =
+      await this.executeHybridSearchWithConfig(
         store,
         normalized.normalized,
+        config,
         normalizedPathPrefix,
         filters?.languages,
-        sparseWeight,
-        denseWeight,
         group_by_file,
       );
     sparseLatencyMs = sparseTime;
@@ -121,28 +103,16 @@ export class SearchService {
     // Compute fusion stats for telemetry
     const fusionStats = this.hybridRanker.computeFusionStats(fusedResults);
 
-    // Apply reranking if enabled
+    // 7. Multi-pass rerank (Phase 1 - Task 1.4, 1.5)
     let rankedResults = fusedResults;
     if (request.enable_reranking !== false && fusedResults.length > 0) {
-      const rerankStart = Date.now();
-      try {
-        rankedResults = await this.reranker.rerank(query, fusedResults, {
-          candidates: rerankCandidates,
-          timeout: this.configService.get<number>("reranker.timeout"),
-        });
-        rerankLatencyMs = Date.now() - rerankStart;
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error);
-        this.logger.warn(`Reranking failed, using RRF results: ${errorMessage}`);
-        rerankLatencyMs = Date.now() - rerankStart;
-        rerankTimedOut = true;
-      }
-    } else if (fusedResults.length === 0) {
-      rerankSkipped = true;
-      rerankSkipReason = "no_results";
-    } else if (request.enable_reranking === false) {
-      rerankSkipped = true;
-      rerankSkipReason = "disabled";
+      const rerankResult = await this.multiPassReranker.rerank(
+        normalized.normalized,
+        fusedResults,
+        config,
+      );
+      rankedResults = rerankResult.results;
+      rerankStats = rerankResult.stats;
     }
 
     // Limit to top_k
@@ -155,13 +125,13 @@ export class SearchService {
     const sparseStats = this.telemetry.computeScoreStats(sparseScores);
     const denseStats = this.telemetry.computeScoreStats(denseScores);
 
-    // Record telemetry
+    // Record telemetry with intent and strategy info
     const telemetryRecord: SearchTelemetryRecord = {
       requestId,
       timestamp: new Date(),
       store,
       query: normalized.normalized,
-      queryType: classification.type,
+      queryType: intent.baseClassification.type,
       sparse: {
         resultCount: sparseResults.length,
         latencyMs: sparseLatencyMs,
@@ -184,11 +154,11 @@ export class SearchService {
       },
       rerank: {
         enabled: request.enable_reranking !== false,
-        candidates: rerankCandidates,
-        latencyMs: rerankLatencyMs,
-        timedOut: rerankTimedOut,
-        skipped: rerankSkipped,
-        skipReason: rerankSkipReason,
+        candidates: config.rerankCandidates,
+        latencyMs: (rerankStats?.pass1Latency ?? 0) + (rerankStats?.pass2Latency ?? 0),
+        timedOut: false,
+        skipped: !rerankStats?.pass1Applied,
+        skipReason: rerankStats?.earlyExitReason,
       },
       cache: {
         embeddingHit: false, // TODO: Get from embeddings service
@@ -218,151 +188,36 @@ export class SearchService {
       total: finalResults.length,
       store,
       search_time_ms: totalLatencyMs,
+      // Enhanced response with intelligence info
+      intelligence: {
+        intent: intent.intent,
+        difficulty: intent.difficulty,
+        strategy: config.strategy,
+        confidence: intent.confidence,
+      },
       reranking: {
         enabled: request.enable_reranking !== false,
-        candidates: rerankCandidates,
-        latency_ms: rerankLatencyMs,
-        timed_out: rerankTimedOut,
+        candidates: config.rerankCandidates,
+        pass1_applied: rerankStats?.pass1Applied ?? false,
+        pass1_latency_ms: rerankStats?.pass1Latency ?? 0,
+        pass2_applied: rerankStats?.pass2Applied ?? false,
+        pass2_latency_ms: rerankStats?.pass2Latency ?? 0,
+        early_exit: rerankStats?.earlyExitTriggered ?? false,
+        early_exit_reason: rerankStats?.earlyExitReason,
       },
     };
   }
 
   /**
-   * Execute hybrid search using Tantivy (BM25) + Milvus (vectors)
-   * Results are fused using RRF (Reciprocal Rank Fusion)
+   * Execute hybrid search using strategy config
+   * Respects config's topK values and weights
    */
-  private async executeHybridSearch(
+  private async executeHybridSearchWithConfig(
     store: string,
     query: string,
+    config: RetrievalConfig,
     pathPrefix?: string,
     languages?: string[],
-    sparseWeight?: number,
-    denseWeight?: number,
-    groupByFile?: boolean,
-  ) {
-    // Get embedding from Infinity
-    const queryEmbeddings = await this.embeddings.embed([query]);
-    const queryEmbedding = queryEmbeddings[0];
-
-    // Run sparse (Tantivy) and dense (Milvus) search in parallel
-    const [sparseResults, denseResults] = await Promise.all([
-      this.tantivy.search(
-        store,
-        query,
-        this.sparseTopK,
-        pathPrefix,
-        languages?.[0],
-      ),
-      queryEmbedding
-        ? this.milvus.search(
-            store,
-            queryEmbedding,
-            this.denseTopK,
-            pathPrefix,
-            languages,
-          )
-        : Promise.resolve([]),
-    ]);
-
-    // Build content map for hybrid ranking
-    const contentMap = new Map<string, { content: string; symbols: string[] }>();
-    for (const result of sparseResults) {
-      contentMap.set(result.doc_id, {
-        content: result.content,
-        symbols: result.symbols,
-      });
-    }
-
-    // Fuse results using RRF
-    return this.hybridRanker.fuseResults(
-      sparseResults,
-      denseResults,
-      contentMap,
-      query,
-      {
-        sparseWeight,
-        denseWeight,
-        groupByFile,
-      },
-    );
-  }
-
-  /**
-   * Get optimized weights based on query type
-   * Code queries → favor sparse (BM25 better for exact matches)
-   * Natural language → favor dense (semantic better for concepts)
-   * Hybrid → balanced
-   */
-  private getOptimizedWeights(queryType: "code" | "natural" | "hybrid"): {
-    sparse: number;
-    dense: number;
-  } {
-    switch (queryType) {
-      case "code":
-        // Code queries: BM25 excels at exact symbol/keyword matching
-        return { sparse: 0.7, dense: 0.3 };
-      case "natural":
-        // Natural language: semantic search better for concepts
-        return { sparse: 0.3, dense: 0.7 };
-      case "hybrid":
-      default:
-        // Balanced for mixed queries
-        return { sparse: 0.5, dense: 0.5 };
-    }
-  }
-
-  /**
-   * Determine adaptive rerank candidates based on query classification (Task 0.3)
-   * Navigational queries → fewer candidates (exact match expected)
-   * Exploratory queries → more candidates (cast wider net)
-   * High specificity → fewer candidates
-   */
-  private getAdaptiveRerankCandidates(
-    classification: QueryClassification,
-    requestCandidates?: number,
-  ): number {
-    // If explicitly specified in request, honor it
-    if (requestCandidates !== undefined) {
-      return requestCandidates;
-    }
-
-    const { signals, type } = classification;
-
-    // Navigational queries (exact file/symbol lookup) → minimal candidates
-    if (signals.isNavigational) {
-      return 15;
-    }
-
-    // Exploratory queries (broad concept search) → cast wider net
-    if (signals.isExploratory) {
-      return 50;
-    }
-
-    // Code queries with high specificity → fewer candidates needed
-    if (type === "code" && signals.specificity >= 0.6) {
-      return 20;
-    }
-
-    // Natural language with low specificity → more candidates
-    if (type === "natural" && signals.specificity < 0.3) {
-      return 40;
-    }
-
-    // Default to configured value
-    return this.defaultRerankCandidates;
-  }
-
-  /**
-   * Execute hybrid search with timing information
-   * Wraps executeHybridSearch and returns individual timing for sparse/dense
-   */
-  private async executeHybridSearchWithTiming(
-    store: string,
-    query: string,
-    pathPrefix?: string,
-    languages?: string[],
-    sparseWeight?: number,
-    denseWeight?: number,
     groupByFile?: boolean,
   ): Promise<{
     fusedResults: HybridSearchResult[];
@@ -371,9 +226,12 @@ export class SearchService {
     sparseTime: number;
     denseTime: number;
   }> {
-    // Get embedding from Infinity
-    const queryEmbeddings = await this.embeddings.embed([query]);
-    const queryEmbedding = queryEmbeddings[0];
+    // Get embedding from Infinity (skip if sparse-only strategy)
+    let queryEmbedding: number[] | undefined;
+    if (config.denseTopK > 0) {
+      const queryEmbeddings = await this.embeddings.embed([query]);
+      queryEmbedding = queryEmbeddings[0];
+    }
 
     // Run sparse (Tantivy) and dense (Milvus) search in parallel with timing
     const sparseStart = Date.now();
@@ -382,26 +240,32 @@ export class SearchService {
     let denseTime = 0;
 
     const [sparseResultsRaw, denseResultsRaw] = await Promise.all([
+      // Sparse search (always runs unless sparseTopK is 0)
       (async () => {
+        if (config.sparseTopK === 0) {
+          sparseTime = 0;
+          return [];
+        }
         const result = await this.tantivy.search(
           store,
           query,
-          this.sparseTopK,
+          config.sparseTopK,
           pathPrefix,
           languages?.[0],
         );
         sparseTime = Date.now() - sparseStart;
         return result;
       })(),
+      // Dense search (skip if sparse-only or no embedding)
       (async () => {
-        if (!queryEmbedding) {
-          denseTime = Date.now() - denseStart;
+        if (config.denseTopK === 0 || !queryEmbedding) {
+          denseTime = 0;
           return [];
         }
         const result = await this.milvus.search(
           store,
           queryEmbedding,
-          this.denseTopK,
+          config.denseTopK,
           pathPrefix,
           languages,
         );
@@ -419,15 +283,15 @@ export class SearchService {
       });
     }
 
-    // Fuse results using RRF
+    // Fuse results using RRF with config weights
     const fusedResults = this.hybridRanker.fuseResults(
       sparseResultsRaw,
       denseResultsRaw,
       contentMap,
       query,
       {
-        sparseWeight,
-        denseWeight,
+        sparseWeight: config.sparseWeight,
+        denseWeight: config.denseWeight,
         groupByFile,
       },
     );

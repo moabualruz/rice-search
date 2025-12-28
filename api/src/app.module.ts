@@ -9,6 +9,8 @@ import { SearchModule } from './search/search.module';
 import { IndexModule } from './index/index.module';
 import { McpModule } from './mcp/mcp.module';
 import { ServicesModule } from './services/services.module';
+import { IntelligenceModule } from './intelligence/intelligence.module';
+import { RankingModule } from './ranking/ranking.module';
 
 @Module({
   imports: [
@@ -25,6 +27,12 @@ import { ServicesModule } from './services/services.module';
 
     // Core services
     ServicesModule,
+
+    // Intelligence (intent classification, strategy selection)
+    IntelligenceModule,
+
+    // Ranking (multi-pass reranking)
+    RankingModule,
 
     // Feature modules
     StoresModule,
