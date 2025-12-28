@@ -3,7 +3,6 @@ import {
   type FileSystemOptions,
   NodeFileSystem,
 } from "./file.js";
-import { type Git, NodeGit } from "./git.js";
 import { LOCAL_API_URL, LocalStore } from "./local-store.js";
 import { type Store, TestStore } from "./store.js";
 import { isTest } from "./utils.js";
@@ -27,17 +26,10 @@ export async function createStore(options?: { silent?: boolean }): Promise<Store
 }
 
 /**
- * Creates a Git instance
- */
-export function createGit(): Git {
-  return new NodeGit();
-}
-
-/**
  * Creates a FileSystem instance
  */
 export function createFileSystem(
   options: FileSystemOptions = { ignorePatterns: [] },
 ): FileSystem {
-  return new NodeFileSystem(createGit(), options);
+  return new NodeFileSystem(options);
 }

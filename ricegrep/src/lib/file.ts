@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import ignore from "ignore";
-import type { Git } from "./git.js";
 
 /**
  * Default glob patterns to ignore during file indexing.
@@ -63,7 +62,7 @@ export class NodeFileSystem implements FileSystem {
   private customIgnoreFilter: ReturnType<typeof ignore>;
   private ignoreCache = new Map<string, ReturnType<typeof ignore>>();
 
-  constructor(private git: Git, options: FileSystemOptions) {
+  constructor(options: FileSystemOptions) {
     this.customIgnoreFilter = ignore();
     this.customIgnoreFilter.add(options.ignorePatterns);
   }
@@ -112,11 +111,9 @@ export class NodeFileSystem implements FileSystem {
     // Preload root .ricegrepignore to ensure it's cached
     this.getDirectoryIgnoreFilter(dirRoot);
 
-    if (this.git.isGitRepository(dirRoot)) {
-      yield* this.git.getGitFiles(dirRoot);
-    } else {
-      yield* this.getAllFilesRecursive(dirRoot, dirRoot);
-    }
+    // Always walk recursively to handle nested git repos
+    // Each directory's .gitignore is respected via isIgnored checks in getAllFilesRecursive
+    yield* this.getAllFilesRecursive(dirRoot, dirRoot);
   }
 
   private getDirectoryIgnoreFilter(dir: string): ReturnType<typeof ignore> {
