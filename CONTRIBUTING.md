@@ -318,7 +318,7 @@ cargo build --release
 
 | Service | Dev Port | Docker Port | Description |
 |---------|----------|-------------|-------------|
-| API | 8088 | 8080 | Rice Search API |
+| API | 8088 | 8088 | Rice Search API |
 | Web UI | 3001 | 3000 | Next.js frontend |
 | Milvus | 19530 | 19530 | Vector database |
 | TEI | 8081 | 8081 | Embeddings service |

@@ -73,18 +73,18 @@ RUN mkdir -p /data /tantivy
 
 # Set environment variables
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=8088
 
 # Bun performance tuning
 ENV BUN_CONFIG_MAX_HTTP_CONNECTIONS=1024
 ENV BUN_CONFIG_NO_CLEAR_TERMINAL_ON_RELOAD=1
 
 # Expose port
-EXPOSE 8080
+EXPOSE 8088
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/healthz || exit 1
+    CMD curl -f http://localhost:8088/healthz || exit 1
 
 # Run the application with Bun
 CMD ["bun", "run", "dist/main.js"]

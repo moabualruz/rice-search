@@ -15,7 +15,7 @@ import type { RiceWsClient } from "./ws-client.js";
  * Get base URL from environment or default
  */
 export function getBaseUrl(): string {
-  return process.env.RICEGREP_BASE_URL || "http://localhost:8080";
+  return process.env.RICEGREP_BASE_URL || "http://localhost:8088";
 }
 
 /**

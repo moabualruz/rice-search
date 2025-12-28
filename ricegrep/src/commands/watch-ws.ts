@@ -21,6 +21,7 @@ import {
 export interface WatchWsOptions {
   store: string;
   dryRun: boolean;
+  incremental: boolean;
   maxFileSize?: number;
   maxFileCount?: number;
 }
@@ -94,51 +95,57 @@ export async function startWatchWs(options: WatchWsOptions): Promise<void> {
       spinner.info("Dry run mode - no files will be sent");
     }
 
-    // Walk directory and collect files
-    const { files, totalFiles: total } = await walkDirectory({
-      watchRoot,
-      fileSystem,
-      maxFileCount: config.maxFileCount,
-    });
-    totalFiles = total;
+    // Skip initial sync in incremental mode
+    if (options.incremental) {
+      spinner.succeed("Incremental mode - skipping initial sync");
+      console.log("Watching for file changes in", watchRoot);
+    } else {
+      // Walk directory and collect files
+      const { files, totalFiles: total } = await walkDirectory({
+        watchRoot,
+        fileSystem,
+        maxFileCount: config.maxFileCount,
+      });
+      totalFiles = total;
 
-    spinner.text = `Found ${totalFiles} files. Sending...`;
+      spinner.text = `Found ${totalFiles} files. Sending...`;
 
-    // Send all files (fire-and-forget via WebSocket)
-    for (const file of files) {
-      try {
-        if (!options.dryRun) {
-          await sendFileToServer(client, file.path, file.relativePath, maxFileSize);
+      // Send all files (fire-and-forget via WebSocket)
+      for (const file of files) {
+        try {
+          if (!options.dryRun) {
+            await sendFileToServer(client, file.path, file.relativePath, maxFileSize);
+          }
+
+          sentFiles++;
+          onProgress({
+            processed: sentFiles,
+            uploaded: sentFiles,
+            deleted: 0,
+            errors,
+            total: totalFiles,
+            filePath: file.relativePath,
+          });
+        } catch (err) {
+          errors++;
+          console.error(`\nFailed to send ${file.relativePath}:`, err);
         }
-
-        sentFiles++;
-        onProgress({
-          processed: sentFiles,
-          uploaded: sentFiles,
-          deleted: 0,
-          errors,
-          total: totalFiles,
-          filePath: file.relativePath,
-        });
-      } catch (err) {
-        errors++;
-        console.error(`\nFailed to send ${file.relativePath}:`, err);
       }
-    }
 
-    const errorsInfo = errors > 0 ? ` • errors ${errors}` : "";
-    if (options.dryRun) {
-      spinner.info(
-        `Dry run complete: ${sentFiles}/${totalFiles} files would be sent${errorsInfo}`,
+      const errorsInfo = errors > 0 ? ` • errors ${errors}` : "";
+      if (options.dryRun) {
+        spinner.info(
+          `Dry run complete: ${sentFiles}/${totalFiles} files would be sent${errorsInfo}`,
+        );
+        client.close();
+        return;
+      }
+
+      spinner.succeed(
+        `Initial sync: sent ${sentFiles}/${totalFiles} files${errorsInfo}`,
       );
-      client.close();
-      return;
+      console.log("Watching for file changes in", watchRoot);
     }
-
-    spinner.succeed(
-      `Initial sync: sent ${sentFiles}/${totalFiles} files${errorsInfo}`,
-    );
-    console.log("Watching for file changes in", watchRoot);
 
     // Setup file watcher with verbose callbacks
     setupFileWatcher(watchRoot, fileSystem, maxFileSize, client, {
@@ -185,6 +192,11 @@ export const watchWs = new Command("watch")
   .option(
     "-d, --dry-run",
     "Dry run the watch process (no actual file syncing)",
+    false,
+  )
+  .option(
+    "-i, --incremental",
+    "Skip initial sync, only watch for file changes (assumes already indexed)",
     false,
   )
   .option(

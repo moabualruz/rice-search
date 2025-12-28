@@ -186,6 +186,11 @@ export class RiceWsClient extends EventEmitter {
     return new Promise((resolve, reject) => {
       const wsUrl = `${this.baseUrl}/v1/ws?store=${encodeURIComponent(this.store)}`;
       
+      // Debug: log connection URL
+      if (process.env.DEBUG) {
+        console.error(`[ws-client] Connecting to: ${wsUrl}`);
+      }
+      
       this.ws = new WebSocket(wsUrl);
 
       const timeout = setTimeout(() => {
@@ -213,9 +218,19 @@ export class RiceWsClient extends EventEmitter {
         }
       });
 
-      this.ws.on("close", () => {
+      this.ws.on("close", (code: number, reason: Buffer) => {
+        const wasConnected = this.connected;
         this.connected = false;
         this.connId = null;
+        
+        // If closed during initial connection, reject the promise
+        if (!wasConnected) {
+          clearTimeout(timeout);
+          const reasonStr = reason?.toString() || `code ${code}`;
+          reject(new Error(`WebSocket closed during connect: ${reasonStr}`));
+          return;
+        }
+        
         this.onDisconnect?.();
         this.emit("disconnect");
 

@@ -46,7 +46,7 @@ Rice Search is a fully local, self-hosted code search platform combining BM25 ke
                               │
                     ┌─────────▼─────────┐
                     │    Rice API       │
-                    │  (NestJS :8080)   │
+                    │  (NestJS :8088)   │
                     │                   │
                     │ ┌───────────────┐ │
                     │ │  Intelligence │ │  ← Intent + Strategy
@@ -91,7 +91,7 @@ docker-compose up -d
 python scripts/reindex.py /path/to/your/repo
 
 # Or via API
-curl -X POST http://localhost:8080/v1/stores/default/index \
+curl -X POST http://localhost:8088/v1/stores/default/index \
   -H "Content-Type: application/json" \
   -d '{"files": [{"path": "src/main.py", "content": "..."}]}'
 ```
@@ -102,7 +102,7 @@ curl -X POST http://localhost:8080/v1/stores/default/index \
 
 **API**:
 ```bash
-curl -X POST http://localhost:8080/v1/stores/default/search \
+curl -X POST http://localhost:8088/v1/stores/default/search \
   -H "Content-Type: application/json" \
   -d '{"query": "authentication handler"}'
 ```
@@ -192,7 +192,7 @@ Rice Search supports the Model Context Protocol for AI assistant integration.
 {
   "mcpServers": {
     "rice-search": {
-      "url": "http://localhost:8080/mcp",
+      "url": "http://localhost:8088/mcp",
       "transport": "http"
     }
   }
@@ -232,7 +232,7 @@ EMBEDDING_DIM=1536
 
 | Service | Port | Description |
 |---------|------|-------------|
-| API | 8080 | REST API + MCP |
+| API | 8088 | REST API + MCP |
 | Web UI | 3000 | Search interface |
 | Milvus | 19530 | Vector database |
 | MinIO | 9001 | Storage console |

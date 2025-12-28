@@ -2,7 +2,7 @@
  * LocalStore - Store implementation for Rice Search backend
  *
  * This store connects to a local Rice Search API.
- * Configure with RICEGREP_BASE_URL (defaults to http://localhost:8080)
+ * Configure with RICEGREP_BASE_URL (defaults to http://localhost:8088)
  */
 
 
@@ -27,7 +27,7 @@ import debug from "debug";
 const log = debug("ricegrep:local-store");
 
 export const LOCAL_API_URL =
-  process.env.RICEGREP_BASE_URL || "http://localhost:8080";
+  process.env.RICEGREP_BASE_URL || "http://localhost:8088";
 
 export function isLocalMode(): boolean {
   // Rice Search is always local - no cloud mode

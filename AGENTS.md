@@ -66,7 +66,7 @@ Run `bun run typecheck` before any significant changes. Never commit without cle
 
 | Service | Local Dev | Docker | Description |
 |---------|-----------|--------|-------------|
-| API | 8088 | 8080 | Rice Search REST API |
+| API | 8088 | 8088 | Rice Search REST API |
 | Web UI | 3001 | 3000 | Next.js frontend |
 | Attu | 8000 | 8000 | Milvus admin UI |
 | Embeddings | 8081 | 8081 | Text embeddings inference |
@@ -77,8 +77,8 @@ Run `bun run typecheck` before any significant changes. Never commit without cle
 
 ## API Endpoints
 
-Base URL: `http://localhost:8080` (Docker) or `http://localhost:8088` (Local Dev)  
-Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
+Base URL: `http://localhost:8088`  
+Swagger Docs: `http://localhost:8088/docs` (dev only)
 
 ### Health
 
@@ -274,7 +274,7 @@ Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
 
 ### WebSocket API
 
-**Endpoint:** `ws://localhost:8080/v1/ws?store={store}` (Docker) or `ws://localhost:8088/v1/ws?store={store}` (Local Dev)
+**Endpoint:** `ws://localhost:8088/v1/ws?store={store}`
 
 Non-blocking WebSocket communication for ricegrep watch mode. All handlers are fire-and-forget with push notifications.
 

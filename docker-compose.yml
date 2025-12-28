@@ -39,7 +39,7 @@ services:
   redis:
     container_name: rice-redis
     image: redis:7-alpine
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --save "" --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - ./data/redis:/data
     ports:
@@ -270,6 +270,9 @@ services:
       CLUSTER_MODE: "false"
       NODE_ENV: production
       
+      # Port configuration
+      PORT: "8088"
+      
       # Bun runtime tuning
       BUN_CONFIG_MAX_HTTP_CONNECTIONS: "1024"
     volumes:
@@ -278,9 +281,9 @@ services:
       # Mount repos for server-side indexing (optional)
       - ${REPOS_PATH:-./repos}:/repos:ro
     ports:
-      - "8080:8080"
+      - "8088:8088"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:8088/healthz"]
       interval: 15s
       timeout: 10s
       retries: 3
@@ -312,7 +315,7 @@ services:
       dockerfile: Dockerfile
     environment:
       # For server-side proxying within Docker network
-      API_URL: http://api:8080
+      API_URL: http://api:8088
     ports:
       - "3000:3000"
     depends_on:
