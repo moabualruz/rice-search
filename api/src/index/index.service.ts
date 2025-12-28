@@ -49,6 +49,8 @@ export class IndexService {
       'indexing.maxFileSizeMb',
     )!;
     this.defaultMode = (this.configService.get<string>('search.mode') as IndexMode) || 'mixedbread';
+    
+    this.logger.log(`Index mode: ${this.defaultMode} (Tantivy: ${this.defaultMode === 'mixedbread' ? 'enabled' : 'skipped'})`);
   }
 
   /**
@@ -185,8 +187,8 @@ export class IndexService {
     }
 
     // For mixedbread mode: Index to Tantivy for BM25 sparse search
-    // For bge-m3 mode: Skip Tantivy, sparse search is done via Milvus hybrid
-    if (allChunks.length > 0 && embeddingMode !== 'bge-m3') {
+    // For bge-m3 mode: Skip Tantivy - BGE-M3 has built-in sparse via Milvus hybrid
+    if (allChunks.length > 0 && embeddingMode === 'mixedbread') {
       const tantivyDocs = allChunks.map((chunk) => ({
         doc_id: chunk.doc_id,
         path: chunk.path,

@@ -57,6 +57,15 @@ QUERIES=(
   "async await promise handling"
 )
 
+# Embedding test texts for direct endpoint benchmarking
+EMBEDDING_TEXTS=(
+  "function calculateSum(a, b) { return a + b; }"
+  "class UserRepository implements IUserRepository"
+  "async function fetchData(url) { const response = await fetch(url); return response.json(); }"
+  "import { Injectable, Logger } from '@nestjs/common';"
+  "def process_batch(items: List[str]) -> Dict[str, Any]:"
+)
+
 # Parse arguments
 CPU_ONLY=false
 GPU_ONLY=false
@@ -216,19 +225,28 @@ start_services() {
     compose_cmd="$compose_cmd -f $BENCHMARK_COMPOSE_GPU"
   fi
   
-  # Add bge-m3 profile if needed
-  if [ "$embed_mode" = "bge-m3" ]; then
-    compose_cmd="$compose_cmd --profile bge-m3"
-  fi
-  
-  # Export API_PORT for compose file
+  # Export environment variables for compose file
   export API_PORT
+  
+  # Set search mode based on embed_mode
+  # Tantivy is automatically used for mixedbread, skipped for bge-m3
+  if [ "$embed_mode" = "bge-m3" ]; then
+    # BGE-M3 mode: use bge-m3 profile, Tantivy auto-skipped
+    compose_cmd="$compose_cmd --profile bge-m3"
+    export SEARCH_MODE="bge-m3"
+  else
+    # Mixedbread mode: default infinity, Tantivy auto-enabled
+    export SEARCH_MODE="mixedbread"
+  fi
   
   # Stop any existing containers
   $compose_cmd down --remove-orphans 2>/dev/null || true
   
   # Start services (no --build, images should be pre-built)
+  local tantivy_status="enabled"
+  [ "$SEARCH_MODE" = "bge-m3" ] && tantivy_status="skipped"
   log_info "Running: $compose_cmd up -d"
+  log_info "  SEARCH_MODE=$SEARCH_MODE (Tantivy: $tantivy_status)"
   $compose_cmd up -d
   
   # Wait for services to be healthy
@@ -381,6 +399,149 @@ run_searches() {
 }
 
 # ============================================
+# Direct Embedding Endpoint Benchmarks
+# ============================================
+run_embedding_benchmarks() {
+  local embed_mode=$1
+  local hw_mode=$2
+  local output_file="$RESULTS_DIR/${TIMESTAMP}_${hw_mode}_${embed_mode}_embeddings.jsonl"
+  
+  log_info "Running embedding benchmark: $hw_mode + $embed_mode"
+  
+  mkdir -p "$RESULTS_DIR"
+  
+  # Determine endpoint based on mode
+  local embed_url=""
+  local embed_payload=""
+  
+  if [ "$embed_mode" = "bge-m3" ]; then
+    embed_url="http://localhost:8083/encode"
+  else
+    # mixedbread uses Infinity on port 8081
+    embed_url="http://localhost:8081/embeddings"
+  fi
+  
+  local total_latency=0
+  local count=0
+  
+  for text in "${EMBEDDING_TEXTS[@]}"; do
+    local start_time=$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')
+    
+    local response=""
+    if [ "$embed_mode" = "bge-m3" ]; then
+      # BGE-M3 endpoint format
+      response=$(curl -s --max-time 30 -X POST "$embed_url" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"texts\": [\"$text\"],
+          \"return_dense\": true,
+          \"return_sparse\": true,
+          \"return_colbert\": false
+        }" 2>/dev/null)
+    else
+      # Infinity/OpenAI-compatible endpoint format
+      response=$(curl -s --max-time 30 -X POST "$embed_url" \
+        -H "Content-Type: application/json" \
+        -d "{
+          \"model\": \"mixedbread-ai/mxbai-embed-large-v1\",
+          \"input\": [\"$text\"]
+        }" 2>/dev/null)
+    fi
+    
+    local end_time=$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')
+    local latency=$((end_time - start_time))
+    
+    # Add metadata to response
+    local result=$(echo "$response" | jq -c \
+      --arg latency "$latency" \
+      --arg text "${text:0:50}" \
+      --arg mode "$embed_mode" \
+      --arg hw "$hw_mode" \
+      '. + {latency_ms: ($latency | tonumber), text: $text, mode: $mode, hardware: $hw}' 2>/dev/null || \
+      echo "{\"error\": \"parse_failed\", \"latency_ms\": $latency, \"text\": \"${text:0:50}\", \"mode\": \"$embed_mode\", \"hardware\": \"$hw_mode\"}")
+    
+    echo "$result" >> "$output_file"
+    
+    total_latency=$((total_latency + latency))
+    count=$((count + 1))
+    
+    printf "  [EMBED] %-50s %4dms\n" "\"${text:0:47}...\"" "$latency"
+  done
+  
+  local avg_latency=$((total_latency / count))
+  echo ""
+  log_pass "Embedding $hw_mode + $embed_mode: avg ${avg_latency}ms over $count texts"
+}
+
+# ============================================
+# Direct Reranking Endpoint Benchmarks
+# ============================================
+run_rerank_benchmarks() {
+  local embed_mode=$1
+  local hw_mode=$2
+  local output_file="$RESULTS_DIR/${TIMESTAMP}_${hw_mode}_${embed_mode}_rerank.jsonl"
+  
+  log_info "Running rerank benchmark: $hw_mode + $embed_mode"
+  
+  mkdir -p "$RESULTS_DIR"
+  
+  # Determine endpoint based on mode
+  local rerank_url=""
+  
+  if [ "$embed_mode" = "bge-m3" ]; then
+    rerank_url="http://localhost:8083/rerank"
+  else
+    # mixedbread uses Infinity on port 8081
+    rerank_url="http://localhost:8081/rerank"
+  fi
+  
+  # Test documents for reranking
+  local query="async function that fetches data from API"
+  local docs='["function fetchData() { return fetch(url); }","class User { constructor(name) {} }","async function getData(url) { const res = await fetch(url); return res.json(); }","const x = 1 + 2;","import axios from \"axios\"; export const api = axios.create();"]'
+  
+  local start_time=$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')
+  
+  local response=""
+  if [ "$embed_mode" = "bge-m3" ]; then
+    # BGE-M3 rerank endpoint format
+    response=$(curl -s --max-time 30 -X POST "$rerank_url" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"query\": \"$query\",
+        \"documents\": $docs,
+        \"top_k\": 3
+      }" 2>/dev/null)
+  else
+    # Infinity rerank endpoint format
+    response=$(curl -s --max-time 30 -X POST "$rerank_url" \
+      -H "Content-Type: application/json" \
+      -d "{
+        \"model\": \"mixedbread-ai/mxbai-rerank-xsmall-v1\",
+        \"query\": \"$query\",
+        \"documents\": $docs,
+        \"top_n\": 3
+      }" 2>/dev/null)
+  fi
+  
+  local end_time=$(date +%s%3N 2>/dev/null || python3 -c 'import time; print(int(time.time()*1000))')
+  local latency=$((end_time - start_time))
+  
+  # Add metadata to response
+  local result=$(echo "$response" | jq -c \
+    --arg latency "$latency" \
+    --arg query "$query" \
+    --arg mode "$embed_mode" \
+    --arg hw "$hw_mode" \
+    '. + {latency_ms: ($latency | tonumber), query: $query, mode: $mode, hardware: $hw}' 2>/dev/null || \
+    echo "{\"error\": \"parse_failed\", \"latency_ms\": $latency, \"query\": \"$query\", \"mode\": \"$embed_mode\", \"hardware\": \"$hw_mode\"}")
+  
+  echo "$result" >> "$output_file"
+  
+  printf "  [RERANK] %-50s %4dms\n" "\"${query:0:47}...\"" "$latency"
+  log_pass "Rerank $hw_mode + $embed_mode: ${latency}ms"
+}
+
+# ============================================
 # Report Generation
 # ============================================
 generate_report() {
@@ -456,16 +617,83 @@ REPORT_DETAILS
     echo "| $short_query | ${cpu_mb}ms | ${cpu_bg}ms | ${gpu_mb}ms | ${gpu_bg}ms |" >> "$REPORT_FILE"
   done
   
+  # Add embedding benchmark results
+  cat >> "$REPORT_FILE" << 'EMBED_HEADER'
+
+## Direct Embedding Endpoint Benchmarks
+
+These test the raw embedding service performance (bypassing the API).
+
+EMBED_HEADER
+
+  echo "| Configuration | Avg Latency (ms) | Texts |" >> "$REPORT_FILE"
+  echo "|---------------|------------------|-------|" >> "$REPORT_FILE"
+  
+  for file in "$RESULTS_DIR"/${TIMESTAMP}_*_embeddings.jsonl; do
+    if [ -f "$file" ]; then
+      local basename=$(basename "$file" _embeddings.jsonl)
+      local config="${basename#${TIMESTAMP}_}"
+      
+      local stats=$(jq -s '
+        {
+          avg: ([.[].latency_ms] | add / length | floor),
+          count: length
+        }
+      ' "$file" 2>/dev/null)
+      
+      local avg=$(echo "$stats" | jq -r '.avg')
+      local count=$(echo "$stats" | jq -r '.count')
+      
+      echo "| $config | $avg | $count |" >> "$REPORT_FILE"
+    fi
+  done
+
+  # Add reranking benchmark results
+  cat >> "$REPORT_FILE" << 'RERANK_HEADER'
+
+## Direct Reranking Endpoint Benchmarks
+
+These test the raw reranking service performance (bypassing the API).
+
+RERANK_HEADER
+
+  echo "| Configuration | Latency (ms) |" >> "$REPORT_FILE"
+  echo "|---------------|--------------|" >> "$REPORT_FILE"
+  
+  for file in "$RESULTS_DIR"/${TIMESTAMP}_*_rerank.jsonl; do
+    if [ -f "$file" ]; then
+      local basename=$(basename "$file" _rerank.jsonl)
+      local config="${basename#${TIMESTAMP}_}"
+      
+      local latency=$(jq -r '.latency_ms' "$file" 2>/dev/null | head -1)
+      
+      echo "| $config | $latency |" >> "$REPORT_FILE"
+    fi
+  done
+
   cat >> "$REPORT_FILE" << REPORT_FOOTER
 
 ## Files
 
 Raw results are in: \`$RESULTS_DIR/\`
 
+### Search Results
 - \`${TIMESTAMP}_cpu_mixedbread.jsonl\`
 - \`${TIMESTAMP}_cpu_bge-m3.jsonl\`
 - \`${TIMESTAMP}_gpu_mixedbread.jsonl\`
 - \`${TIMESTAMP}_gpu_bge-m3.jsonl\`
+
+### Embedding Results
+- \`${TIMESTAMP}_cpu_mixedbread_embeddings.jsonl\`
+- \`${TIMESTAMP}_cpu_bge-m3_embeddings.jsonl\`
+- \`${TIMESTAMP}_gpu_mixedbread_embeddings.jsonl\`
+- \`${TIMESTAMP}_gpu_bge-m3_embeddings.jsonl\`
+
+### Reranking Results
+- \`${TIMESTAMP}_cpu_mixedbread_rerank.jsonl\`
+- \`${TIMESTAMP}_cpu_bge-m3_rerank.jsonl\`
+- \`${TIMESTAMP}_gpu_mixedbread_rerank.jsonl\`
+- \`${TIMESTAMP}_gpu_bge-m3_rerank.jsonl\`
 REPORT_FOOTER
 
   log_pass "Report generated: $REPORT_FILE"
@@ -490,6 +718,11 @@ run_benchmark_for_mode() {
     return 1
   fi
   
+  # Run direct embedding and rerank benchmarks BEFORE indexing
+  # This tests raw embedding service performance
+  run_embedding_benchmarks "$embed_mode" "$hw_mode"
+  run_rerank_benchmarks "$embed_mode" "$hw_mode"
+  
   # Index files
   if ! index_files "$embed_mode"; then
     log_fail "Failed to index for $hw_mode + $embed_mode"
@@ -500,7 +733,7 @@ run_benchmark_for_mode() {
   # Wait for index to be ready
   sleep 5
   
-  # Run searches
+  # Run searches (tests full pipeline through API)
   run_searches "$embed_mode" "$hw_mode"
   
   # Stop services

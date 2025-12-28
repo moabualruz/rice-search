@@ -9,6 +9,11 @@ export default () => ({
     port: parseInt(process.env.MILVUS_PORT || '19530', 10),
   },
 
+  // Embedding backend selection
+  // - "infinity" (default): Mixedbread/Infinity embeddings
+  // - "bge-m3": BGE-M3 embeddings (requires --profile bge-m3)
+  embeddingBackend: (process.env.EMBEDDING_BACKEND || 'infinity') as 'infinity' | 'bge-m3',
+
   // Embeddings configuration
   // Note: Uses Infinity service URL for embeddings (OpenAI-compatible format)
   embeddings: {
@@ -37,6 +42,8 @@ export default () => ({
   },
 
   // Search configuration
+  // Note: Tantivy (BM25) is automatically enabled for mixedbread mode
+  // and disabled for bge-m3 mode (which has its own sparse search)
   search: {
     mode: (process.env.SEARCH_MODE || 'mixedbread') as 'mixedbread' | 'bge-m3',
     sparseTopK: parseInt(process.env.SPARSE_TOPK || '100', 10),

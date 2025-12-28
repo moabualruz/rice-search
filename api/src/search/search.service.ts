@@ -39,6 +39,8 @@ export class SearchService {
     this.sparseTopK = this.configService.get<number>("search.sparseTopK")!;
     this.denseTopK = this.configService.get<number>("search.denseTopK")!;
     this.defaultMode = (this.configService.get<string>("search.mode") as SearchMode) || "mixedbread";
+    
+    this.logger.log(`Search mode: ${this.defaultMode} (Tantivy: ${this.defaultMode === 'mixedbread' ? 'enabled' : 'disabled'})`);
   }
 
   async search(store: string, request: SearchRequestDto) {
@@ -159,6 +161,7 @@ export class SearchService {
 
   /**
    * Mixedbread mode: Uses Infinity embeddings + Tantivy BM25
+   * Always uses Tantivy for sparse search - if you don't want Tantivy, use bge-m3 mode
    */
   private async searchMixedbreadMode(
     store: string,

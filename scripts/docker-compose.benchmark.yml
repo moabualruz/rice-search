@@ -129,6 +129,7 @@ services:
   # ============================================
   # Infinity: Embedding + Reranking Server (CPU)
   # Model cache persists to ../data/ for faster rebuilds
+  # Port 8081 exposed for direct endpoint benchmarking
   # ============================================
   infinity:
     container_name: bench-infinity
@@ -137,13 +138,17 @@ services:
       v2
       --model-id mixedbread-ai/mxbai-embed-large-v1
       --model-id mixedbread-ai/mxbai-rerank-xsmall-v1
+      --engine torch
       --port 80
       --batch-size 32
     volumes:
       - ../data/infinity-cache:/app/.cache
+    ports:
+      - "8081:80"
     environment:
       - HF_HOME=/app/.cache
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      - INFINITY_ENGINE=torch
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
@@ -205,7 +210,8 @@ services:
       DATA_DIR: /data
       TANTIVY_INDEX_DIR: /tantivy
       EMBEDDING_DIM: "1024"
-      SEARCH_MODE: mixedbread
+      # Search mode: mixedbread (Infinity+Tantivy) or bge-m3 (BGE-M3+Milvus)
+      SEARCH_MODE: ${SEARCH_MODE:-mixedbread}
       SPARSE_TOPK: "100"
       DENSE_TOPK: "100"
       FINAL_TOPK: "20"

@@ -1,0 +1,33 @@
+# Rice Search - BGE-M3 Override
+# Switches from Infinity (default) to BGE-M3 as the embedding backend
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.bge-m3.yml up -d
+#
+# This override:
+# - Disables the infinity service (scale: 0)
+# - Enables the bge-m3 service (removes profile requirement)
+# - Configures API to use bge-m3 mode (Tantivy automatically skipped)
+
+services:
+  # Disable Infinity (don't run it)
+  infinity:
+    deploy:
+      replicas: 0
+
+  # Enable BGE-M3 (remove profile, always run)
+  bge-m3:
+    profiles: []  # Remove profile requirement - always run with this override
+    
+  # Configure API to use BGE-M3 mode
+  # Tantivy is automatically skipped when SEARCH_MODE=bge-m3
+  api:
+    environment:
+      SEARCH_MODE: bge-m3
+    depends_on:
+      milvus:
+        condition: service_healthy
+      bge-m3:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
