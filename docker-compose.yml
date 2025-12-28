@@ -39,7 +39,7 @@ services:
   redis:
     container_name: rice-redis
     image: redis:7-alpine
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --save "" --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
       - ./data/redis:/data
     ports:
