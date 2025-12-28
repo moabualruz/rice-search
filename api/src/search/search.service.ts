@@ -14,6 +14,7 @@ import { MultiPassRerankerService, RerankStats } from "../ranking/multi-pass-rer
 import { PostrankPipelineService, PostrankStats } from "../postrank/postrank-pipeline.service";
 import { AggregatedResult } from "../postrank/aggregation.service";
 import { StoreVersioningService } from "../lifecycle/store-versioning.service";
+import { QueryLogService, QueryLogEntry } from "../observability/query-log.service";
 import { SearchRequestDto } from "./dto/search-request.dto";
 
 /**
@@ -42,8 +43,9 @@ export class SearchService {
     private multiPassReranker: MultiPassRerankerService,
     private postrankPipeline: PostrankPipelineService,
     private storeVersioning: StoreVersioningService,
+    private queryLog: QueryLogService,
   ) {
-    this.logger.log("Search service initialized (Intelligence Pipeline v2 + PostRank + Lifecycle)");
+    this.logger.log("Search service initialized (Intelligence Pipeline v2 + PostRank + Lifecycle + Observability)");
   }
 
   async search(store: string, request: SearchRequestDto) {
@@ -205,6 +207,34 @@ export class SearchService {
       resultCount: finalResults.length,
     };
     this.telemetry.record(telemetryRecord);
+
+    // Log query for replay and evaluation (Phase 4 - Observability)
+    const queryLogEntry: QueryLogEntry = {
+      timestamp: new Date().toISOString(),
+      requestId,
+      store,
+      query,
+      normalizedQuery: normalized.normalized,
+      intent: intent.intent,
+      difficulty: intent.difficulty,
+      strategy: config.strategy,
+      topK: top_k,
+      resultCount: finalResults.length,
+      totalLatencyMs,
+      topResultPath: finalResults[0]?.path,
+      topResultScore: finalResults[0]?.final_score,
+      filters: filters ? {
+        pathPrefix: filters.path_prefix,
+        languages: filters.languages,
+      } : undefined,
+      options: {
+        enableReranking: request.enable_reranking,
+        enableDedup: request.enable_dedup,
+        enableDiversity: request.enable_diversity,
+        groupByFile: request.group_by_file,
+      },
+    };
+    this.queryLog.log(queryLogEntry);
 
     return {
       query,

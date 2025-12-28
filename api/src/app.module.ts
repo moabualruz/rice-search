@@ -13,6 +13,7 @@ import { IntelligenceModule } from './intelligence/intelligence.module';
 import { RankingModule } from './ranking/ranking.module';
 import { PostrankModule } from './postrank/postrank.module';
 import { LifecycleModule } from './lifecycle/lifecycle.module';
+import { ObservabilityModule } from './observability/observability.module';
 
 @Module({
   imports: [
@@ -41,6 +42,9 @@ import { LifecycleModule } from './lifecycle/lifecycle.module';
 
     // Store lifecycle (versioning, A/B testing, migrations)
     LifecycleModule,
+
+    // Observability (query logging, metrics, evaluation)
+    ObservabilityModule,
 
     // Feature modules
     StoresModule,

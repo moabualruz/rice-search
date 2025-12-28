@@ -1,4 +1,6 @@
 import { Injectable, Logger } from "@nestjs/common";
+import { QueryIntent } from "../intelligence/intent-classifier.service";
+import { RetrievalStrategy } from "../intelligence/strategy-selector.service";
 
 /**
  * Telemetry data for sparse (BM25) search
@@ -8,6 +10,8 @@ export interface SparseTelemetry {
   latencyMs: number;
   topScore: number;
   scoreStdDev: number;
+  scoreP50?: number;
+  scoreP90?: number;
 }
 
 /**
@@ -18,6 +22,8 @@ export interface DenseTelemetry {
   latencyMs: number;
   topScore: number;
   scoreStdDev: number;
+  scoreP50?: number;
+  scoreP90?: number;
 }
 
 /**
@@ -42,6 +48,26 @@ export interface RerankTelemetry {
   timedOut: boolean;
   skipped: boolean;
   skipReason?: string;
+  pass1Applied?: boolean;
+  pass1LatencyMs?: number;
+  pass2Applied?: boolean;
+  pass2LatencyMs?: number;
+  earlyExit?: boolean;
+}
+
+/**
+ * Telemetry data for post-rank processing
+ */
+export interface PostrankTelemetry {
+  dedupEnabled: boolean;
+  dedupRemoved: number;
+  dedupLatencyMs: number;
+  diversityEnabled: boolean;
+  diversityAvg: number;
+  diversityLatencyMs: number;
+  aggregationEnabled: boolean;
+  uniqueFiles: number;
+  totalLatencyMs: number;
 }
 
 /**
@@ -59,17 +85,32 @@ export interface SearchTelemetryRecord {
   requestId: string;
   timestamp: Date;
   store: string;
+  storeVersion?: string;
   query: string;
+  normalizedQuery?: string;
   queryType: string; // code, natural, hybrid
+
+  // Intelligence pipeline (Phase 1)
+  intent?: QueryIntent;
+  difficulty?: string;
+  strategy?: RetrievalStrategy;
+  strategyConfig?: {
+    sparseTopK: number;
+    denseTopK: number;
+    rerankCandidates: number;
+    useSecondPass: boolean;
+  };
 
   sparse: SparseTelemetry;
   dense: DenseTelemetry;
   fusion: FusionTelemetry;
   rerank: RerankTelemetry;
+  postrank?: PostrankTelemetry;
   cache: CacheTelemetry;
 
   totalLatencyMs: number;
   resultCount: number;
+  topResultScore?: number;
 }
 
 /**
@@ -146,6 +187,57 @@ export class TelemetryService {
   getRecords(limit = 100): SearchTelemetryRecord[] {
     const start = Math.max(0, this.records.length - limit);
     return this.records.slice(start);
+  }
+
+  /**
+   * Get telemetry records for a time range
+   *
+   * @param since - Start date
+   * @param until - End date (optional, defaults to now)
+   * @returns Filtered telemetry records
+   */
+  getRecordsByTimeRange(since: Date, until?: Date): SearchTelemetryRecord[] {
+    const endDate = until ?? new Date();
+    return this.records.filter(
+      (r) => r.timestamp >= since && r.timestamp <= endDate
+    );
+  }
+
+  /**
+   * Get telemetry records for a specific store
+   *
+   * @param store - Store name
+   * @param limit - Maximum records (default: 100)
+   * @returns Filtered telemetry records
+   */
+  getRecordsByStore(store: string, limit = 100): SearchTelemetryRecord[] {
+    return this.records
+      .filter((r) => r.store === store)
+      .slice(-limit);
+  }
+
+  /**
+   * Get strategy distribution from recent records
+   */
+  getStrategyDistribution(): Map<string, number> {
+    const distribution = new Map<string, number>();
+    for (const record of this.records) {
+      const strategy = record.strategy ?? "unknown";
+      distribution.set(strategy, (distribution.get(strategy) ?? 0) + 1);
+    }
+    return distribution;
+  }
+
+  /**
+   * Get intent distribution from recent records
+   */
+  getIntentDistribution(): Map<string, number> {
+    const distribution = new Map<string, number>();
+    for (const record of this.records) {
+      const intent = record.intent ?? "unknown";
+      distribution.set(intent, (distribution.get(intent) ?? 0) + 1);
+    }
+    return distribution;
   }
 
   /**
