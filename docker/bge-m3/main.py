@@ -277,14 +277,16 @@ async def encode(request: EncodeRequest):
         # Sparse embeddings (lexical weights)
         if request.return_sparse and "lexical_weights" in output:
             lexical_weights = output["lexical_weights"]
-            # Convert token IDs to tokens
-            token_weights = model.convert_id_to_token(lexical_weights)
-
+            # Convert token IDs to tokens - must call per-item, not on entire list
             response.sparse = [
                 SparseEmbedding(
-                    weights={k: float(v) for k, v in weights.items()}, index=i
+                    weights={
+                        k: float(v)
+                        for k, v in model.convert_id_to_token(weights).items()
+                    },
+                    index=i,
                 )
-                for i, weights in enumerate(token_weights)
+                for i, weights in enumerate(lexical_weights)
             ]
 
         # ColBERT embeddings

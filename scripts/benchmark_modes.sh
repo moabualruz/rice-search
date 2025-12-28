@@ -181,15 +181,15 @@ BENCHMARK_COMPOSE="$SCRIPT_DIR/docker-compose.benchmark.yml"
 BENCHMARK_COMPOSE_GPU="$SCRIPT_DIR/docker-compose.benchmark.gpu.yml"
 
 build_images() {
-  log_info "Checking for pre-built images..."
+  log_info "Checking for pre-built images from main docker-compose..."
   
   cd "$PROJECT_DIR"
   
   # Check if API image exists
-  if docker images rice-search-api:latest -q | grep -q .; then
-    log_pass "API image already exists (rice-search-api:latest)"
+  if docker images rice-search-api:latest -q 2>/dev/null | grep -q .; then
+    log_pass "API image exists (rice-search-api:latest)"
   else
-    log_info "API image not found, building..."
+    log_info "API image not found, building via main docker-compose..."
     if docker compose build api; then
       log_pass "API image built"
     else
@@ -199,10 +199,10 @@ build_images() {
   fi
   
   # Check if BGE-M3 image exists
-  if docker images rice-search-bge-m3:latest -q | grep -q .; then
-    log_pass "BGE-M3 image already exists (rice-search-bge-m3:latest)"
+  if docker images rice-search-bge-m3:latest -q 2>/dev/null | grep -q .; then
+    log_pass "BGE-M3 image exists (rice-search-bge-m3:latest)"
   else
-    log_info "BGE-M3 image not found, building..."
+    log_info "BGE-M3 image not found, building via main docker-compose..."
     if docker compose --profile bge-m3 build bge-m3; then
       log_pass "BGE-M3 image built"
     else
@@ -229,13 +229,12 @@ start_services() {
   export API_PORT
   
   # Set search mode based on embed_mode
-  # Tantivy is automatically used for mixedbread, skipped for bge-m3
   if [ "$embed_mode" = "bge-m3" ]; then
-    # BGE-M3 mode: use bge-m3 profile, Tantivy auto-skipped
+    # BGE-M3 mode: BGE-M3 + Milvus (no Tantivy)
     compose_cmd="$compose_cmd --profile bge-m3"
     export SEARCH_MODE="bge-m3"
   else
-    # Mixedbread mode: default infinity, Tantivy auto-enabled
+    # Mixedbread mode: Infinity + Tantivy + Milvus
     export SEARCH_MODE="mixedbread"
   fi
   
@@ -558,10 +557,10 @@ generate_report() {
 
 ## Architecture
 
-| Mode | Dense Embeddings | Sparse Search | Fusion |
-|------|------------------|---------------|--------|
-| mixedbread | Infinity (mxbai-embed-large-v1) → Milvus | Tantivy BM25 | RRF (app layer) |
-| bge-m3 | BGE-M3 → Milvus hybrid | BGE-M3 sparse → Milvus | RRF (Milvus native) |
+| Mode | Embeddings | Sparse (BM25) | Dense (Vectors) | Fusion |
+|------|------------|---------------|-----------------|--------|
+| mixedbread | Infinity | Tantivy | Milvus | RRF (app layer) |
+| bge-m3 | BGE-M3 | BGE-M3 → Milvus | Milvus | RRF (Milvus native) |
 
 ## Results Summary
 

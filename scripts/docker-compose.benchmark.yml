@@ -1,7 +1,12 @@
 # Rice Search Benchmark - Standalone Docker Compose
 # This is a STANDALONE compose file - no base compose dependency
+# Uses pre-built images from main docker-compose.yml
 # Uses named volumes for data (cleaned on teardown)
 # Uses bind mounts for model caches (persist across builds)
+#
+# Prerequisites:
+#   docker-compose build api
+#   docker-compose --profile bge-m3 build bge-m3
 #
 # Usage:
 #   docker compose -f scripts/docker-compose.benchmark.yml --profile bge-m3 up -d
@@ -69,7 +74,7 @@ services:
   # ============================================
   minio:
     container_name: bench-minio
-    image: minio/minio:RELEASE.2024-12-18T13-15-00Z
+    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
@@ -142,7 +147,7 @@ services:
       --port 80
       --batch-size 32
     volumes:
-      - ../data/infinity-cache:/app/.cache
+      - ./../data/infinity-cache:/app/.cache
     ports:
       - "8081:80"
     environment:
@@ -161,8 +166,8 @@ services:
 
   # ============================================
   # BGE-M3: Alternative embedding service
-  # Uses image built by main docker-compose.yml
-  # Model cache persists to ../data/ for faster rebuilds
+  # Uses pre-built image from main docker-compose
+  # Run `docker-compose --profile bge-m3 build bge-m3` first
   # ============================================
   bge-m3:
     container_name: bench-bge-m3
@@ -170,18 +175,23 @@ services:
     ports:
       - "8083:80"
     volumes:
-      - ../data/bge-m3-cache:/app/.cache
+      # Pip cache - packages download once, install from cache on restart
+      - ./../persistent-data/bge-m3/pip-cache:/root/.cache/pip
+      # HuggingFace cache - models persist across container restarts
+      - ./../persistent-data/bge-m3/models:/root/.cache/huggingface
     environment:
       - MODEL_NAME=BAAI/bge-m3
       - DEVICE=cpu
       - USE_FP16=true
       - BATCH_SIZE=32
       - MAX_LENGTH=8192
-      - HF_HOME=/app/.cache
+      - UVICORN_HOST=0.0.0.0
+      - UVICORN_PORT=80
+      - UVICORN_WORKERS=1
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
-      start_period: 180s
+      start_period: 300s
       timeout: 10s
       retries: 5
     restart: unless-stopped
@@ -193,7 +203,8 @@ services:
   # ============================================
   # API: Main integration point
   # Port configurable via API_PORT env var (default 8085)
-  # Uses image built by main docker-compose.yml
+  # Uses pre-built image from main docker-compose
+  # Run `docker-compose build api` first
   # ============================================
   api:
     container_name: bench-api

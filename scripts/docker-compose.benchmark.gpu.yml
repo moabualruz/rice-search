@@ -1,10 +1,12 @@
 # Rice Search Benchmark - GPU Override
 # Use with: docker compose -f scripts/docker-compose.benchmark.yml -f scripts/docker-compose.benchmark.gpu.yml up -d
+#
+# Same GPU configuration as main docker-compose.gpu.yml
 
 services:
   # ============================================
   # Milvus with GPU acceleration
-  # Accelerates vector similarity search
+  # Same as main docker-compose.gpu.yml
   # ============================================
   milvus:
     image: milvusdb/milvus:v2.4.15-gpu
@@ -35,7 +37,7 @@ services:
 
   # ============================================
   # Infinity: GPU-accelerated embedding + reranking
-  # Port 8081 exposed for direct endpoint benchmarking
+  # Same as main docker-compose.gpu.yml
   # ============================================
   infinity:
     container_name: bench-infinity-gpu
@@ -65,12 +67,14 @@ services:
 
   # ============================================
   # BGE-M3: GPU-accelerated embeddings
+  # Same as main docker-compose.gpu.yml
   # ============================================
   bge-m3:
     container_name: bench-bge-m3-gpu
     environment:
       - DEVICE=cuda
       - USE_FP16=true
+      - CUDA_VISIBLE_DEVICES=0
     deploy:
       resources:
         reservations:
