@@ -12,16 +12,32 @@ const DEFAULT_MAX_FILE_SIZE = 1024 * 1024 * 1024; // 1GB - local traffic only
 const DEFAULT_MAX_FILE_COUNT = Infinity;
 
 const ConfigSchema = z.object({
+  // Sync options
   maxFileSize: z.number().positive().optional(),
   maxFileCount: z.number().positive().optional(),
+  // Search options (all booleans default to server defaults)
+  enableRerank: z.boolean().optional(),
+  enableDedup: z.boolean().optional(),
+  enableDiversity: z.boolean().optional(),
+  enableExpansion: z.boolean().optional(),
+  groupByFile: z.boolean().optional(),
+  verbose: z.boolean().optional(),
 });
 
 /**
  * CLI options that can override config
  */
 export interface CliConfigOptions {
+  // Sync options
   maxFileSize?: number;
   maxFileCount?: number;
+  // Search options
+  enableRerank?: boolean;
+  enableDedup?: boolean;
+  enableDiversity?: boolean;
+  enableExpansion?: boolean;
+  groupByFile?: boolean;
+  verbose?: boolean;
 }
 
 /**
@@ -41,11 +57,51 @@ export interface RicegrepConfig {
    * @default Infinity (unlimited)
    */
   maxFileCount: number;
+
+  // Search options - these override environment variables when set
+  // All default to undefined (use server/CLI defaults)
+
+  /**
+   * Enable neural reranking of search results.
+   * @default true (via CLI/env)
+   */
+  enableRerank?: boolean;
+
+  /**
+   * Enable semantic deduplication of results.
+   * @default true (via CLI/env)
+   */
+  enableDedup?: boolean;
+
+  /**
+   * Enable MMR diversity in results.
+   * @default true (via CLI/env)
+   */
+  enableDiversity?: boolean;
+
+  /**
+   * Enable query expansion.
+   * @default true (via CLI/env)
+   */
+  enableExpansion?: boolean;
+
+  /**
+   * Group results by file.
+   * @default false (via CLI/env)
+   */
+  groupByFile?: boolean;
+
+  /**
+   * Show verbose search statistics.
+   * @default false (via CLI/env)
+   */
+  verbose?: boolean;
 }
 
 const DEFAULT_CONFIG: RicegrepConfig = {
   maxFileSize: DEFAULT_MAX_FILE_SIZE,
   maxFileCount: DEFAULT_MAX_FILE_COUNT,
+  // Search options left undefined to use CLI/env defaults
 };
 
 const configCache = new Map<string, RicegrepConfig>();
@@ -170,11 +226,31 @@ function filterUndefinedCliOptions(
   options: CliConfigOptions,
 ): Partial<RicegrepConfig> {
   const result: Partial<RicegrepConfig> = {};
+  // Sync options
   if (options.maxFileSize !== undefined) {
     result.maxFileSize = options.maxFileSize;
   }
   if (options.maxFileCount !== undefined) {
     result.maxFileCount = options.maxFileCount;
+  }
+  // Search options
+  if (options.enableRerank !== undefined) {
+    result.enableRerank = options.enableRerank;
+  }
+  if (options.enableDedup !== undefined) {
+    result.enableDedup = options.enableDedup;
+  }
+  if (options.enableDiversity !== undefined) {
+    result.enableDiversity = options.enableDiversity;
+  }
+  if (options.enableExpansion !== undefined) {
+    result.enableExpansion = options.enableExpansion;
+  }
+  if (options.groupByFile !== undefined) {
+    result.groupByFile = options.groupByFile;
+  }
+  if (options.verbose !== undefined) {
+    result.verbose = options.verbose;
   }
   return result;
 }

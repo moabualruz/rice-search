@@ -39,8 +39,127 @@ export interface UploadFileOptions {
   metadata?: FileMetadata;
 }
 
+// ============================================================================
+// Search Options - All decisions made by server
+// ============================================================================
+
+/**
+ * Search options passed to the server.
+ * ricegrep is a thin client - the server makes all retrieval decisions.
+ */
+export interface SearchOptions {
+  // Basic options
+  rerank?: boolean;           // Enable neural reranking (default: true)
+  includeContent?: boolean;   // Include code content in results (default: true)
+
+  // Retrieval weights (server uses these as hints, may adjust based on query)
+  sparseWeight?: number;      // BM25 weight 0-1 (default: 0.5)
+  denseWeight?: number;       // Semantic weight 0-1 (default: 0.5)
+
+  // Post-processing (server applies these after retrieval)
+  enableDedup?: boolean;      // Semantic deduplication (default: true)
+  dedupThreshold?: number;    // Similarity threshold 0-1 (default: 0.85)
+  enableDiversity?: boolean;  // MMR diversity (default: true)
+  diversityLambda?: number;   // 0=diverse, 1=relevant (default: 0.7)
+  groupByFile?: boolean;      // Group results by file (default: false)
+  maxChunksPerFile?: number;  // Max chunks per file when grouping (default: 3)
+
+  // Query processing (server handles expansion)
+  enableExpansion?: boolean;  // Query expansion (default: true)
+}
+
+// ============================================================================
+// Search Response - Full metadata from server
+// ============================================================================
+
+/**
+ * Intelligence info returned by server (Phase 1)
+ */
+export interface IntelligenceInfo {
+  intent: "navigational" | "factual" | "exploratory" | "analytical";
+  difficulty: "easy" | "medium" | "hard";
+  strategy: "sparse-only" | "balanced" | "dense-heavy" | "deep-rerank";
+  confidence: number;
+}
+
+/**
+ * Reranking stats returned by server (Phase 1)
+ */
+export interface RerankingInfo {
+  enabled: boolean;
+  candidates: number;
+  pass1_applied: boolean;
+  pass1_latency_ms: number;
+  pass2_applied: boolean;
+  pass2_latency_ms: number;
+  early_exit: boolean;
+  early_exit_reason?: string;
+}
+
+/**
+ * PostRank stats returned by server (Phase 2)
+ */
+export interface PostrankInfo {
+  dedup: {
+    input_count: number;
+    output_count: number;
+    removed: number;
+    latency_ms: number;
+  };
+  diversity: {
+    enabled: boolean;
+    avg_diversity: number;
+    latency_ms: number;
+  };
+  aggregation: {
+    unique_files: number;
+    chunks_dropped: number;
+  };
+  total_latency_ms: number;
+}
+
+/**
+ * Aggregation info for grouped results (Phase 2)
+ */
+export interface AggregationInfo {
+  is_representative: boolean;
+  related_chunks: number;
+  file_score: number;
+  chunk_rank_in_file: number;
+}
+
+/**
+ * Individual search result
+ */
+export interface SearchResultItem {
+  doc_id: string;
+  path: string;
+  language: string;
+  start_line: number;
+  end_line: number;
+  content?: string;
+  symbols: string[];
+  final_score: number;
+  sparse_score?: number;
+  dense_score?: number;
+  sparse_rank?: number;
+  dense_rank?: number;
+  aggregation?: AggregationInfo;
+}
+
+/**
+ * Full search response from server
+ */
 export interface SearchResponse {
   data: ChunkType[];
+  // Server metadata (available in full response)
+  query?: string;
+  total?: number;
+  store?: string;
+  search_time_ms?: number;
+  intelligence?: IntelligenceInfo;
+  reranking?: RerankingInfo;
+  postrank?: PostrankInfo;
 }
 
 export interface AskResponse {
@@ -99,13 +218,14 @@ export interface Store {
   deleteFile(storeId: string, externalId: string): Promise<void>;
 
   /**
-   * Search in one or more stores
+   * Search in one or more stores.
+   * All retrieval decisions are made by the server.
    */
   search(
     storeIds: string[],
     query: string,
     top_k?: number,
-    search_options?: { rerank?: boolean },
+    search_options?: SearchOptions,
     filters?: SearchFilter,
   ): Promise<SearchResponse>;
 
@@ -126,7 +246,7 @@ export interface Store {
     storeIds: string[],
     question: string,
     top_k?: number,
-    search_options?: { rerank?: boolean },
+    search_options?: SearchOptions,
     filters?: SearchFilter,
   ): Promise<AskResponse>;
 
@@ -292,7 +412,7 @@ export class TestStore implements Store {
     _storeIds: string[],
     query: string,
     top_k?: number,
-    search_options?: { rerank?: boolean },
+    search_options?: SearchOptions,
     filters?: SearchFilter,
   ): Promise<SearchResponse> {
     const db = await this.load();
@@ -357,7 +477,7 @@ export class TestStore implements Store {
     storeIds: string[],
     question: string,
     top_k?: number,
-    search_options?: { rerank?: boolean },
+    search_options?: SearchOptions,
     filters?: SearchFilter,
   ): Promise<AskResponse> {
     const searchRes = await this.search(

@@ -102,20 +102,88 @@ Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/v1/stores/{store}/search` | Hybrid search (BM25 + semantic) |
+| POST | `/v1/stores/{store}/search` | Intelligent hybrid search (BM25 + semantic + reranking) |
 
 **Request Body:**
 ```json
 {
   "query": "search text",           // Required
   "top_k": 20,                      // Number of results (default: 20)
-  "sparse_weight": 0.5,             // BM25 weight (default: 0.5)
-  "dense_weight": 0.5,              // Semantic weight (default: 0.5)
-  "group_by_file": false,           // Group by file (default: false)
-  "include_content": true,          // Include content (default: true)
   "filters": {
     "path_prefix": "src/",          // Optional path filter
     "languages": ["typescript"]     // Optional language filter
+  },
+  "include_content": true,          // Include content (default: true)
+  
+  // Retrieval options
+  "sparse_weight": 0.5,             // BM25 weight 0-1 (default: 0.5)
+  "dense_weight": 0.5,              // Semantic weight 0-1 (default: 0.5)
+  "enable_reranking": true,         // Neural reranking (default: true)
+  "rerank_candidates": 30,          // Candidates for reranking (default: 30)
+  
+  // Post-processing options
+  "enable_dedup": true,             // Semantic deduplication (default: true)
+  "dedup_threshold": 0.85,          // Similarity threshold 0-1 (default: 0.85)
+  "enable_diversity": true,         // MMR diversity (default: true)
+  "diversity_lambda": 0.7,          // 0=diverse, 1=relevant (default: 0.7)
+  "group_by_file": false,           // Group by file (default: false)
+  "max_chunks_per_file": 3,         // Max chunks per file when grouping (default: 3)
+  
+  // Query processing
+  "enable_expansion": true          // Query expansion (default: true)
+}
+```
+
+**Response:**
+```json
+{
+  "query": "search text",
+  "results": [
+    {
+      "doc_id": "abc123",
+      "path": "src/auth.ts",
+      "language": "typescript",
+      "start_line": 10,
+      "end_line": 25,
+      "content": "...",
+      "symbols": ["authenticate", "validateToken"],
+      "final_score": 0.85,
+      "sparse_score": 12.5,
+      "dense_score": 0.82,
+      "sparse_rank": 1,
+      "dense_rank": 3,
+      "aggregation": {              // When group_by_file=true
+        "is_representative": true,
+        "related_chunks": 2,
+        "file_score": 0.9,
+        "chunk_rank_in_file": 1
+      }
+    }
+  ],
+  "total": 20,
+  "store": "default",
+  "search_time_ms": 45,
+  "intelligence": {
+    "intent": "navigational",       // navigational|factual|exploratory|analytical
+    "difficulty": "easy",           // easy|medium|hard
+    "strategy": "balanced",         // sparse-only|balanced|dense-heavy|deep-rerank
+    "confidence": 0.85
+  },
+  "reranking": {
+    "enabled": true,
+    "candidates": 30,
+    "pass1_applied": true,
+    "pass1_latency_ms": 15,
+    "pass2_applied": false,
+    "pass2_latency_ms": 0,
+    "early_exit": true,
+    "early_exit_reason": "high_confidence"
+  },
+  "postrank": {
+    "dedup": { "input_count": 30, "output_count": 25, "removed": 5, "latency_ms": 3 },
+    "diversity": { "enabled": true, "avg_diversity": 0.72, "latency_ms": 2 },
+    "aggregation": { "unique_files": 15, "chunks_dropped": 5 },
+    "total_latency_ms": 8
   }
 }
 ```
@@ -154,6 +222,16 @@ Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
   "current_paths": ["src/main.ts", "src/utils.ts"]  // Files that exist
 }
 ```
+
+### Observability
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/metrics` | Prometheus metrics endpoint |
+| GET | `/v1/observability/stats` | Aggregated telemetry stats |
+| GET | `/v1/observability/query-stats` | Query log statistics (params: store, days) |
+| GET | `/v1/observability/recent-queries` | Recent queries (params: store, limit) |
+| GET | `/v1/observability/telemetry` | Recent telemetry records (params: store, limit) |
 
 ### MCP (Model Context Protocol)
 

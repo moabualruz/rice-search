@@ -10,8 +10,12 @@ import type {
   AskResponse,
   ChunkType,
   CreateStoreOptions,
+  IntelligenceInfo,
   ListFilesOptions,
+  PostrankInfo,
+  RerankingInfo,
   SearchFilter,
+  SearchOptions,
   SearchResponse,
   Store,
   StoreFile,
@@ -41,6 +45,14 @@ interface LocalSearchResult {
   final_score: number;
   sparse_score?: number;
   dense_score?: number;
+  sparse_rank?: number;
+  dense_rank?: number;
+  aggregation?: {
+    is_representative: boolean;
+    related_chunks: number;
+    file_score: number;
+    chunk_rank_in_file: number;
+  };
 }
 
 interface LocalSearchResponse {
@@ -49,6 +61,10 @@ interface LocalSearchResponse {
   total: number;
   store: string;
   search_time_ms: number;
+  // Phase 1-5 metadata from server
+  intelligence?: IntelligenceInfo;
+  reranking?: RerankingInfo;
+  postrank?: PostrankInfo;
 }
 
 interface LocalIndexResponse {
@@ -167,7 +183,7 @@ export class LocalStore implements Store {
     storeIds: string[],
     query: string,
     top_k?: number,
-    search_options?: { rerank?: boolean },
+    search_options?: SearchOptions,
     filters?: SearchFilter
   ): Promise<SearchResponse> {
     // Use first store (local API doesn't support multi-store search yet)
@@ -184,17 +200,42 @@ export class LocalStore implements Store {
       }
     }
 
+    // Build request with all Phase 1-5 options
+    // ricegrep is a thin client - server makes all decisions
+    const requestBody: Record<string, unknown> = {
+      query,
+      top_k: top_k || 10,
+      include_content: search_options?.includeContent ?? true,
+      // Reranking (Phase 1)
+      enable_reranking: search_options?.rerank ?? true,
+      // Retrieval weights (Phase 1 - server may adjust based on query analysis)
+      sparse_weight: search_options?.sparseWeight,
+      dense_weight: search_options?.denseWeight,
+      // Post-processing (Phase 2)
+      enable_dedup: search_options?.enableDedup,
+      dedup_threshold: search_options?.dedupThreshold,
+      enable_diversity: search_options?.enableDiversity,
+      diversity_lambda: search_options?.diversityLambda,
+      group_by_file: search_options?.groupByFile,
+      max_chunks_per_file: search_options?.maxChunksPerFile,
+      // Query processing (Phase 5)
+      enable_expansion: search_options?.enableExpansion,
+      // Filters
+      filters: pathPrefix ? { path_prefix: pathPrefix } : undefined,
+    };
+
+    // Remove undefined values to use server defaults
+    for (const key of Object.keys(requestBody)) {
+      if (requestBody[key] === undefined) {
+        delete requestBody[key];
+      }
+    }
+
     const response = await this.fetch<LocalSearchResponse>(
       `/v1/stores/${storeId}/search`,
       {
         method: "POST",
-        body: JSON.stringify({
-          query,
-          top_k: top_k || 10,
-          include_content: true,
-          enable_reranking: search_options?.rerank ?? true,
-          filters: pathPrefix ? { path_prefix: pathPrefix } : undefined,
-        }),
+        body: JSON.stringify(requestBody),
       }
     );
 
@@ -214,7 +255,17 @@ export class LocalStore implements Store {
       },
     })) as unknown as ChunkType[];
 
-    return { data: chunks };
+    // Return full response including server metadata
+    return {
+      data: chunks,
+      query: response.query,
+      total: response.total,
+      store: response.store,
+      search_time_ms: response.search_time_ms,
+      intelligence: response.intelligence,
+      reranking: response.reranking,
+      postrank: response.postrank,
+    };
   }
 
   async retrieve(storeId: string): Promise<unknown> {
@@ -235,7 +286,7 @@ export class LocalStore implements Store {
     storeIds: string[],
     question: string,
     top_k?: number,
-    search_options?: { rerank?: boolean },
+    search_options?: SearchOptions,
     filters?: SearchFilter
   ): Promise<AskResponse> {
     // Local API doesn't have RAG/ask endpoint yet

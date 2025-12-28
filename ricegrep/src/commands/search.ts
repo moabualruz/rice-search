@@ -12,6 +12,7 @@ import type {
   AskResponse,
   ChunkType,
   FileMetadata,
+  SearchOptions,
   SearchResponse,
   Store,
 } from "../lib/store.js";
@@ -77,6 +78,49 @@ function formatSearchResponse(response: SearchResponse, show_content: boolean) {
   return response.data
     .map((chunk) => formatChunk(chunk, show_content))
     .join("\n");
+}
+
+/**
+ * Format intelligence and stats for verbose output
+ */
+function formatIntelligenceStats(response: SearchResponse): string {
+  const lines: string[] = [];
+
+  if (response.intelligence) {
+    const intel = response.intelligence;
+    lines.push(
+      `[Intelligence] intent=${intel.intent} difficulty=${intel.difficulty} strategy=${intel.strategy} confidence=${(intel.confidence * 100).toFixed(0)}%`,
+    );
+  }
+
+  if (response.reranking) {
+    const rr = response.reranking;
+    const earlyExit = rr.early_exit
+      ? ` (early exit: ${rr.early_exit_reason})`
+      : "";
+    lines.push(
+      `[Reranking] enabled=${rr.enabled} pass1=${rr.pass1_latency_ms}ms pass2=${rr.pass2_latency_ms}ms${earlyExit}`,
+    );
+  }
+
+  if (response.postrank) {
+    const pr = response.postrank;
+    const parts: string[] = [];
+    if (pr.dedup) {
+      parts.push(`dedup=${pr.dedup.removed} removed`);
+    }
+    if (pr.diversity) {
+      parts.push(`diversity=${(pr.diversity.avg_diversity * 100).toFixed(0)}%`);
+    }
+    if (pr.aggregation && pr.aggregation.unique_files > 0) {
+      parts.push(`files=${pr.aggregation.unique_files}`);
+    }
+    if (parts.length > 0) {
+      lines.push(`[PostRank] ${parts.join(" | ")} (${pr.total_latency_ms}ms)`);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function isWebResult(chunk: ChunkType): boolean {
@@ -208,6 +252,31 @@ export const search: Command = new CommanderCommand("search")
     parseBooleanEnv(process.env.RICEGREP_RERANK, true), // `true` here means that reranking is enabled by default
   )
   .option(
+    "--no-dedup",
+    "Disable semantic deduplication of results",
+    parseBooleanEnv(process.env.RICEGREP_DEDUP, true),
+  )
+  .option(
+    "--no-diversity",
+    "Disable MMR diversity in results",
+    parseBooleanEnv(process.env.RICEGREP_DIVERSITY, true),
+  )
+  .option(
+    "--no-expansion",
+    "Disable query expansion",
+    parseBooleanEnv(process.env.RICEGREP_EXPANSION, true),
+  )
+  .option(
+    "--group-by-file",
+    "Group results by file",
+    parseBooleanEnv(process.env.RICEGREP_GROUP_BY_FILE, false),
+  )
+  .option(
+    "-v, --verbose",
+    "Show detailed search stats (intelligence, timing, dedup)",
+    parseBooleanEnv(process.env.RICEGREP_VERBOSE, false),
+  )
+  .option(
     "--max-file-size <bytes>",
     "Maximum file size in bytes to upload",
     (value) => {
@@ -247,6 +316,11 @@ export const search: Command = new CommanderCommand("search")
       sync: boolean;
       dryRun: boolean;
       rerank: boolean;
+      dedup: boolean;
+      diversity: boolean;
+      expansion: boolean;
+      groupByFile: boolean;
+      verbose: boolean;
       maxFileSize?: number;
       maxFileCount?: number;
       web: boolean;
@@ -306,28 +380,58 @@ export const search: Command = new CommanderCommand("search")
         ],
       };
 
+      // Build SearchOptions from CLI flags
+      // ricegrep is a thin client - server makes all retrieval decisions
+      const searchOptions: SearchOptions = {
+        rerank: options.rerank,
+        enableDedup: options.dedup,
+        enableDiversity: options.diversity,
+        enableExpansion: options.expansion,
+        groupByFile: options.groupByFile,
+        includeContent: true,
+      };
+
       let response: string;
+      let results: SearchResponse;
+
       if (!options.answer) {
-        const results = await store.search(
+        results = await store.search(
           storeIds,
           pattern,
           parseInt(options.maxCount, 10),
-          { rerank: options.rerank },
+          searchOptions,
           filters,
         );
         response = formatSearchResponse(results, options.content);
       } else {
-        const results = await store.ask(
+        const askResults = await store.ask(
           storeIds,
           pattern,
           parseInt(options.maxCount, 10),
-          { rerank: options.rerank },
+          searchOptions,
           filters,
         );
-        response = formatAskResponse(results, options.content);
+        response = formatAskResponse(askResults, options.content);
+        results = { data: askResults.sources };
+      }
+
+      // Show verbose stats if requested
+      if (options.verbose && results.intelligence) {
+        console.log(formatIntelligenceStats(results));
+        console.log("");
       }
 
       console.log(response);
+
+      // Show summary line with timing
+      if (results.search_time_ms !== undefined) {
+        const dedupInfo = results.postrank?.dedup
+          ? ` (${results.postrank.dedup.removed} duplicates removed)`
+          : "";
+        console.log(
+          `\n${results.total ?? results.data.length} results in ${results.search_time_ms}ms${dedupInfo}`,
+        );
+      }
     } catch (error) {
       if (error instanceof QuotaExceededError) {
         console.error(
