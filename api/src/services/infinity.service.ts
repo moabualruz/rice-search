@@ -94,6 +94,13 @@ class LRUCache<K, V> {
  * - POST /embeddings with { model, input }
  * - POST /rerank with { model, query, documents, top_n }
  */
+/**
+ * InfinityService - Low-level HTTP client for Infinity server.
+ * 
+ * No retry logic here - callers handle retries:
+ * - Indexing: EmbeddingQueueService (BullMQ) re-queues failed jobs
+ * - Search/Rerank: Fails fast, caller decides on fallback
+ */
 @Injectable()
 export class InfinityService implements OnModuleInit {
   private readonly logger = new Logger(InfinityService.name);
@@ -265,45 +272,41 @@ export class InfinityService implements OnModuleInit {
       return results as number[][];
     }
 
-    try {
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.embedModel,
-          input: uncachedTexts,
-        }),
-        signal: AbortSignal.timeout(this.timeout),
-        // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
-        dispatcher: this.agent,
-      });
+    // No retry here - caller handles retry (queue re-queues on failure)
+    const response = await fetch(`${this.baseUrl}/embeddings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.embedModel,
+        input: uncachedTexts,
+      }),
+      signal: AbortSignal.timeout(this.timeout),
+      // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
+      dispatcher: this.agent,
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Embed request failed (${response.status}): ${errorText}`);
-      }
-
-      const data = await response.json() as { 
-        data: Array<{ embedding: number[] }>;
-      };
-
-      const embeddings = data.data.map((item) => item.embedding);
-
-      // Cache new embeddings and merge results
-      for (let i = 0; i < uncachedIndices.length; i++) {
-        const idx = uncachedIndices[i];
-        const embedding = embeddings[i];
-        results[idx] = embedding;
-        this.cacheEmbedding(texts[idx], embedding);
-      }
-
-      return results as number[][];
-    } catch (error) {
-      this.logger.error(`Embedding request failed: ${error}`);
-      throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Embedding request failed (${response.status}): ${errorText}`);
     }
+
+    const data = await response.json() as { 
+      data: Array<{ embedding: number[] }>;
+    };
+
+    const embeddings = data.data.map((item) => item.embedding);
+
+    // Cache new embeddings and merge results
+    for (let i = 0; i < uncachedIndices.length; i++) {
+      const idx = uncachedIndices[i];
+      const embedding = embeddings[i];
+      results[idx] = embedding;
+      this.cacheEmbedding(texts[idx], embedding);
+    }
+
+    return results as number[][];
   }
 
   /**
@@ -342,36 +345,7 @@ export class InfinityService implements OnModuleInit {
     return results.flat();
   }
 
-  /**
-   * Embed with retry logic for transient failures
-   * @param texts Array of texts to embed
-   * @param maxRetries Maximum number of retry attempts (default: 3)
-   * @param retryDelay Initial retry delay in ms (default: 1000)
-   * @returns 2D array of embeddings
-   */
-  async embedWithRetry(
-    texts: string[],
-    maxRetries = 3,
-    retryDelay = 1000,
-  ): Promise<number[][]> {
-    let lastError: Error | null = null;
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        return await this.embed(texts);
-      } catch (error) {
-        lastError = error as Error;
-        this.logger.warn(`Embed attempt ${attempt + 1} failed: ${error}`);
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, retryDelay * (attempt + 1)),
-          );
-        }
-      }
-    }
-
-    throw lastError;
-  }
 
   /**
    * Rerank documents using Infinity's reranking model
@@ -396,85 +370,70 @@ export class InfinityService implements OnModuleInit {
       return cached.slice(0, topN);
     }
 
-    try {
-      const response = await fetch(`${this.baseUrl}/rerank`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.rerankModel,
-          query,
-          documents: documents.map((d) => d.content),
-          top_n: topN,
-          return_documents: false,
-        }),
-        signal: AbortSignal.timeout(this.timeout),
-        // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
-        dispatcher: this.agent,
-      });
+    // No retry here - caller handles retry or fallback
+    const response = await fetch(`${this.baseUrl}/rerank`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.rerankModel,
+        query,
+        documents: documents.map((d) => d.content),
+        top_n: topN,
+        return_documents: false,
+      }),
+      signal: AbortSignal.timeout(this.timeout),
+      // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
+      dispatcher: this.agent,
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Rerank request failed (${response.status}): ${errorText}`);
-      }
-
-      const data = await response.json() as {
-        results: Array<{ index: number; relevance_score: number }>;
-      };
-
-      // Map results back to doc_ids
-      const results: RerankResult[] = data.results.map((item) => ({
-        doc_id: documents[item.index].doc_id,
-        score: item.relevance_score,
-        index: item.index,
-      }));
-
-      // Cache results
-      this.cacheRerank(query, docIds, results);
-
-      return results;
-    } catch (error) {
-      this.logger.error(`Rerank request failed: ${error}`);
-      throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Rerank request failed (${response.status}): ${errorText}`);
     }
+
+    const data = await response.json() as {
+      results: Array<{ index: number; relevance_score: number }>;
+    };
+
+    // Map results back to doc_ids
+    const results = data.results.map((item) => ({
+      doc_id: documents[item.index].doc_id,
+      score: item.relevance_score,
+      index: item.index,
+    }));
+
+    // Cache results
+    this.cacheRerank(query, docIds, results);
+
+    return results;
   }
 
   /**
-   * Rerank with retry logic and fallback
+   * Rerank with graceful fallback on failure.
+   * No retry loop - fails fast and returns original order as fallback.
    * @param query Search query
    * @param documents Array of documents
    * @param topN Number of top results
-   * @param maxRetries Maximum retry attempts
    * @returns Reranked results, or original order on failure
    */
-  async rerankWithRetry(
+  async rerankWithFallback(
     query: string,
     documents: RerankDocument[],
     topN: number,
-    maxRetries = 2,
   ): Promise<RerankResult[]> {
-    let lastError: Error | null = null;
-
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        return await this.rerank(query, documents, topN);
-      } catch (error) {
-        lastError = error as Error;
-        this.logger.warn(`Rerank attempt ${attempt + 1} failed: ${error}`);
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 500 * (attempt + 1)));
-        }
-      }
+    try {
+      return await this.rerank(query, documents, topN);
+    } catch (error) {
+      // Fallback: return documents in original order
+      this.logger.warn(`Rerank failed, returning original order: ${(error as Error).message}`);
+      return documents.slice(0, topN).map((doc, index) => ({
+        doc_id: doc.doc_id,
+        score: 1.0 - (index * 0.01), // Decreasing scores
+        index,
+      }));
     }
-
-    // Fallback: return documents in original order
-    this.logger.warn(`Rerank failed after ${maxRetries} attempts, returning original order`);
-    return documents.slice(0, topN).map((doc, index) => ({
-      doc_id: doc.doc_id,
-      score: 1.0 - (index * 0.01), // Decreasing scores
-      index,
-    }));
   }
 
   /**

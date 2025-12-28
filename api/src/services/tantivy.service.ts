@@ -123,7 +123,7 @@ export class TantivyService {
       );
       return result;
     } catch (error) {
-      this.logger.error(`Indexing failed: ${error}`);
+      // Don't log here - BullMQ queue handles retry logging
       throw error;
     }
   }
@@ -220,7 +220,7 @@ export class TantivyService {
       const result = JSON.parse(output);
       return result.deleted;
     } catch (error) {
-      this.logger.error(`Delete failed: ${error}`);
+      // Don't log here - BullMQ queue handles retry logging
       throw error;
     }
   }

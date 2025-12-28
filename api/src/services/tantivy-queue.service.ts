@@ -59,6 +59,9 @@ export class TantivyQueueService implements OnModuleDestroy {
   
   // Job timeout in ms (5 minutes default - indexing can be slow)
   private readonly jobTimeout: number;
+  
+  // Retry delay before re-queuing failed jobs
+  private readonly RETRY_DELAY_MS = 2000;
 
   constructor(
     private configService: ConfigService,
@@ -101,7 +104,7 @@ export class TantivyQueueService implements OnModuleDestroy {
         connection: this.redisConfig,
         defaultJobOptions: {
           removeOnComplete: 100,
-          removeOnFail: 50,
+          removeOnFail: false, // Keep failed jobs for re-queue
         },
       });
       this.queues.set(store, queue);
@@ -119,12 +122,24 @@ export class TantivyQueueService implements OnModuleDestroy {
           },
         );
 
-        worker.on('failed', (job, err) => {
-          this.logger.error(`Job ${job?.id} failed for store ${store}: ${err.message}`);
+        worker.on('failed', async (job, err) => {
+          if (!job) return;
+          
+          this.logger.warn(
+            `Tantivy job ${job.id} failed for store ${store}: ${err.message}. Re-queuing...`,
+          );
+          
+          // Re-queue with retry loop to ensure job is not lost
+          this.requeueJob(queue, job.name, job.data, store);
         });
 
         worker.on('completed', (job) => {
-          this.logger.debug(`Job ${job.id} completed for store ${store}`);
+          const data = job.data;
+          if (data.type === 'index') {
+            this.logger.log(`Tantivy job ${job.id} completed: ${data.documents.length} docs indexed to store ${store}`);
+          } else {
+            this.logger.debug(`Tantivy job ${job.id} completed for store ${store}`);
+          }
         });
 
         this.workers.set(store, worker);
@@ -149,7 +164,8 @@ export class TantivyQueueService implements OnModuleDestroy {
   }
 
   /**
-   * Process a Tantivy job (called by worker)
+   * Process a Tantivy job (called by worker) - completes full index/delete cycle.
+   * Only returns success after the operation fully completes.
    */
   private async processJob(job: Job<TantivyJob>): Promise<TantivyJobResult> {
     const { data } = job;
@@ -166,6 +182,37 @@ export class TantivyQueueService implements OnModuleDestroy {
     }
 
     throw new Error(`Unknown job type: ${(data as TantivyJob).type}`);
+  }
+
+  /**
+   * Re-queue a failed job with retry logic.
+   * Keeps trying to re-queue until successful - jobs are never lost.
+   */
+  private requeueJob(
+    queue: Queue<TantivyJob>,
+    jobName: string,
+    jobData: TantivyJob,
+    store: string,
+    requeueAttempt = 1,
+  ): void {
+    const delay = requeueAttempt === 1 
+      ? this.RETRY_DELAY_MS 
+      : Math.min(this.RETRY_DELAY_MS * Math.pow(2, requeueAttempt - 1), 30000);
+
+    setTimeout(async () => {
+      try {
+        await queue.add(jobName, jobData, {
+          priority: 10, // Lower priority for retries
+        });
+        this.logger.debug(`Re-queued Tantivy job for store ${store}`);
+      } catch (requeueError) {
+        // If re-queue fails, keep trying with exponential backoff
+        this.logger.warn(
+          `Failed to re-queue Tantivy job for store ${store} (attempt ${requeueAttempt}): ${requeueError}. Retrying...`,
+        );
+        this.requeueJob(queue, jobName, jobData, store, requeueAttempt + 1);
+      }
+    }, delay);
   }
 
   /**

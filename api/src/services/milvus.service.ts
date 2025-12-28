@@ -17,17 +17,19 @@ export interface MilvusSearchResult {
   dense_rank: number;
 }
 
+/**
+ * MilvusService - Low-level client for Milvus vector database.
+ * 
+ * No retry logic here - callers handle retries:
+ * - Indexing: EmbeddingQueueService (BullMQ) re-queues failed jobs
+ * - Search: Fails fast, caller can fallback to BM25-only results
+ */
 @Injectable()
 export class MilvusService implements OnModuleInit {
   private readonly logger = new Logger(MilvusService.name);
   private client: MilvusClient;
   private readonly COLLECTION_PREFIX = 'lcs_';
   private dim: number;
-
-  // Retry configuration
-  private readonly MAX_RETRIES = 3;
-  private readonly OPERATION_TIMEOUT_MS = 10000; // 10 seconds per attempt
-  private readonly RETRY_BASE_DELAY_MS = 500; // Exponential backoff base
 
   // Cache collection existence to avoid repeated checks
   private readonly collectionCache = new Map<string, boolean>();
@@ -41,58 +43,11 @@ export class MilvusService implements OnModuleInit {
 
     this.client = new MilvusClient({
       address: `${host}:${port}`,
-      // Connection pool settings for high concurrency
-      maxRetries: 3,
-      retryDelay: 100,
-      timeout: this.OPERATION_TIMEOUT_MS,
+      // MilvusClient has built-in retry
+      maxRetries: 5,
+      retryDelay: 200,
+      timeout: 30000,
     });
-  }
-
-  /**
-   * Execute a Milvus operation with retry logic and timeout
-   * Retries up to MAX_RETRIES times with exponential backoff
-   */
-  private async withRetry<T>(
-    operation: () => Promise<T>,
-    operationName: string,
-  ): Promise<T> {
-    let lastError: Error | null = null;
-
-    for (let attempt = 1; attempt <= this.MAX_RETRIES; attempt++) {
-      try {
-        // Create a timeout promise
-        const timeoutPromise = new Promise<never>((_, reject) => {
-          setTimeout(() => {
-            reject(new Error(`${operationName} timed out after ${this.OPERATION_TIMEOUT_MS}ms`));
-          }, this.OPERATION_TIMEOUT_MS);
-        });
-
-        // Race the operation against the timeout
-        const result = await Promise.race([operation(), timeoutPromise]);
-        return result;
-      } catch (error) {
-        lastError = error as Error;
-        const isLastAttempt = attempt === this.MAX_RETRIES;
-
-        if (isLastAttempt) {
-          this.logger.error(
-            `${operationName} failed after ${this.MAX_RETRIES} attempts: ${lastError.message}`,
-          );
-        } else {
-          const delay = this.RETRY_BASE_DELAY_MS * Math.pow(2, attempt - 1);
-          this.logger.warn(
-            `${operationName} attempt ${attempt}/${this.MAX_RETRIES} failed: ${lastError.message}. Retrying in ${delay}ms...`,
-          );
-          await this.sleep(delay);
-        }
-      }
-    }
-
-    throw lastError;
-  }
-
-  private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async onModuleInit() {
@@ -267,23 +222,21 @@ export class MilvusService implements OnModuleInit {
   async getCollectionStats(
     store: string,
   ): Promise<{ exists: boolean; count: number }> {
-    return this.withRetry(async () => {
-      const name = this.collectionName(store);
-      const exists = await this.client.hasCollection({ collection_name: name });
+    const name = this.collectionName(store);
+    const exists = await this.client.hasCollection({ collection_name: name });
 
-      if (!exists.value) {
-        return { exists: false, count: 0 };
-      }
+    if (!exists.value) {
+      return { exists: false, count: 0 };
+    }
 
-      const stats = await this.client.getCollectionStatistics({
-        collection_name: name,
-      });
+    const stats = await this.client.getCollectionStatistics({
+      collection_name: name,
+    });
 
-      return {
-        exists: true,
-        count: parseInt(stats.data.row_count || '0', 10),
-      };
-    }, `Milvus getCollectionStats (${store})`);
+    return {
+      exists: true,
+      count: parseInt(stats.data.row_count || '0', 10),
+    };
   }
 
   async upsert(
@@ -298,46 +251,44 @@ export class MilvusService implements OnModuleInit {
       end_lines: number[];
     },
   ): Promise<number> {
-    return this.withRetry(async () => {
-      const name = this.collectionName(store);
+    const name = this.collectionName(store);
 
-      // Ensure collection exists
-      const exists = await this.collectionExists(store);
-      if (!exists) {
-        await this.createCollection(store);
+    // Ensure collection exists
+    const exists = await this.collectionExists(store);
+    if (!exists) {
+      await this.createCollection(store);
+    }
+
+    // Prepare insert data
+    const insertData = data.doc_ids.map((doc_id, i) => ({
+      doc_id,
+      embedding: data.embeddings[i],
+      path: data.paths[i],
+      language: data.languages[i],
+      chunk_id: data.chunk_ids[i],
+      start_line: data.start_lines[i],
+      end_line: data.end_lines[i],
+    }));
+
+    // Delete existing docs with same IDs (upsert)
+    if (data.doc_ids.length > 0) {
+      const expr = `doc_id in [${data.doc_ids.map((id) => `"${id}"`).join(',')}]`;
+      try {
+        await this.client.delete({ collection_name: name, filter: expr });
+      } catch {
+        // Ignore delete errors (documents might not exist)
       }
+    }
 
-      // Prepare insert data
-      const insertData = data.doc_ids.map((doc_id, i) => ({
-        doc_id,
-        embedding: data.embeddings[i],
-        path: data.paths[i],
-        language: data.languages[i],
-        chunk_id: data.chunk_ids[i],
-        start_line: data.start_lines[i],
-        end_line: data.end_lines[i],
-      }));
+    // Insert
+    const result = await this.client.insert({
+      collection_name: name,
+      data: insertData,
+    });
 
-      // Delete existing docs with same IDs (upsert)
-      if (data.doc_ids.length > 0) {
-        const expr = `doc_id in [${data.doc_ids.map((id) => `"${id}"`).join(',')}]`;
-        try {
-          await this.client.delete({ collection_name: name, filter: expr });
-        } catch {
-          // Ignore delete errors (documents might not exist)
-        }
-      }
-
-      // Insert
-      const result = await this.client.insert({
-        collection_name: name,
-        data: insertData,
-      });
-
-      return typeof result.insert_cnt === 'string'
-        ? parseInt(result.insert_cnt, 10)
-        : result.insert_cnt;
-    }, `Milvus upsert (${data.doc_ids.length} docs)`);
+    return typeof result.insert_cnt === 'string'
+      ? parseInt(result.insert_cnt, 10)
+      : result.insert_cnt;
   }
 
   async deleteByDocIds(store: string, docIds: string[]): Promise<number> {
@@ -347,18 +298,16 @@ export class MilvusService implements OnModuleInit {
       return 0;
     }
 
-    return this.withRetry(async () => {
-      const name = this.collectionName(store);
-      const expr = `doc_id in [${docIds.map((id) => `"${id}"`).join(',')}]`;
-      const result = await this.client.delete({
-        collection_name: name,
-        filter: expr,
-      });
+    const name = this.collectionName(store);
+    const expr = `doc_id in [${docIds.map((id) => `"${id}"`).join(',')}]`;
+    const result = await this.client.delete({
+      collection_name: name,
+      filter: expr,
+    });
 
-      return typeof result.delete_cnt === 'string'
-        ? parseInt(result.delete_cnt, 10)
-        : result.delete_cnt;
-    }, `Milvus deleteByDocIds (${docIds.length} docs)`);
+    return typeof result.delete_cnt === 'string'
+      ? parseInt(result.delete_cnt, 10)
+      : result.delete_cnt;
   }
 
   async deleteByPathPrefix(store: string, pathPrefix: string): Promise<number> {
@@ -368,17 +317,15 @@ export class MilvusService implements OnModuleInit {
       return 0;
     }
 
-    return this.withRetry(async () => {
-      const name = this.collectionName(store);
-      const expr = `path like "${pathPrefix}%"`;
-      const result = await this.client.delete({
-        collection_name: name,
-        filter: expr,
-      });
-      return typeof result.delete_cnt === 'string'
-        ? parseInt(result.delete_cnt, 10)
-        : result.delete_cnt;
-    }, `Milvus deleteByPathPrefix (${pathPrefix})`);
+    const name = this.collectionName(store);
+    const expr = `path like "${pathPrefix}%"`;
+    const result = await this.client.delete({
+      collection_name: name,
+      filter: expr,
+    });
+    return typeof result.delete_cnt === 'string'
+      ? parseInt(result.delete_cnt, 10)
+      : result.delete_cnt;
   }
 
   async search(
@@ -402,49 +349,47 @@ export class MilvusService implements OnModuleInit {
       }
     }
 
-    return this.withRetry(async () => {
-      const name = this.collectionName(store);
+    const name = this.collectionName(store);
 
-      // Build filter expression
-      const filters: string[] = [];
-      if (pathPrefix) {
-        filters.push(`path like "%${pathPrefix}%"`);
-      }
-      if (languages && languages.length > 0) {
-        const langList = languages.map((l) => `"${l}"`).join(',');
-        filters.push(`language in [${langList}]`);
-      }
+    // Build filter expression
+    const filters: string[] = [];
+    if (pathPrefix) {
+      filters.push(`path like "%${pathPrefix}%"`);
+    }
+    if (languages && languages.length > 0) {
+      const langList = languages.map((l) => `"${l}"`).join(',');
+      filters.push(`language in [${langList}]`);
+    }
 
-      const expr = filters.length > 0 ? filters.join(' and ') : undefined;
+    const expr = filters.length > 0 ? filters.join(' and ') : undefined;
 
-      // Search
-      const result = await this.client.search({
-        collection_name: name,
-        data: [queryEmbedding],
-        limit: topK,
-        filter: expr,
-        output_fields: [
-          'doc_id',
-          'path',
-          'language',
-          'chunk_id',
-          'start_line',
-          'end_line',
-        ],
-        params: { ef: Math.max(64, topK * 2) },
-      });
+    // Search
+    const result = await this.client.search({
+      collection_name: name,
+      data: [queryEmbedding],
+      limit: topK,
+      filter: expr,
+      output_fields: [
+        'doc_id',
+        'path',
+        'language',
+        'chunk_id',
+        'start_line',
+        'end_line',
+      ],
+      params: { ef: Math.max(64, topK * 2) },
+    });
 
-      // Format results
-      return result.results.map((hit, index) => ({
-        doc_id: hit.doc_id as string,
-        path: hit.path as string,
-        language: hit.language as string,
-        chunk_id: hit.chunk_id as number,
-        start_line: hit.start_line as number,
-        end_line: hit.end_line as number,
-        dense_score: hit.score,
-        dense_rank: index + 1,
-      }));
-    }, `Milvus search (topK=${topK})`);
+    // Format results
+    return result.results.map((hit, index) => ({
+      doc_id: hit.doc_id as string,
+      path: hit.path as string,
+      language: hit.language as string,
+      chunk_id: hit.chunk_id as number,
+      start_line: hit.start_line as number,
+      end_line: hit.end_line as number,
+      dense_score: hit.score,
+      dense_rank: index + 1,
+    }));
   }
 }

@@ -72,6 +72,13 @@ class LRUCache<K, V> {
   }
 }
 
+/**
+ * EmbeddingsService - Low-level HTTP client for embeddings.
+ * 
+ * No retry logic here - callers handle retries:
+ * - Indexing: EmbeddingQueueService (BullMQ) re-queues failed jobs
+ * - Search: Fails fast, returns partial results
+ */
 @Injectable()
 export class EmbeddingsService implements OnModuleInit {
   private readonly logger = new Logger(EmbeddingsService.name);
@@ -197,43 +204,39 @@ export class EmbeddingsService implements OnModuleInit {
       return results as number[][];
     }
 
-    try {
-      // Use OpenAI-compatible /embeddings endpoint (Infinity format)
-      const response = await fetch(`${this.baseUrl}/embeddings`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: this.model,
-          input: uncachedTexts,
-        }),
-        signal: AbortSignal.timeout(this.timeout),
-        // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
-        dispatcher: this.agent,
-      });
+    // Use OpenAI-compatible /embeddings endpoint (Infinity format)
+    // No retry here - caller handles retry (queue re-queues on failure)
+    const response = await fetch(`${this.baseUrl}/embeddings`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: this.model,
+        input: uncachedTexts,
+      }),
+      signal: AbortSignal.timeout(this.timeout),
+      // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
+      dispatcher: this.agent,
+    });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Embed request failed (${response.status}): ${errorText}`);
-      }
-
-      const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
-      const embeddings = data.data.map((item) => item.embedding);
-
-      // Cache new embeddings and merge results
-      for (let i = 0; i < uncachedIndices.length; i++) {
-        const idx = uncachedIndices[i];
-        const embedding = embeddings[i];
-        results[idx] = embedding;
-        this.cacheEmbedding(texts[idx], embedding);
-      }
-
-      return results as number[][];
-    } catch (error) {
-      this.logger.error(`Embedding request failed: ${error}`);
-      throw error;
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Embedding request failed (${response.status}): ${errorText}`);
     }
+
+    const data = (await response.json()) as { data: Array<{ embedding: number[] }> };
+    const embeddings = data.data.map((item) => item.embedding);
+
+    // Cache new embeddings and merge results
+    for (let i = 0; i < uncachedIndices.length; i++) {
+      const idx = uncachedIndices[i];
+      const embedding = embeddings[i];
+      results[idx] = embedding;
+      this.cacheEmbedding(texts[idx], embedding);
+    }
+
+    return results as number[][];
   }
 
   /**
@@ -270,32 +273,7 @@ export class EmbeddingsService implements OnModuleInit {
     return results.flat();
   }
 
-  /**
-   * Embed with retry logic for transient failures
-   */
-  async embedWithRetry(
-    texts: string[],
-    maxRetries = 3,
-    retryDelay = 1000,
-  ): Promise<number[][]> {
-    let lastError: Error | null = null;
 
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        return await this.embed(texts);
-      } catch (error) {
-        lastError = error as Error;
-        this.logger.warn(`Embed attempt ${attempt + 1} failed: ${error}`);
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) =>
-            setTimeout(resolve, retryDelay * (attempt + 1)),
-          );
-        }
-      }
-    }
-
-    throw lastError;
-  }
 
   getDimension(): number {
     return this.dim;

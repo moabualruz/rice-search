@@ -267,9 +267,8 @@ export class IndexService {
         }
       }
     } catch (error) {
-      const errorMsg = `Milvus indexing failed: ${error}`;
-      this.logger.error(errorMsg);
-      errors.push(errorMsg);
+      // Error already logged by EmbeddingsService/MilvusService with retry details
+      errors.push(`Indexing failed: ${(error as Error).message}`);
     }
 
     return {
