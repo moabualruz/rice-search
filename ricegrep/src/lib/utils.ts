@@ -104,17 +104,6 @@ export async function computeBufferHash(buffer: Buffer): Promise<string> {
 }
 
 /**
- * Computes a hash of the file using xxhash64.
- */
-export async function computeFileHash(
-  filePath: string,
-  readFileSyncFn: (p: string) => Buffer,
-): Promise<string> {
-  const buffer = readFileSyncFn(filePath);
-  return computeBufferHash(buffer);
-}
-
-/**
  * Checks if a stored hash matches the computed hash of a buffer.
  * Supports both old SHA-256 hashes (no prefix) and new xxhash64 hashes (xxh64: prefix).
  */
@@ -128,14 +117,6 @@ export async function hashesMatch(
   }
   const computedSha256 = computeSha256Hash(buffer);
   return storedHash === computedSha256;
-}
-
-export function isDevelopment(): boolean {
-  if (process.env.NODE_ENV === "development" || isTest) {
-    return true;
-  }
-
-  return false;
 }
 
 /**
@@ -161,11 +142,6 @@ export async function listStoreFileHashes(
     byExternalId.set(externalId, hash);
   }
   return byExternalId;
-}
-
-export async function ensureAuthenticated(): Promise<void> {
-  // Rice Search is always local - no authentication needed
-  return;
 }
 
 export async function deleteFile(

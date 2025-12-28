@@ -4,15 +4,8 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { program } from "commander";
 import { search } from "./commands/search.js";
-import { watch } from "./commands/watch.js";
-import { watchMcp } from "./commands/watch_mcp.js";
-import {
-  installClaudeCode,
-  uninstallClaudeCode,
-} from "./install/claude-code.js";
-import { installCodex, uninstallCodex } from "./install/codex.js";
-import { installDroid, uninstallDroid } from "./install/droid.js";
-import { installOpencode, uninstallOpencode } from "./install/opencode.js";
+import { watchWs as watch } from "./commands/watch-ws.js";
+import { mcpCommand as mcp } from "./commands/mcp.js";
 import { setupLogger } from "./lib/logger.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -36,14 +29,6 @@ program
 
 program.addCommand(search, { isDefault: true });
 program.addCommand(watch);
-program.addCommand(installClaudeCode);
-program.addCommand(uninstallClaudeCode);
-program.addCommand(installCodex);
-program.addCommand(uninstallCodex);
-program.addCommand(installDroid);
-program.addCommand(uninstallDroid);
-program.addCommand(installOpencode);
-program.addCommand(uninstallOpencode);
-program.addCommand(watchMcp);
+program.addCommand(mcp);
 
 program.parse();

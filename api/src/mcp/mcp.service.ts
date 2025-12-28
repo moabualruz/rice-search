@@ -242,14 +242,14 @@ export class McpService {
 
   private async handleIndexFiles(
     input: IndexFilesInput,
-  ): Promise<{ content: { indexed: number; errors?: string[] } }> {
+  ): Promise<{ content: { queued: number; job_id: string; errors?: string[] } }> {
     const store = input.store || 'default';
     const result = await this.indexService.indexFiles(store, input.files, false, false);
-    const indexed = 'chunks_indexed' in result ? result.chunks_indexed : result.chunks_queued;
 
     return {
       content: {
-        indexed,
+        queued: result.chunks_queued,
+        job_id: result.job_id,
         errors: result.errors,
       },
     };

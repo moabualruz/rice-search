@@ -8,6 +8,7 @@ import { StoresModule } from './stores/stores.module';
 import { SearchModule } from './search/search.module';
 import { IndexModule } from './index/index.module';
 import { McpModule } from './mcp/mcp.module';
+import { WsModule } from './ws/ws.module';
 import { ServicesModule } from './services/services.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
 import { RankingModule } from './ranking/ranking.module';
@@ -55,6 +56,7 @@ import { SparseModule } from './sparse/sparse.module';
     SearchModule,
     IndexModule,
     McpModule,
+    WsModule,
   ],
 })
 export class AppModule {}

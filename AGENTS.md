@@ -271,3 +271,103 @@ Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
 | GET | `/mcp/tools` | List available MCP tools |
 | POST | `/mcp` | Handle MCP JSON-RPC request |
 | POST | `/mcp/tools/call` | Call MCP tool directly |
+
+### WebSocket API
+
+**Endpoint:** `ws://localhost:8080/v1/ws?store={store}` (Docker) or `ws://localhost:8088/v1/ws?store={store}` (Local Dev)
+
+Non-blocking WebSocket communication for ricegrep watch mode. All handlers are fire-and-forget with push notifications.
+
+**Connection Flow:**
+```
+Client connects → Server sends: { type: "ack", conn_id: "abc123", store: "default" }
+```
+
+**Client → Server Messages:**
+
+| Type | Description | Response |
+|------|-------------|----------|
+| `file` | Index a file (fire-and-forget) | None (batched, see `indexed` below) |
+| `search` | Search query | `results` message with `req_id` |
+| `delete` | Delete files | `deleted` message with `req_id` |
+| `stats` | Get store stats | `stats_result` message with `req_id` |
+| `ping` | Keep-alive | `pong` message |
+
+**File Message (fire-and-forget):**
+```json
+{ "type": "file", "path": "src/main.ts", "content": "..." }
+```
+Server batches files (100 files OR 3s timeout) then pushes `indexed` notification.
+
+**Search Message:**
+```json
+{
+  "type": "search",
+  "req_id": "r1",
+  "query": "auth handler",
+  "top_k": 20,
+  "filters": { "path_prefix": "src/" },
+  "include_content": true,
+  "enable_reranking": true
+}
+```
+
+**Server → Client Messages:**
+
+| Type | Description |
+|------|-------------|
+| `ack` | Connection established with `conn_id` |
+| `indexed` | Batch indexing complete |
+| `results` | Search results (matches `req_id`) |
+| `deleted` | Delete complete (matches `req_id`) |
+| `stats_result` | Store stats (matches `req_id`) |
+| `pong` | Ping response |
+| `error` | Error with optional `req_id` |
+
+**Indexed Notification (pushed after batch):**
+```json
+{
+  "type": "indexed",
+  "chunks_queued": 150,
+  "files_count": 25,
+  "batch_id": "batch_1735347600_abc123"
+}
+```
+
+**Search Results:**
+```json
+{
+  "type": "results",
+  "req_id": "r1",
+  "query": "auth handler",
+  "results": [
+    {
+      "doc_id": "abc123",
+      "path": "src/auth.ts",
+      "language": "typescript",
+      "start_line": 10,
+      "end_line": 25,
+      "content": "...",
+      "symbols": ["authenticate"],
+      "final_score": 0.85
+    }
+  ],
+  "total": 5,
+  "search_time_ms": 45
+}
+```
+
+**Error Message:**
+```json
+{
+  "type": "error",
+  "req_id": "r1",
+  "code": "SEARCH_ERROR",
+  "message": "Store not found"
+}
+```
+
+**Batching Behavior:**
+- Files are buffered per-connection
+- Flush triggers: 100 files accumulated OR 3 seconds since first file in batch
+- Each client gets isolated buffer and notifications

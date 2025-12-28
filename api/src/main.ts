@@ -5,6 +5,7 @@ import {
   FastifyAdapter,
   NestFastifyApplication,
 } from '@nestjs/platform-fastify';
+import { WsAdapter } from '@nestjs/platform-ws';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
@@ -67,6 +68,9 @@ async function bootstrapWorker() {
     credentials: true,
     maxAge: 86400, // Cache preflight for 24 hours
   });
+
+  // WebSocket adapter for non-blocking communication
+  app.useWebSocketAdapter(new WsAdapter(app));
 
   // Swagger - only in development
   if (isDev) {

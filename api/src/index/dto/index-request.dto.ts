@@ -33,8 +33,9 @@ export class IndexFilesRequestDto {
   force?: boolean;
 
   @ApiPropertyOptional({
-    description: 'Async mode: return immediately, process embeddings in background',
-    default: false,
+    description: 'Deprecated: Always async now. Kept for API compatibility.',
+    default: true,
+    deprecated: true,
   })
   @IsOptional()
   @IsBoolean()
@@ -52,23 +53,6 @@ export class DeleteFilesRequestDto {
   @IsOptional()
   @IsString()
   path_prefix?: string;
-}
-
-export class IndexResponseDto {
-  @ApiProperty({ description: 'Number of files processed' })
-  files_processed: number;
-
-  @ApiProperty({ description: 'Number of chunks indexed' })
-  chunks_indexed: number;
-
-  @ApiProperty({ description: 'Processing time in milliseconds' })
-  time_ms: number;
-
-  @ApiPropertyOptional({ description: 'Number of unchanged files skipped (incremental indexing)' })
-  skipped_unchanged?: number;
-
-  @ApiPropertyOptional({ description: 'Errors encountered' })
-  errors?: string[];
 }
 
 export class AsyncIndexResponseDto {

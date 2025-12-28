@@ -21,7 +21,6 @@ import {
   IndexFilesRequestDto,
   DeleteFilesRequestDto,
   SyncRequestDto,
-  IndexResponseDto,
   AsyncIndexResponseDto,
   DeleteResponseDto,
   SyncResponseDto,
@@ -35,28 +34,23 @@ export class IndexController {
   constructor(private readonly indexService: IndexService) {}
 
   @Post()
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.ACCEPTED)
   @ApiOperation({
     summary: 'Index files into the store',
-    description: 'Set async=true to return immediately while embeddings process in background',
+    description: 'Always returns immediately. Files are queued for background processing. Poll /stats or /files for status.',
   })
   @ApiParam({ name: 'store', description: 'Store name' })
   @ApiBody({ type: IndexFilesRequestDto })
   @ApiResponse({
-    status: 200,
-    description: 'Files indexed successfully (sync mode)',
-    type: IndexResponseDto,
-  })
-  @ApiResponse({
     status: 202,
-    description: 'Files accepted for processing (async mode)',
+    description: 'Files accepted for processing',
     type: AsyncIndexResponseDto,
   })
   @ApiResponse({ status: 400, description: 'Invalid request' })
   async indexFiles(
     @Param('store') store: string,
     @Body() request: IndexFilesRequestDto,
-  ): Promise<IndexResponseDto | AsyncIndexResponseDto> {
+  ): Promise<AsyncIndexResponseDto> {
     return this.indexService.indexFiles(
       store,
       request.files,
@@ -87,19 +81,19 @@ export class IndexController {
   }
 
   @Post('reindex')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Clear and rebuild the entire store index' })
+  @HttpCode(HttpStatus.ACCEPTED)
+  @ApiOperation({ summary: 'Clear and rebuild the entire store index (async)' })
   @ApiParam({ name: 'store', description: 'Store name' })
   @ApiBody({ type: IndexFilesRequestDto })
   @ApiResponse({
-    status: 200,
-    description: 'Store reindexed successfully',
-    type: IndexResponseDto,
+    status: 202,
+    description: 'Reindex accepted for processing',
+    type: AsyncIndexResponseDto,
   })
   async reindex(
     @Param('store') store: string,
     @Body() request: IndexFilesRequestDto,
-  ): Promise<IndexResponseDto> {
+  ): Promise<AsyncIndexResponseDto> {
     return this.indexService.reindex(store, request.files);
   }
 

@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EmbeddingsService } from '../services/embeddings.service';
 import { MilvusService } from '../services/milvus.service';
 import { TantivyQueueService } from '../services/tantivy-queue.service';
 import { StoreManagerService } from '../services/store-manager.service';
@@ -12,7 +11,6 @@ import {
 } from '../services/treesitter-chunker.service';
 import {
   FileToIndex,
-  IndexResponseDto,
   AsyncIndexResponseDto,
   DeleteResponseDto,
 } from './dto/index-request.dto';
@@ -29,12 +27,9 @@ function normalizePath(filePath: string): string {
 export class IndexService {
   private readonly logger = new Logger(IndexService.name);
   private readonly maxFileSizeMb: number;
-  private readonly embeddingBatchSize = 32;
-  private readonly milvusBatchSize = 3000; // Max chunks per Milvus upsert to avoid RESOURCE_EXHAUSTED
 
   constructor(
     private configService: ConfigService,
-    private embeddings: EmbeddingsService,
     private milvus: MilvusService,
     private tantivyQueue: TantivyQueueService,
     private storeManager: StoreManagerService,
@@ -46,22 +41,24 @@ export class IndexService {
       'indexing.maxFileSizeMb',
     )!;
     
-    this.logger.log("Index service initialized (Tantivy BM25 + Milvus vectors)");
+    this.logger.log("Index service initialized (fire-and-forget queues: Tantivy + Embeddings)");
   }
 
   /**
-   * Index files into both sparse (Tantivy) and dense (Milvus) indexes
-   * Supports incremental indexing - only re-indexes changed files
+   * Index files into both sparse (Tantivy) and dense (Milvus) indexes.
    * 
-   * @param asyncMode - If true, queue embeddings in background and return immediately
+   * ALWAYS non-blocking: queues work and returns immediately.
+   * - Tantivy indexing: queued via TantivyQueueService
+   * - Embeddings + Milvus: queued via EmbeddingQueueService
+   * 
+   * Client can poll /stats or /files for status updates.
    */
   async indexFiles(
     store: string,
     files: FileToIndex[],
     force = false,
-    asyncMode = false,
-  ): Promise<IndexResponseDto | AsyncIndexResponseDto> {
-    const startTime = Date.now();
+    _asyncMode = true, // Always async, param kept for API compatibility
+  ): Promise<AsyncIndexResponseDto> {
     const errors: string[] = [];
     let skippedUnchanged = 0;
 
@@ -102,20 +99,12 @@ export class IndexService {
     }
 
     if (filesToProcess.length === 0) {
-      if (asyncMode) {
-        return {
-          job_id: 'none',
-          status: 'completed',
-          files_accepted: files.length,
-          chunks_queued: 0,
-          queue_position: 0,
-          skipped_unchanged: skippedUnchanged,
-        };
-      }
       return {
-        files_processed: files.length,
-        chunks_indexed: 0,
-        time_ms: Date.now() - startTime,
+        job_id: 'none',
+        status: 'completed',
+        files_accepted: files.length,
+        chunks_queued: 0,
+        queue_position: 0,
         skipped_unchanged: skippedUnchanged,
       };
     }
@@ -188,21 +177,12 @@ export class IndexService {
     }
 
     if (allChunks.length === 0) {
-      if (asyncMode) {
-        return {
-          job_id: 'none',
-          status: 'completed',
-          files_accepted: files.length,
-          chunks_queued: 0,
-          queue_position: 0,
-          skipped_unchanged: skippedUnchanged,
-          errors: errors.length > 0 ? errors : undefined,
-        };
-      }
       return {
-        files_processed: files.length,
-        chunks_indexed: 0,
-        time_ms: Date.now() - startTime,
+        job_id: 'none',
+        status: 'completed',
+        files_accepted: files.length,
+        chunks_queued: 0,
+        queue_position: 0,
         skipped_unchanged: skippedUnchanged,
         errors: errors.length > 0 ? errors : undefined,
       };
@@ -223,58 +203,20 @@ export class IndexService {
       };
     });
 
-    // ASYNC MODE: Queue embeddings and return immediately
-    if (asyncMode) {
-      const { jobId, position } = this.embeddingQueue.enqueue(store, embeddingChunks);
-      
-      return {
-        job_id: jobId,
-        status: 'accepted',
-        files_accepted: files.length,
-        chunks_queued: allChunks.length,
-        queue_position: position,
-        skipped_unchanged: skippedUnchanged,
-        errors: errors.length > 0 ? errors : undefined,
-      };
-    }
-
-    // SYNC MODE: Wait for embeddings and upsert in batches
-    let totalChunks = 0;
-    try {
-      const texts = embeddingChunks.map((c) => c.text);
-      const embeddings = await this.embeddings.embedBatch(texts, this.embeddingBatchSize);
-
-      // Batch Milvus upserts to avoid RESOURCE_EXHAUSTED errors
-      for (let i = 0; i < allChunks.length; i += this.milvusBatchSize) {
-        const batchEnd = Math.min(i + this.milvusBatchSize, allChunks.length);
-        const batchChunks = allChunks.slice(i, batchEnd);
-        const batchEmbeddings = embeddings.slice(i, batchEnd);
-
-        await this.milvus.upsert(store, {
-          doc_ids: batchChunks.map((c) => c.doc_id),
-          embeddings: batchEmbeddings,
-          paths: batchChunks.map((c) => c.path),
-          languages: batchChunks.map((c) => c.language),
-          chunk_ids: batchChunks.map((c) => c.chunk_index),
-          start_lines: batchChunks.map((c) => c.start_line),
-          end_lines: batchChunks.map((c) => c.end_line),
-        });
-
-        totalChunks += batchChunks.length;
-        
-        if (batchEnd < allChunks.length) {
-          this.logger.debug(`Milvus upsert batch ${Math.ceil(batchEnd / this.milvusBatchSize)}/${Math.ceil(allChunks.length / this.milvusBatchSize)}`);
-        }
-      }
-    } catch (error) {
-      // Error already logged by EmbeddingsService/MilvusService with retry details
-      errors.push(`Indexing failed: ${(error as Error).message}`);
-    }
+    // Queue embeddings for background processing (fire-and-forget)
+    // Tantivy is already queued above, embeddings queue handles Milvus
+    const { jobId, position } = this.embeddingQueue.enqueue(store, embeddingChunks);
+    
+    this.logger.log(
+      `Accepted ${files.length} files → ${allChunks.length} chunks queued (Tantivy + Embeddings)`
+    );
 
     return {
-      files_processed: files.length,
-      chunks_indexed: totalChunks,
-      time_ms: Date.now() - startTime,
+      job_id: jobId,
+      status: 'accepted',
+      files_accepted: files.length,
+      chunks_queued: allChunks.length,
+      queue_position: position,
       skipped_unchanged: skippedUnchanged,
       errors: errors.length > 0 ? errors : undefined,
     };
@@ -335,19 +277,20 @@ export class IndexService {
 
   /**
    * Re-index entire store (clear and rebuild)
+   * Non-blocking: clears existing data, then queues new files for indexing.
    */
   async reindex(
     store: string,
     files: FileToIndex[],
-  ): Promise<IndexResponseDto> {
+  ): Promise<AsyncIndexResponseDto> {
     // Clear file tracking for this store
     this.fileTracker.clearStore(store);
 
     // Delete all existing data
     await this.deleteFiles(store, undefined, '');
 
-    // Re-index all files with force=true, asyncMode=false
-    return this.indexFiles(store, files, true, false) as Promise<IndexResponseDto>;
+    // Re-index all files with force=true
+    return this.indexFiles(store, files, true);
   }
 
   /**
