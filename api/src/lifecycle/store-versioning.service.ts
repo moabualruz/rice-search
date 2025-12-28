@@ -36,7 +36,7 @@ export interface VersionedStore {
 }
 
 const DEFAULT_VERSION_CONFIG: StoreVersionConfig = {
-  embeddingModel: "mxbai-embed-large-v1",
+  embeddingModel: "jina-code-embeddings-1.5b",
   chunkingStrategy: "treesitter",
   maxChunkLines: 100,
   overlapLines: 10,

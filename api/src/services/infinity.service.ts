@@ -87,8 +87,8 @@ class LRUCache<K, V> {
  * InfinityService
  * 
  * Wraps calls to the Infinity server which hosts both:
- * - mixedbread-ai/mxbai-embed-large-v1 (1024-dim embeddings)
- * - mixedbread-ai/mxbai-rerank-base-v2 (neural reranking)
+ * - jinaai/jina-code-embeddings-1.5b (1536-dim, code-optimized)
+ * - jinaai/jina-reranker-v2-base-multilingual (neural reranking)
  * 
  * Infinity uses OpenAI-compatible API format:
  * - POST /embeddings with { model, input }
@@ -113,10 +113,10 @@ export class InfinityService implements OnModuleInit {
   private readonly agent: http.Agent | https.Agent;
 
   constructor(private configService: ConfigService) {
-    // Configuration with defaults from RERANKING_PLAN.md
+    // Configuration with defaults for code search
     this.baseUrl = this.configService.get<string>('infinity.url') || 'http://infinity:80';
-    this.embedModel = this.configService.get<string>('infinity.embedModel') || 'mixedbread-ai/mxbai-embed-large-v1';
-    this.rerankModel = this.configService.get<string>('infinity.rerankModel') || 'mixedbread-ai/mxbai-rerank-base-v2';
+    this.embedModel = this.configService.get<string>('infinity.embedModel') || 'jinaai/jina-code-embeddings-1.5b';
+    this.rerankModel = this.configService.get<string>('infinity.rerankModel') || 'jinaai/jina-reranker-v2-base-multilingual';
     this.timeout = this.configService.get<number>('infinity.timeout') || 30000;
 
     this.embeddingCache = new LRUCache<string, CacheEntry<number[]>>(this.MAX_EMBEDDING_CACHE_SIZE);

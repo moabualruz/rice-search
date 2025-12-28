@@ -381,4 +381,166 @@ export class IndexService {
   } {
     return this.fileTracker.getStoreStats(store);
   }
+
+  /**
+   * List indexed files with pagination, filtering, and sorting
+   */
+  listFiles(
+    store: string,
+    options: {
+      page?: number;
+      pageSize?: number;
+      pathFilter?: string;
+      language?: string;
+      sortBy?: 'path' | 'size' | 'indexed_at';
+      sortOrder?: 'asc' | 'desc';
+    } = {},
+  ): {
+    files: Array<{
+      path: string;
+      size: number;
+      hash: string;
+      indexed_at: string;
+      chunk_count: number;
+      language?: string;
+    }>;
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+  } {
+    const {
+      page = 1,
+      pageSize = 50,
+      pathFilter,
+      language,
+      sortBy = 'path',
+      sortOrder = 'asc',
+    } = options;
+
+    // Get all tracked files
+    let files = this.fileTracker.getTrackedFiles(store);
+
+    // Apply path filter
+    if (pathFilter) {
+      const filterLower = pathFilter.toLowerCase();
+      files = files.filter((f) => f.path.toLowerCase().includes(filterLower));
+    }
+
+    // Apply language filter (extract from path extension)
+    if (language) {
+      const langLower = language.toLowerCase();
+      files = files.filter((f) => {
+        const ext = f.path.split('.').pop()?.toLowerCase();
+        // Map extensions to languages
+        const extToLang: Record<string, string> = {
+          ts: 'typescript',
+          tsx: 'typescript',
+          js: 'javascript',
+          jsx: 'javascript',
+          py: 'python',
+          rs: 'rust',
+          go: 'go',
+          java: 'java',
+          kt: 'kotlin',
+          kts: 'kotlin',
+          c: 'c',
+          cpp: 'cpp',
+          cc: 'cpp',
+          h: 'c',
+          hpp: 'cpp',
+          cs: 'csharp',
+          rb: 'ruby',
+          php: 'php',
+          swift: 'swift',
+          scala: 'scala',
+          md: 'markdown',
+          json: 'json',
+          yaml: 'yaml',
+          yml: 'yaml',
+          toml: 'toml',
+          sql: 'sql',
+          sh: 'bash',
+          bash: 'bash',
+          zsh: 'bash',
+        };
+        const fileLang = ext ? extToLang[ext] : undefined;
+        return fileLang?.toLowerCase() === langLower;
+      });
+    }
+
+    // Sort
+    files.sort((a, b) => {
+      let cmp = 0;
+      switch (sortBy) {
+        case 'size':
+          cmp = a.size - b.size;
+          break;
+        case 'indexed_at':
+          cmp = new Date(a.indexed_at).getTime() - new Date(b.indexed_at).getTime();
+          break;
+        case 'path':
+        default:
+          cmp = a.path.localeCompare(b.path);
+          break;
+      }
+      return sortOrder === 'desc' ? -cmp : cmp;
+    });
+
+    const total = files.length;
+    const totalPages = Math.ceil(total / pageSize);
+    const offset = (page - 1) * pageSize;
+    const paginatedFiles = files.slice(offset, offset + pageSize);
+
+    // Map to response format with language detection
+    const extToLang: Record<string, string> = {
+      ts: 'typescript',
+      tsx: 'typescript',
+      js: 'javascript',
+      jsx: 'javascript',
+      py: 'python',
+      rs: 'rust',
+      go: 'go',
+      java: 'java',
+      kt: 'kotlin',
+      kts: 'kotlin',
+      c: 'c',
+      cpp: 'cpp',
+      cc: 'cpp',
+      h: 'c',
+      hpp: 'cpp',
+      cs: 'csharp',
+      rb: 'ruby',
+      php: 'php',
+      swift: 'swift',
+      scala: 'scala',
+      md: 'markdown',
+      json: 'json',
+      yaml: 'yaml',
+      yml: 'yaml',
+      toml: 'toml',
+      sql: 'sql',
+      sh: 'bash',
+      bash: 'bash',
+      zsh: 'bash',
+    };
+
+    return {
+      files: paginatedFiles.map((f) => {
+        const ext = f.path.split('.').pop()?.toLowerCase();
+        return {
+          path: f.path,
+          size: f.size,
+          hash: f.hash,
+          indexed_at: f.indexed_at,
+          chunk_count: f.chunk_ids.length,
+          language: ext ? extToLang[ext] : undefined,
+        };
+      }),
+      total,
+      page,
+      page_size: pageSize,
+      total_pages: totalPages,
+    };
+  }
 }

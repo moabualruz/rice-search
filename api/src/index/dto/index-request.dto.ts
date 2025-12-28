@@ -130,3 +130,41 @@ export class StatsResponseDto {
   @ApiProperty({ description: 'Last update timestamp' })
   last_updated: string;
 }
+
+// File listing with pagination
+export class TrackedFileDto {
+  @ApiProperty({ description: 'File path' })
+  path: string;
+
+  @ApiProperty({ description: 'File size in bytes' })
+  size: number;
+
+  @ApiProperty({ description: 'Content hash' })
+  hash: string;
+
+  @ApiProperty({ description: 'When file was indexed' })
+  indexed_at: string;
+
+  @ApiProperty({ description: 'Number of chunks' })
+  chunk_count: number;
+
+  @ApiPropertyOptional({ description: 'Detected language' })
+  language?: string;
+}
+
+export class ListFilesResponseDto {
+  @ApiProperty({ description: 'Files in current page', type: [TrackedFileDto] })
+  files: TrackedFileDto[];
+
+  @ApiProperty({ description: 'Total number of files' })
+  total: number;
+
+  @ApiProperty({ description: 'Current page (1-indexed)' })
+  page: number;
+
+  @ApiProperty({ description: 'Page size' })
+  page_size: number;
+
+  @ApiProperty({ description: 'Total pages' })
+  total_pages: number;
+}

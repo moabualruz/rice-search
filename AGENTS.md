@@ -197,6 +197,7 @@ Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
 | POST | `/v1/stores/{store}/index/reindex` | Clear and rebuild index |
 | POST | `/v1/stores/{store}/index/sync` | Sync index (remove deleted files) |
 | GET | `/v1/stores/{store}/index/stats` | Get indexing statistics |
+| GET | `/v1/stores/{store}/index/files` | List indexed files (paginated) |
 
 **Index Request Body:**
 ```json
@@ -220,6 +221,36 @@ Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
 ```json
 {
   "current_paths": ["src/main.ts", "src/utils.ts"]  // Files that exist
+}
+```
+
+**List Files Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | int | 1 | Page number (1-indexed) |
+| `page_size` | int | 50 | Results per page |
+| `path` | string | - | Filter by path substring |
+| `language` | string | - | Filter by language (typescript, python, rust, etc.) |
+| `sort_by` | string | path | Sort field: path, size, indexed_at |
+| `sort_order` | string | asc | Sort order: asc, desc |
+
+**List Files Response:**
+```json
+{
+  "files": [
+    {
+      "path": "src/auth.ts",
+      "size": 2048,
+      "hash": "a1b2c3d4e5f6g7h8",
+      "indexed_at": "2025-12-28T02:00:00Z",
+      "chunk_count": 5,
+      "language": "typescript"
+    }
+  ],
+  "total": 150,
+  "page": 1,
+  "page_size": 50,
+  "total_pages": 3
 }
 ```
 

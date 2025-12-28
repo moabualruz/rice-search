@@ -6,14 +6,16 @@
     "axe/forms": [
       "default",
       {
-        "label": "off"
+        "label": "off",
+        "select-name": "off"
       }
     ],
     "compat-api/css": [
       "default",
       {
         "ignore": [
-          "backdrop-filter"
+          "backdrop-filter",
+          "user-select"
         ]
       }
     ]

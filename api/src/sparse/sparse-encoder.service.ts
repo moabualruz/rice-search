@@ -25,7 +25,7 @@ export interface SparseEncodingResult {
  * Sparse encoder configuration
  */
 export interface SparseEncoderConfig {
-  model: "splade-v2-distil" | "bge-m3-sparse" | "stub" | "custom";
+  model: "splade-v2-distil" | "stub" | "custom";
   serviceUrl?: string;
   topK: number;        // Keep top K terms per document
   minWeight: number;   // Minimum weight threshold
@@ -38,14 +38,13 @@ export interface SparseEncoderConfig {
  * This is an abstraction layer that supports multiple backends:
  * - "stub": Simple term-frequency based vectors (default, no external deps)
  * - "splade-v2-distil": SPLADE model via HTTP service
- * - "bge-m3-sparse": BGE-M3 sparse component via HTTP service
  *
  * The stub implementation provides a working baseline while the actual
  * learned sparse models can be deployed as separate services.
  *
  * Why learned sparse matters:
  * - BM25 uses statistical term weights (TF-IDF)
- * - SPLADE/BGE-M3 learn term weights that capture semantics
+ * - SPLADE learns term weights that capture semantics
  * - Query expansion happens automatically in the model
  * - Better handling of synonyms and paraphrases
  */
@@ -101,7 +100,6 @@ export class SparseEncoderService implements OnModuleInit {
 
     switch (this.config.model) {
       case "splade-v2-distil":
-      case "bge-m3-sparse":
         ({ vector, tokenCount } = await this.encodeWithService(text));
         break;
       case "stub":

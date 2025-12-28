@@ -76,6 +76,7 @@ class LRUCache<K, V> {
 export class EmbeddingsService implements OnModuleInit {
   private readonly logger = new Logger(EmbeddingsService.name);
   private readonly baseUrl: string;
+  private readonly model: string;
   private readonly dim: number;
   private readonly timeout: number;
 
@@ -89,6 +90,7 @@ export class EmbeddingsService implements OnModuleInit {
 
   constructor(private configService: ConfigService) {
     this.baseUrl = this.configService.get<string>('embeddings.url')!;
+    this.model = this.configService.get<string>('infinity.embedModel') || 'jinaai/jina-code-embeddings-1.5b';
     this.dim = this.configService.get<number>('embeddings.dim')!;
     this.timeout = 60000;
     this.queryCache = new LRUCache<string, CacheEntry>(this.MAX_CACHE_SIZE);
@@ -203,7 +205,7 @@ export class EmbeddingsService implements OnModuleInit {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'mixedbread-ai/mxbai-embed-large-v1',
+          model: this.model,
           input: uncachedTexts,
         }),
         signal: AbortSignal.timeout(this.timeout),

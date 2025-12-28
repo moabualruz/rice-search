@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Body,
+  Query,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -25,6 +26,7 @@ import {
   DeleteResponseDto,
   SyncResponseDto,
   StatsResponseDto,
+  ListFilesResponseDto,
 } from './dto/index-request.dto';
 
 @ApiTags('index')
@@ -130,5 +132,32 @@ export class IndexController {
   })
   getStats(@Param('store') store: string): StatsResponseDto {
     return this.indexService.getStoreStats(store);
+  }
+
+  @Get('files')
+  @ApiOperation({ summary: 'List indexed files with pagination and filtering' })
+  @ApiParam({ name: 'store', description: 'Store name' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of indexed files',
+    type: ListFilesResponseDto,
+  })
+  listFiles(
+    @Param('store') store: string,
+    @Query('page') page?: string,
+    @Query('page_size') pageSize?: string,
+    @Query('path') pathFilter?: string,
+    @Query('language') language?: string,
+    @Query('sort_by') sortBy?: 'path' | 'size' | 'indexed_at',
+    @Query('sort_order') sortOrder?: 'asc' | 'desc',
+  ): ListFilesResponseDto {
+    return this.indexService.listFiles(store, {
+      page: page ? parseInt(page, 10) : undefined,
+      pageSize: pageSize ? parseInt(pageSize, 10) : undefined,
+      pathFilter,
+      language,
+      sortBy,
+      sortOrder,
+    });
   }
 }
