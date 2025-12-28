@@ -27,6 +27,15 @@ export interface RankingOptions {
   groupByFile?: boolean;
 }
 
+export interface FusionStats {
+  topScore: number;
+  secondScore: number;
+  scoreGap: number;      // top - second
+  scoreRatio: number;    // top / second (infinity if second is 0)
+  tailMean: number;      // mean of scores from position 3-10
+  resultCount: number;
+}
+
 @Injectable()
 export class HybridRankerService {
   private readonly logger = new Logger(HybridRankerService.name);
@@ -255,5 +264,69 @@ export class HybridRankerService {
         dense_rank: r.dense_rank,
       };
     });
+  }
+
+  /**
+   * Compute statistics about the fused result distribution
+   * Used for confidence estimation and early exit decisions
+   *
+   * @param results Hybrid search results sorted by final_score (descending)
+   * @returns Statistics about score distribution
+   */
+  computeFusionStats(results: HybridSearchResult[]): FusionStats {
+    const resultCount = results.length;
+
+    // Handle edge cases
+    if (resultCount === 0) {
+      return {
+        topScore: 0,
+        secondScore: 0,
+        scoreGap: 0,
+        scoreRatio: 0,
+        tailMean: 0,
+        resultCount: 0,
+      };
+    }
+
+    const topScore = results[0].final_score;
+
+    if (resultCount === 1) {
+      return {
+        topScore,
+        secondScore: 0,
+        scoreGap: topScore,
+        scoreRatio: Infinity,
+        tailMean: 0,
+        resultCount: 1,
+      };
+    }
+
+    const secondScore = results[1].final_score;
+    const scoreGap = topScore - secondScore;
+    const scoreRatio = secondScore === 0 ? Infinity : topScore / secondScore;
+
+    // Compute tail mean (positions 3-10, or as many as available)
+    let tailMean = 0;
+    if (resultCount > 2) {
+      const tailStart = 2;
+      const tailEnd = Math.min(10, resultCount);
+      const tailScores = results
+        .slice(tailStart, tailEnd)
+        .map((r) => r.final_score);
+
+      if (tailScores.length > 0) {
+        tailMean =
+          tailScores.reduce((sum, score) => sum + score, 0) / tailScores.length;
+      }
+    }
+
+    return {
+      topScore,
+      secondScore,
+      scoreGap,
+      scoreRatio,
+      tailMean,
+      resultCount,
+    };
   }
 }

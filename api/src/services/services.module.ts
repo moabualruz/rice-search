@@ -14,6 +14,8 @@ import { TreeSitterChunkerService } from './treesitter-chunker.service';
 import { EmbeddingQueueService } from './embedding-queue.service';
 import { RerankerService } from './reranker.service';
 import { QueryClassifierService } from './query-classifier.service';
+import { QueryNormalizerService } from './query-normalizer.service';
+import { TelemetryService } from './telemetry.service';
 
 @Global()
 @Module({
@@ -33,6 +35,8 @@ import { QueryClassifierService } from './query-classifier.service';
     TreeSitterChunkerService,
     EmbeddingQueueService,
     QueryClassifierService,
+    QueryNormalizerService,
+    TelemetryService,
   ],
   exports: [
     EmbeddingsService,
@@ -49,6 +53,8 @@ import { QueryClassifierService } from './query-classifier.service';
     TreeSitterChunkerService,
     EmbeddingQueueService,
     QueryClassifierService,
+    QueryNormalizerService,
+    TelemetryService,
   ],
 })
 export class ServicesModule {}

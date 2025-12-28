@@ -11,6 +11,11 @@ export interface QueryClassification {
     hasCamelCase: boolean;
     wordCount: number;
     avgWordLength: number;
+    isNavigational: boolean;
+    isExploratory: boolean;
+    hasQuestionWords: boolean;
+    hasActionVerbs: boolean;
+    specificity: number;
   };
 }
 
@@ -139,6 +144,27 @@ export class QueryClassifierService {
     "describe",
   ]);
 
+  // Question words for exploratory queries
+  private readonly QUESTION_WORDS = new Set([
+    "how",
+    "what",
+    "where",
+    "why",
+    "when",
+    "which",
+    "who",
+  ]);
+
+  // Action verbs commonly used in queries
+  private readonly ACTION_VERBS = new Set([
+    "find",
+    "show",
+    "list",
+    "get",
+    "search",
+    "locate",
+  ]);
+
   /**
    * Classify a query as code, natural language, or hybrid
    * @param query The search query to classify
@@ -157,6 +183,11 @@ export class QueryClassifierService {
           hasCamelCase: false,
           wordCount: 0,
           avgWordLength: 0,
+          isNavigational: false,
+          isExploratory: false,
+          hasQuestionWords: false,
+          hasActionVerbs: false,
+          specificity: 0,
         },
       };
     }
@@ -199,16 +230,34 @@ export class QueryClassifierService {
   private extractSignals(query: string): QueryClassification["signals"] {
     const words = this.tokenizeQuery(query);
 
-    return {
-      hasCodePatterns: this.hasCodeSymbols(query) || this.hasCodeKeywords(query),
-      hasPathPatterns: this.hasPathPattern(query),
-      hasCamelCase: this.hasCamelCase(query),
+    const hasCodePatterns = this.hasCodeSymbols(query) || this.hasCodeKeywords(query);
+    const hasPathPatterns = this.hasPathPattern(query);
+    const hasCamelCase = this.hasCamelCase(query);
+    const hasQuestionWords = this.hasQuestionWords(query);
+    const hasActionVerbs = this.hasActionVerbs(query);
+
+    const signals = {
+      hasCodePatterns,
+      hasPathPatterns,
+      hasCamelCase,
       wordCount: words.length,
       avgWordLength:
         words.length > 0
           ? words.reduce((sum, w) => sum + w.length, 0) / words.length
           : 0,
+      isNavigational: false,
+      isExploratory: false,
+      hasQuestionWords,
+      hasActionVerbs,
+      specificity: 0,
     };
+
+    // Compute derived signals
+    signals.isNavigational = this.isNavigational(query, signals);
+    signals.isExploratory = this.isExploratory(query, signals);
+    signals.specificity = this.computeSpecificity(query, signals);
+
+    return signals;
   }
 
   /**
@@ -399,5 +448,87 @@ export class QueryClassifierService {
     return query
       .split(/[\s\-_.,;:!?()\[\]{}'"]+/)
       .filter((token) => token.length > 0);
+  }
+
+  /**
+   * Check if query contains question words
+   */
+  private hasQuestionWords(query: string): boolean {
+    const firstWord = query.trim().split(/\s+/)[0]?.toLowerCase();
+    return firstWord ? this.QUESTION_WORDS.has(firstWord) : false;
+  }
+
+  /**
+   * Check if query contains action verbs
+   */
+  private hasActionVerbs(query: string): boolean {
+    const words = this.tokenizeQuery(query);
+    return words.some((word) => this.ACTION_VERBS.has(word.toLowerCase()));
+  }
+
+  /**
+   * Detect navigational intent (exact file/symbol lookup)
+   * True when: short query + path pattern OR short query + camelCase symbol
+   */
+  private isNavigational(
+    query: string,
+    signals: Partial<QueryClassification["signals"]>,
+  ): boolean {
+    const wordCount = signals.wordCount ?? 0;
+    const hasPathPatterns = signals.hasPathPatterns ?? false;
+    const hasCamelCase = signals.hasCamelCase ?? false;
+
+    return wordCount <= 2 && (hasPathPatterns || hasCamelCase);
+  }
+
+  /**
+   * Detect exploratory intent (broad concept search)
+   * True when: 4+ words + question words + no code patterns
+   */
+  private isExploratory(
+    query: string,
+    signals: Partial<QueryClassification["signals"]>,
+  ): boolean {
+    const wordCount = signals.wordCount ?? 0;
+    const hasQuestionWords = signals.hasQuestionWords ?? false;
+    const hasCodePatterns = signals.hasCodePatterns ?? false;
+
+    return wordCount >= 4 && hasQuestionWords && !hasCodePatterns;
+  }
+
+  /**
+   * Compute query specificity score (0-1)
+   * Higher = more specific query
+   * Factors: code patterns, path patterns, short length, camelCase
+   */
+  private computeSpecificity(
+    query: string,
+    signals: Partial<QueryClassification["signals"]>,
+  ): number {
+    let score = 0;
+
+    // Code patterns increase specificity (+0.3)
+    if (signals.hasCodePatterns) {
+      score += 0.3;
+    }
+
+    // Path patterns increase specificity (+0.3)
+    if (signals.hasPathPatterns) {
+      score += 0.3;
+    }
+
+    // CamelCase increases specificity (+0.2)
+    if (signals.hasCamelCase) {
+      score += 0.2;
+    }
+
+    // Short queries are more specific (+0.2)
+    const wordCount = signals.wordCount ?? 0;
+    if (wordCount > 0 && wordCount <= 3) {
+      score += 0.2;
+    }
+
+    // Clamp to [0, 1]
+    return Math.max(0, Math.min(1, score));
   }
 }
