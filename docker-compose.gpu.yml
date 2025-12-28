@@ -35,10 +35,19 @@ services:
       QUERY_NODE_MAX_CONCURRENT: "512"
       PROXY_MAX_TASK_NUM: "2048"
       QUERYNODE_CACHE_ENABLED: "true"
-      QUERYNODE_CACHE_SIZE: "2147483648"  # 2GB cache with GPU
+      QUERYNODE_CACHE_SIZE: "4294967296"  # 4GB cache with GPU
+      # gRPC message size limits (fixes RESOURCE_EXHAUSTED on large batches)
+      GRPC_SERVERMAXTOKENPERSET: "1073741824"  # 1GB max tokens
+      PROXY_MAXMSGSIZE: "268435456"            # 256MB max message size
+      COMMON_MAXMSGSIZE: "268435456"           # 256MB max message size
+      # Insert buffer tuning
+      DATANODE_FLUSH_INSERT_BUFFER_SIZE: "268435456"  # 256MB insert buffer
     deploy:
       resources:
+        limits:
+          memory: 12G
         reservations:
+          memory: 4G
           devices:
             - driver: nvidia
               count: 1
@@ -74,19 +83,4 @@ services:
               count: 1
               capabilities: [gpu]
 
-  # ============================================
-  # BGE-M3 with GPU acceleration (Phase 2)
-  # Dense + Sparse + ColBERT in one model
-  # ============================================
-  bge-m3:
-    environment:
-      - DEVICE=cuda
-      - USE_FP16=true
-      - CUDA_VISIBLE_DEVICES=0
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+

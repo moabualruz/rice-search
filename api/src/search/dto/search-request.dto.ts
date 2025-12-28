@@ -1,4 +1,4 @@
-import { IsString, IsOptional, IsNumber, IsBoolean, IsIn, Min, Max, ValidateNested } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsBoolean, Min, Max, ValidateNested } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -14,8 +14,6 @@ class SearchFiltersDto {
   languages?: string[];
 }
 
-export type SearchMode = 'mixedbread' | 'bge-m3';
-
 export class SearchRequestDto {
   @ApiProperty({ description: 'Search query' })
   @IsString()
@@ -27,15 +25,6 @@ export class SearchRequestDto {
   @Min(1)
   @Max(10000)
   top_k?: number = 20;
-
-  @ApiPropertyOptional({ 
-    description: 'Search mode: mixedbread (default) or bge-m3',
-    enum: ['mixedbread', 'bge-m3'],
-    default: 'mixedbread'
-  })
-  @IsOptional()
-  @IsIn(['mixedbread', 'bge-m3'])
-  mode?: SearchMode;
 
   @ApiPropertyOptional({ description: 'Enable neural reranking', default: true })
   @IsOptional()

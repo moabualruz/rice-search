@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EmbeddingsService } from '../services/embeddings.service';
-import { BgeM3Service } from '../services/bge-m3.service';
-import { MilvusService, convertSparseToMilvusFormat } from '../services/milvus.service';
+import { MilvusService } from '../services/milvus.service';
 import { TantivyQueueService } from '../services/tantivy-queue.service';
 import { StoreManagerService } from '../services/store-manager.service';
 import { FileTrackerService } from '../services/file-tracker.service';
@@ -16,7 +15,6 @@ import {
   IndexResponseDto,
   AsyncIndexResponseDto,
   DeleteResponseDto,
-  IndexMode,
 } from './dto/index-request.dto';
 
 /**
@@ -32,12 +30,11 @@ export class IndexService {
   private readonly logger = new Logger(IndexService.name);
   private readonly maxFileSizeMb: number;
   private readonly embeddingBatchSize = 32;
-  private readonly defaultMode: IndexMode;
+  private readonly milvusBatchSize = 3000; // Max chunks per Milvus upsert to avoid RESOURCE_EXHAUSTED
 
   constructor(
     private configService: ConfigService,
     private embeddings: EmbeddingsService,
-    private bgeM3: BgeM3Service,
     private milvus: MilvusService,
     private tantivyQueue: TantivyQueueService,
     private storeManager: StoreManagerService,
@@ -48,28 +45,8 @@ export class IndexService {
     this.maxFileSizeMb = this.configService.get<number>(
       'indexing.maxFileSizeMb',
     )!;
-    this.defaultMode = (this.configService.get<string>('search.mode') as IndexMode) || 'mixedbread';
     
-    this.logger.log(`Index mode: ${this.defaultMode} (Tantivy: ${this.defaultMode === 'mixedbread' ? 'enabled' : 'skipped'})`);
-  }
-
-  /**
-   * Get embeddings using the appropriate service based on mode
-   */
-  private async getEmbeddings(texts: string[], mode: IndexMode): Promise<number[][]> {
-    if (mode === 'bge-m3') {
-      // Use BGE-M3 service - process in batches
-      const results: number[][] = [];
-      for (let i = 0; i < texts.length; i += this.embeddingBatchSize) {
-        const batch = texts.slice(i, i + this.embeddingBatchSize);
-        const embeddings = await this.bgeM3.embedDense(batch);
-        results.push(...embeddings);
-      }
-      return results;
-    } else {
-      // Default: Use Infinity via EmbeddingsService
-      return this.embeddings.embedBatch(texts, this.embeddingBatchSize);
-    }
+    this.logger.log("Index service initialized (Tantivy BM25 + Milvus vectors)");
   }
 
   /**
@@ -77,16 +54,13 @@ export class IndexService {
    * Supports incremental indexing - only re-indexes changed files
    * 
    * @param asyncMode - If true, queue embeddings in background and return immediately
-   * @param mode - Embedding mode: 'mixedbread' (Infinity) or 'bge-m3'
    */
   async indexFiles(
     store: string,
     files: FileToIndex[],
     force = false,
     asyncMode = false,
-    mode?: IndexMode,
   ): Promise<IndexResponseDto | AsyncIndexResponseDto> {
-    const embeddingMode = mode || this.defaultMode;
     const startTime = Date.now();
     const errors: string[] = [];
     let skippedUnchanged = 0;
@@ -186,9 +160,8 @@ export class IndexService {
       }
     }
 
-    // For mixedbread mode: Index to Tantivy for BM25 sparse search
-    // For bge-m3 mode: Skip Tantivy - BGE-M3 has built-in sparse via Milvus hybrid
-    if (allChunks.length > 0 && embeddingMode === 'mixedbread') {
+    // Index to Tantivy for BM25 sparse search
+    if (allChunks.length > 0) {
       const tantivyDocs = allChunks.map((chunk) => ({
         doc_id: chunk.doc_id,
         path: chunk.path,
@@ -200,7 +173,6 @@ export class IndexService {
       }));
 
       // Fire-and-forget: queue job but don't wait for completion
-      // Tantivy indexing happens in background, eventually catches up
       const { jobId } = await this.tantivyQueue.index(store, tantivyDocs);
       this.logger.debug(`Queued Tantivy job ${jobId} for ${tantivyDocs.length} chunks`);
     }
@@ -266,57 +238,33 @@ export class IndexService {
       };
     }
 
-    // SYNC MODE: Wait for embeddings (original behavior)
+    // SYNC MODE: Wait for embeddings and upsert in batches
     let totalChunks = 0;
     try {
       const texts = embeddingChunks.map((c) => c.text);
+      const embeddings = await this.embeddings.embedBatch(texts, this.embeddingBatchSize);
 
-      if (embeddingMode === 'bge-m3') {
-        // BGE-M3 mode: Get both dense and sparse embeddings, store in hybrid collection
-        this.logger.log(`Indexing ${texts.length} chunks with BGE-M3 hybrid mode...`);
-        
-        // Process in batches
-        for (let i = 0; i < texts.length; i += this.embeddingBatchSize) {
-          const batchTexts = texts.slice(i, i + this.embeddingBatchSize);
-          const batchChunks = allChunks.slice(i, i + this.embeddingBatchSize);
-          
-          // Get both dense and sparse embeddings in one call
-          const { dense, sparse } = await this.bgeM3.embedBoth(batchTexts);
-          
-          // Convert sparse weights to Milvus format (token -> hash)
-          const milvusSparse = sparse.map(convertSparseToMilvusFormat);
-          
-          // Upsert to hybrid collection (includes content for reranking)
-          await this.milvus.upsertHybrid(store, {
-            doc_ids: batchChunks.map((c) => c.doc_id),
-            dense_embeddings: dense,
-            sparse_embeddings: milvusSparse,
-            paths: batchChunks.map((c) => c.path),
-            languages: batchChunks.map((c) => c.language),
-            chunk_ids: batchChunks.map((c) => c.chunk_index),
-            start_lines: batchChunks.map((c) => c.start_line),
-            end_lines: batchChunks.map((c) => c.end_line),
-            contents: batchChunks.map((c) => c.content),
-            symbols: batchChunks.map((c) => c.symbols),
-          });
-          
-          totalChunks += batchChunks.length;
-        }
-      } else {
-        // Mixedbread mode: Dense embeddings only, stored in regular collection
-        const embeddings = await this.getEmbeddings(texts, embeddingMode);
+      // Batch Milvus upserts to avoid RESOURCE_EXHAUSTED errors
+      for (let i = 0; i < allChunks.length; i += this.milvusBatchSize) {
+        const batchEnd = Math.min(i + this.milvusBatchSize, allChunks.length);
+        const batchChunks = allChunks.slice(i, batchEnd);
+        const batchEmbeddings = embeddings.slice(i, batchEnd);
 
         await this.milvus.upsert(store, {
-          doc_ids: allChunks.map((c) => c.doc_id),
-          embeddings,
-          paths: allChunks.map((c) => c.path),
-          languages: allChunks.map((c) => c.language),
-          chunk_ids: allChunks.map((c) => c.chunk_index),
-          start_lines: allChunks.map((c) => c.start_line),
-          end_lines: allChunks.map((c) => c.end_line),
+          doc_ids: batchChunks.map((c) => c.doc_id),
+          embeddings: batchEmbeddings,
+          paths: batchChunks.map((c) => c.path),
+          languages: batchChunks.map((c) => c.language),
+          chunk_ids: batchChunks.map((c) => c.chunk_index),
+          start_lines: batchChunks.map((c) => c.start_line),
+          end_lines: batchChunks.map((c) => c.end_line),
         });
 
-        totalChunks = allChunks.length;
+        totalChunks += batchChunks.length;
+        
+        if (batchEnd < allChunks.length) {
+          this.logger.debug(`Milvus upsert batch ${Math.ceil(batchEnd / this.milvusBatchSize)}/${Math.ceil(allChunks.length / this.milvusBatchSize)}`);
+        }
       }
     } catch (error) {
       const errorMsg = `Milvus indexing failed: ${error}`;
@@ -335,7 +283,6 @@ export class IndexService {
 
   /**
    * Delete files from all indexes and remove from tracking
-   * Deletes from: Tantivy (if exists), regular Milvus, and hybrid Milvus
    */
   async deleteFiles(
     store: string,
@@ -355,16 +302,13 @@ export class IndexService {
       for (const path of normalizedPaths) {
         try {
           sparseDeleted += await this.tantivyQueue.delete(store, { path });
-          // Untrack the file
           this.fileTracker.untrackFile(store, path);
         } catch (error) {
           this.logger.warn(`Failed to delete from Tantivy: ${path}: ${error}`);
         }
       }
-      // Delete from both regular and hybrid Milvus collections
       for (const path of normalizedPaths) {
         denseDeleted += await this.milvus.deleteByPathPrefix(store, path);
-        denseDeleted += await this.milvus.deleteHybridByPathPrefix(store, path);
       }
     }
 
@@ -372,19 +316,15 @@ export class IndexService {
     if (normalizedPrefix) {
       try {
         sparseDeleted += await this.tantivyQueue.delete(store, { path: normalizedPrefix });
-        // Untrack files by prefix
         this.fileTracker.untrackByPrefix(store, normalizedPrefix);
       } catch (error) {
         this.logger.warn(
           `Failed to delete from Tantivy by prefix: ${normalizedPrefix}: ${error}`,
         );
       }
-      // Delete from both regular and hybrid Milvus collections
       denseDeleted += await this.milvus.deleteByPathPrefix(store, normalizedPrefix);
-      denseDeleted += await this.milvus.deleteHybridByPathPrefix(store, normalizedPrefix);
     }
 
-    // Update store timestamp
     this.storeManager.touchStore(store);
 
     return {
@@ -396,12 +336,10 @@ export class IndexService {
 
   /**
    * Re-index entire store (clear and rebuild)
-   * Always synchronous - waits for completion
    */
   async reindex(
     store: string,
     files: FileToIndex[],
-    mode?: IndexMode,
   ): Promise<IndexResponseDto> {
     // Clear file tracking for this store
     this.fileTracker.clearStore(store);
@@ -410,7 +348,7 @@ export class IndexService {
     await this.deleteFiles(store, undefined, '');
 
     // Re-index all files with force=true, asyncMode=false
-    return this.indexFiles(store, files, true, false, mode) as Promise<IndexResponseDto>;
+    return this.indexFiles(store, files, true, false) as Promise<IndexResponseDto>;
   }
 
   /**
@@ -420,7 +358,6 @@ export class IndexService {
     store: string,
     currentPaths: string[],
   ): Promise<{ deleted: number }> {
-    // Normalize paths for consistent matching
     const normalizedCurrentPaths = currentPaths.map(normalizePath);
     const deletedPaths = this.fileTracker.findDeletedFiles(store, normalizedCurrentPaths);
     

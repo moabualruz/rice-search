@@ -267,40 +267,6 @@ POST /mcp                 # JSON-RPC 2.0 endpoint for MCP protocol
 | `DENSE_TOPK` | `80` | Vector search candidates |
 | `DATA_DIR` | `/data` | Data directory |
 
-### Embedding Backend Selection
-
-Rice Search supports two embedding backends:
-
-| Backend | Service | Description |
-|---------|---------|-------------|
-| **infinity** (default) | Mixedbread/TEI | Fast, production-ready with reranking |
-| **bge-m3** | BGE-M3 | Unified dense+sparse, no Tantivy needed |
-
-**Default (Infinity/Mixedbread):**
-```bash
-docker-compose up -d
-```
-
-**BGE-M3 Mode (alternative):**
-```bash
-docker-compose -f docker-compose.yml -f docker-compose.bge-m3.yml up -d
-```
-
-**Environment Variable:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `SEARCH_MODE` | `mixedbread` | Search pipeline mode |
-
-**Mode Comparison:**
-
-| Mode | Embeddings | Sparse (BM25) | Dense (Vectors) |
-|------|------------|---------------|-----------------|
-| `mixedbread` | Infinity | Tantivy | Milvus |
-| `bge-m3` | BGE-M3 | BGE-M3 sparse → Milvus | Milvus |
-
-Tantivy is automatically enabled for `mixedbread` and skipped for `bge-m3`.
-
 ### GPU Acceleration
 
 For NVIDIA GPU support:
@@ -312,23 +278,6 @@ docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 Requirements:
 - NVIDIA GPU with CUDA support
 - nvidia-container-toolkit installed
-
-### Benchmarking
-
-To compare embedding backends:
-
-```bash
-# Full benchmark (CPU + GPU if available)
-bash scripts/benchmark_modes.sh
-
-# CPU only
-bash scripts/benchmark_modes.sh --cpu-only
-
-# Custom index path
-bash scripts/benchmark_modes.sh --path ./my-project
-```
-
-Results are saved to `benchmark_results/` with a markdown report.
 
 ## Data Persistence
 

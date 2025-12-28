@@ -6,11 +6,8 @@ import {
   ValidateNested,
   IsBoolean,
   MaxLength,
-  IsIn,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-
-export type IndexMode = 'mixedbread' | 'bge-m3';
 
 export class FileToIndex {
   @ApiProperty({ description: 'Relative path to the file' })
@@ -28,7 +25,7 @@ export class IndexFilesRequestDto {
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => FileToIndex)
-  files: FileToIndex[]; // No limit - local traffic only
+  files: FileToIndex[];
 
   @ApiPropertyOptional({ description: 'Force re-index even if unchanged' })
   @IsOptional()
@@ -42,15 +39,6 @@ export class IndexFilesRequestDto {
   @IsOptional()
   @IsBoolean()
   async?: boolean;
-
-  @ApiPropertyOptional({
-    description: 'Embedding mode: mixedbread (Infinity) or bge-m3',
-    enum: ['mixedbread', 'bge-m3'],
-    default: 'mixedbread',
-  })
-  @IsOptional()
-  @IsIn(['mixedbread', 'bge-m3'])
-  mode?: IndexMode;
 }
 
 export class DeleteFilesRequestDto {

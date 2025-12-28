@@ -1,14 +1,13 @@
 import { Injectable, Logger } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { EmbeddingsService } from "../services/embeddings.service";
-import { BgeM3Service } from "../services/bge-m3.service";
-import { MilvusService, convertSparseToMilvusFormat } from "../services/milvus.service";
+import { MilvusService } from "../services/milvus.service";
 import { TantivyService } from "../services/tantivy.service";
 import { HybridRankerService } from "../services/hybrid-ranker.service";
 import { StoreManagerService } from "../services/store-manager.service";
 import { RerankerService } from "../services/reranker.service";
 import { QueryClassifierService } from "../services/query-classifier.service";
-import { SearchRequestDto, SearchMode } from "./dto/search-request.dto";
+import { SearchRequestDto } from "./dto/search-request.dto";
 
 /**
  * Normalize path to use forward slashes consistently.
@@ -23,12 +22,10 @@ export class SearchService {
   private readonly logger = new Logger(SearchService.name);
   private readonly sparseTopK: number;
   private readonly denseTopK: number;
-  private readonly defaultMode: SearchMode;
 
   constructor(
     private configService: ConfigService,
     private embeddings: EmbeddingsService,
-    private bgeM3: BgeM3Service,
     private milvus: MilvusService,
     private tantivy: TantivyService,
     private hybridRanker: HybridRankerService,
@@ -38,9 +35,8 @@ export class SearchService {
   ) {
     this.sparseTopK = this.configService.get<number>("search.sparseTopK")!;
     this.denseTopK = this.configService.get<number>("search.denseTopK")!;
-    this.defaultMode = (this.configService.get<string>("search.mode") as SearchMode) || "mixedbread";
     
-    this.logger.log(`Search mode: ${this.defaultMode} (Tantivy: ${this.defaultMode === 'mixedbread' ? 'enabled' : 'disabled'})`);
+    this.logger.log("Search service initialized (Tantivy BM25 + Milvus vectors)");
   }
 
   async search(store: string, request: SearchRequestDto) {
@@ -48,9 +44,6 @@ export class SearchService {
     const { query, top_k = 20, filters, group_by_file } = request;
     let rerankTimeMs = 0;
     let rerankTimedOut = false;
-
-    // Determine search mode
-    const mode = request.mode || this.defaultMode;
 
     // Normalize path filter for consistent matching (handles Windows paths)
     const normalizedPathPrefix = filters?.path_prefix
@@ -83,36 +76,23 @@ export class SearchService {
       );
     }
 
-    // Execute search based on mode
-    let fusedResults;
-    if (mode === "bge-m3") {
-      fusedResults = await this.searchBgeM3Mode(
-        store,
-        query,
-        normalizedPathPrefix,
-        filters?.languages,
-        sparseWeight,
-        denseWeight,
-        group_by_file,
-      );
-    } else {
-      // Default: mixedbread mode (uses Infinity + Tantivy)
-      fusedResults = await this.searchMixedbreadMode(
-        store,
-        query,
-        normalizedPathPrefix,
-        filters?.languages,
-        sparseWeight,
-        denseWeight,
-        group_by_file,
-      );
-    }
+    // Execute hybrid search: Tantivy (BM25) + Milvus (vectors)
+    const fusedResults = await this.executeHybridSearch(
+      store,
+      query,
+      normalizedPathPrefix,
+      filters?.languages,
+      sparseWeight,
+      denseWeight,
+      group_by_file,
+    );
 
-    // After fusion, apply reranking if enabled
+    // Apply reranking if enabled
+    let rankedResults = fusedResults;
     if (request.enable_reranking !== false && fusedResults.length > 0) {
       const rerankStart = Date.now();
       try {
-        fusedResults = await this.reranker.rerank(query, fusedResults, {
+        rankedResults = await this.reranker.rerank(query, fusedResults, {
           candidates: request.rerank_candidates,
           timeout: this.configService.get<number>("reranker.timeout"),
         });
@@ -126,13 +106,11 @@ export class SearchService {
     }
 
     // Limit to top_k
-    const finalResults = fusedResults.slice(0, top_k);
-
+    const finalResults = rankedResults.slice(0, top_k);
     const searchTimeMs = Date.now() - startTime;
 
     return {
       query,
-      mode,
       results: finalResults.map((r) => ({
         doc_id: r.doc_id,
         path: r.path,
@@ -160,10 +138,10 @@ export class SearchService {
   }
 
   /**
-   * Mixedbread mode: Uses Infinity embeddings + Tantivy BM25
-   * Always uses Tantivy for sparse search - if you don't want Tantivy, use bge-m3 mode
+   * Execute hybrid search using Tantivy (BM25) + Milvus (vectors)
+   * Results are fused using RRF (Reciprocal Rank Fusion)
    */
-  private async searchMixedbreadMode(
+  private async executeHybridSearch(
     store: string,
     query: string,
     pathPrefix?: string,
@@ -172,7 +150,7 @@ export class SearchService {
     denseWeight?: number,
     groupByFile?: boolean,
   ) {
-    // Get embedding from Infinity (via EmbeddingsService)
+    // Get embedding from Infinity
     const queryEmbeddings = await this.embeddings.embed([query]);
     const queryEmbedding = queryEmbeddings[0];
 
@@ -217,58 +195,6 @@ export class SearchService {
         groupByFile,
       },
     );
-  }
-
-  /**
-   * BGE-M3 mode: Uses Milvus hybrid search with both dense and sparse vectors
-   * 
-   * IMPORTANT: This mode requires data to be indexed with BGE-M3 mode.
-   * Use `SEARCH_MODE=bge-m3` when starting the API to index with BGE-M3.
-   * 
-   * Unlike mixedbread mode, this does NOT use Tantivy.
-   * Both dense and sparse search happen in Milvus with RRF fusion.
-   * Content is stored in Milvus for reranking support.
-   */
-  private async searchBgeM3Mode(
-    store: string,
-    query: string,
-    pathPrefix?: string,
-    languages?: string[],
-    _sparseWeight?: number,
-    _denseWeight?: number,
-    _groupByFile?: boolean,
-  ) {
-    // Get both dense and sparse embeddings from BGE-M3
-    const { dense, sparse } = await this.bgeM3.embedBoth([query]);
-    const queryDense = dense[0];
-    const querySparse = convertSparseToMilvusFormat(sparse[0]);
-
-    // Perform hybrid search in Milvus (RRF fusion happens in Milvus)
-    // Content and symbols are returned directly from Milvus
-    const hybridResults = await this.milvus.hybridSearch(
-      store,
-      queryDense,
-      querySparse,
-      this.sparseTopK + this.denseTopK, // Get more results since RRF will filter
-      pathPrefix,
-      languages,
-    );
-
-    // Convert hybrid results to the format expected by the rest of the pipeline
-    return hybridResults.map((result, index) => ({
-      doc_id: result.doc_id,
-      path: result.path,
-      language: result.language,
-      start_line: result.start_line,
-      end_line: result.end_line,
-      content: result.content,
-      symbols: result.symbols,
-      final_score: result.hybrid_score,
-      sparse_score: 0, // RRF doesn't provide individual scores
-      dense_score: 0,
-      sparse_rank: index + 1,
-      dense_rank: index + 1,
-    }));
   }
 
   /**

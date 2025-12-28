@@ -2,7 +2,6 @@ import { Module, Global } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EmbeddingsService } from './embeddings.service';
 import { InfinityService } from './infinity.service';
-import { BgeM3Service } from './bge-m3.service';
 import { MilvusService } from './milvus.service';
 import { TantivyService } from './tantivy.service';
 import { TantivyQueueService } from './tantivy-queue.service';
@@ -22,10 +21,9 @@ import { QueryClassifierService } from './query-classifier.service';
   providers: [
     EmbeddingsService,
     InfinityService,
-    BgeM3Service,
     MilvusService,
     TantivyService,
-    TantivyQueueService, // Dynamic per-store queues (creates Redis connections on-demand)
+    TantivyQueueService,
     ChunkerService,
     HybridRankerService,
     RerankerService,
@@ -39,7 +37,6 @@ import { QueryClassifierService } from './query-classifier.service';
   exports: [
     EmbeddingsService,
     InfinityService,
-    BgeM3Service,
     MilvusService,
     TantivyService,
     TantivyQueueService,

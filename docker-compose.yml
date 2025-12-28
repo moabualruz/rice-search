@@ -102,9 +102,15 @@ services:
       QUERYCOORD_ENABLE_ACTIVE_STANDBY: "false"
       # Memory management
       QUERYNODE_CACHE_ENABLED: "true"
-      QUERYNODE_CACHE_SIZE: "1073741824"       # 1GB query cache
+      QUERYNODE_CACHE_SIZE: "2147483648"       # 2GB query cache
       # Connection handling
       PROXY_MAX_CONNECTIONS: "65535"           # Max client connections
+      # gRPC message size limits (fixes RESOURCE_EXHAUSTED on large batches)
+      GRPC_SERVERMAXTOKENPERSET: "1073741824"  # 1GB max tokens
+      PROXY_MAXMSGSIZE: "268435456"            # 256MB max message size
+      COMMON_MAXMSGSIZE: "268435456"           # 256MB max message size
+      # Insert buffer tuning
+      DATANODE_FLUSH_INSERT_BUFFER_SIZE: "268435456"  # 256MB insert buffer
     volumes:
       - ./data/milvus:/var/lib/milvus
     ports:
@@ -122,6 +128,12 @@ services:
       minio:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 2G
     networks:
       - rice-network
 
@@ -144,15 +156,10 @@ services:
 
   # ============================================
   # Infinity: Embedding + Reranking Server (CPU)
-  # DEFAULT embedding backend
   # 
   # Models (Dec 2025):
   # - mixedbread-ai/mxbai-embed-large-v1 (1024d embeddings, SOTA quality)
   # - mixedbread-ai/mxbai-rerank-xsmall-v1 (officially supported reranker)
-  #
-  # Usage:
-  # - docker-compose up                    → infinity runs (default)
-  # - docker-compose -f ... -f docker-compose.bge-m3.yml up → bge-m3 instead
   #
   # For GPU, use docker-compose.gpu.yml override
   # ============================================
@@ -185,60 +192,8 @@ services:
       - rice-network
 
   # ============================================
-  # BGE-M3: Alternative embedding service
-  # Supports dense + sparse + ColBERT in one model
-  # Uses persistent storage for models and dependencies
-  #
-  # Usage (mutually exclusive with infinity):
-  #   docker-compose -f docker-compose.yml -f docker-compose.bge-m3.yml up
-  #
-  # This disables infinity and uses BGE-M3 for all embeddings.
-  # BGE-M3 handles both dense AND sparse search (no Tantivy needed).
-  # ============================================
-  bge-m3:
-    container_name: rice-bge-m3
-    build:
-      context: ./docker/bge-m3
-      dockerfile: Dockerfile
-    ports:
-      - "8083:80"
-    volumes:
-      # Pip cache - packages download once, install from cache on restart
-      - ./persistent-data/bge-m3/pip-cache:/root/.cache/pip
-      # HuggingFace cache - models persist across container restarts
-      - ./persistent-data/bge-m3/models:/root/.cache/huggingface
-    environment:
-      - MODEL_NAME=BAAI/bge-m3
-      - DEVICE=cpu
-      - USE_FP16=true
-      - BATCH_SIZE=32
-      - MAX_LENGTH=8192
-      - UVICORN_HOST=0.0.0.0
-      - UVICORN_PORT=80
-      - UVICORN_WORKERS=1
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
-      interval: 30s
-      start_period: 300s  # Increased for initial model download
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
-    profiles:
-      - bge-m3  # Only starts with override file or --profile bge-m3
-    networks:
-      - rice-network
-
-  # ============================================
   # API: Main integration point
   # All clients connect here (8080)
-  #
-  # Embedding Backend Selection:
-  # - EMBEDDING_BACKEND=infinity (default) → uses Infinity/TEI service
-  # - EMBEDDING_BACKEND=bge-m3 → uses BGE-M3 service (requires --profile bge-m3)
-  #
-  # Tantivy (BM25) Toggle:
-  # - ENABLE_TANTIVY=true (default) → hybrid search with BM25
-  # - ENABLE_TANTIVY=false → dense-only search
   # ============================================
   api:
     container_name: rice-api
@@ -257,23 +212,12 @@ services:
       INFINITY_EMBED_MODEL: mixedbread-ai/mxbai-embed-large-v1
       INFINITY_RERANK_MODEL: mixedbread-ai/mxbai-rerank-xsmall-v1
       
-      # BGE-M3 (alternative mode)
-      BGE_M3_URL: http://bge-m3:80
-      
       # Data directories
       DATA_DIR: /data
       TANTIVY_INDEX_DIR: /tantivy
       
       # Model configuration
       EMBEDDING_DIM: "1024"
-      
-      # ========================================
-      # Search Mode
-      # ========================================
-      # SEARCH_MODE: determines the search pipeline
-      # - "mixedbread" (default): Infinity + Tantivy + Milvus
-      # - "bge-m3": BGE-M3 + Milvus (sparse+dense in Milvus, no Tantivy)
-      SEARCH_MODE: ${SEARCH_MODE:-mixedbread}
       
       # Search configuration
       SPARSE_TOPK: "100"

@@ -50,7 +50,15 @@ bun test --filter "Search"                         # Run specific test pattern
 **Config**: YAML config files (`.ricegreprc.yaml`), env vars with `RICEGREP_` prefix  
 **Error Handling**: Custom error classes, proper validation with zod/class-validator  
 **File Organization**: `lib/` for utilities, `commands/` for CLI, `src/` for main code  
-**SVG Files**: Never read SVG files directly (causes critical errors in opencode). Use PNG alternatives or file paths only  
+**SVG Files**: Never read SVG files directly (causes critical errors in opencode). Use PNG alternatives or file paths only
+
+## Architecture Principles
+
+**Quality Over Complexity**: Prioritize search quality even if it means more complex code. Better results justify additional complexity.
+
+**Server-Side Intelligence**: All search/ranking decisions happen on the server (API). ricegrep CLI is a pure client - it forwards user preferences (like `--no-rerank`) to the API but never makes search decisions itself.
+
+**Single Search Pipeline**: Infinity (embeddings + reranking) + Tantivy (BM25) + Milvus (vectors). No mode switching, no alternative backends.  
 
 Run `bun run typecheck` before any significant changes. Never commit without clean diagnostics.
 

@@ -159,13 +159,9 @@ def index_files(
     store: str,
     files: list[dict],
     force: bool = False,
-    mode: str | None = None,
 ) -> dict:
     """Send files to API for indexing."""
     url = f"{api_url}/v1/stores/{store}/index"
-    if mode:
-        url = f"{url}?mode={mode}"
-
     data = json.dumps({"files": files, "force": force}).encode("utf-8")
 
     req = urllib.request.Request(
@@ -235,12 +231,6 @@ def main():
     parser.add_argument(
         "--stats", action="store_true", help="Show indexing statistics and exit"
     )
-    parser.add_argument(
-        "--mode",
-        choices=["mixedbread", "bge-m3"],
-        default=None,
-        help="Embedding mode: mixedbread (Infinity) or bge-m3 (BGE-M3)",
-    )
 
     args = parser.parse_args()
 
@@ -265,8 +255,6 @@ def main():
     print(f"Scanning: {root}")
     print(f"Store: {args.store}")
     print(f"API: {args.api_url}")
-    if args.mode:
-        print(f"Embedding mode: {args.mode}")
     if args.force:
         print(f"Indexing mode: FORCE (re-index all files)")
     else:
@@ -331,9 +319,7 @@ def main():
         )
 
         try:
-            result = index_files(
-                args.api_url, args.store, batch, force=args.force, mode=args.mode
-            )
+            result = index_files(args.api_url, args.store, batch, force=args.force)
             chunks = result.get("chunks_indexed", 0)
             skipped = result.get("skipped_unchanged", 0)
             errors = len(result.get("errors", []))

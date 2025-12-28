@@ -9,30 +9,18 @@ export default () => ({
     port: parseInt(process.env.MILVUS_PORT || '19530', 10),
   },
 
-  // Embedding backend selection
-  // - "infinity" (default): Mixedbread/Infinity embeddings
-  // - "bge-m3": BGE-M3 embeddings (requires --profile bge-m3)
-  embeddingBackend: (process.env.EMBEDDING_BACKEND || 'infinity') as 'infinity' | 'bge-m3',
-
-  // Embeddings configuration
-  // Note: Uses Infinity service URL for embeddings (OpenAI-compatible format)
+  // Embeddings configuration (Infinity service with Mixedbread AI models)
   embeddings: {
     url: process.env.EMBEDDINGS_URL || process.env.INFINITY_URL || 'http://infinity:80',
     dim: parseInt(process.env.EMBEDDING_DIM || '1024', 10),
   },
 
-  // Infinity service (Mixedbread AI models for embedding + reranking)
+  // Infinity service (embedding + reranking)
   infinity: {
     url: process.env.INFINITY_URL || 'http://infinity:80',
     embedModel: process.env.INFINITY_EMBED_MODEL || 'mixedbread-ai/mxbai-embed-large-v1',
     rerankModel: process.env.INFINITY_RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-xsmall-v1',
     timeout: parseInt(process.env.INFINITY_TIMEOUT_MS || '30000', 10),
-  },
-
-  // BGE-M3 service (alternative mode with dense + sparse + ColBERT)
-  bgeM3: {
-    url: process.env.BGE_M3_URL || 'http://bge-m3:80',
-    timeout: parseInt(process.env.BGE_M3_TIMEOUT_MS || '30000', 10),
   },
 
   // Data directories
@@ -41,11 +29,8 @@ export default () => ({
     tantivyDir: process.env.TANTIVY_INDEX_DIR || '/tantivy',
   },
 
-  // Search configuration
-  // Note: Tantivy (BM25) is automatically enabled for mixedbread mode
-  // and disabled for bge-m3 mode (which has its own sparse search)
+  // Search configuration (hybrid: Tantivy BM25 + Milvus vectors)
   search: {
-    mode: (process.env.SEARCH_MODE || 'mixedbread') as 'mixedbread' | 'bge-m3',
     sparseTopK: parseInt(process.env.SPARSE_TOPK || '100', 10),
     denseTopK: parseInt(process.env.DENSE_TOPK || '100', 10),
     finalTopK: parseInt(process.env.FINAL_TOPK || '20', 10),

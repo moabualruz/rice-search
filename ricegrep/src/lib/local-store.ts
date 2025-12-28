@@ -167,7 +167,7 @@ export class LocalStore implements Store {
     storeIds: string[],
     query: string,
     top_k?: number,
-    _search_options?: { rerank?: boolean },
+    search_options?: { rerank?: boolean },
     filters?: SearchFilter
   ): Promise<SearchResponse> {
     // Use first store (local API doesn't support multi-store search yet)
@@ -192,6 +192,7 @@ export class LocalStore implements Store {
           query,
           top_k: top_k || 10,
           include_content: true,
+          enable_reranking: search_options?.rerank ?? true,
           filters: pathPrefix ? { path_prefix: pathPrefix } : undefined,
         }),
       }

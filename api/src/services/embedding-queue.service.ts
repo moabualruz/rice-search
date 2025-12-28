@@ -56,6 +56,7 @@ export class EmbeddingQueueService implements OnModuleDestroy {
   // Process queue continuously
   private processInterval: NodeJS.Timeout | null = null;
   private readonly BATCH_SIZE = 32;
+  private readonly MILVUS_BATCH_SIZE = 3000; // Max chunks per Milvus upsert
 
   constructor(
     private embeddings: EmbeddingsService,
@@ -168,16 +169,22 @@ export class EmbeddingQueueService implements OnModuleDestroy {
       const texts = job.chunks.map((c) => c.text);
       const embeddings = await this.embeddings.embedBatch(texts, this.BATCH_SIZE);
       
-      // Store in Milvus
-      await this.milvus.upsert(job.store, {
-        doc_ids: job.chunks.map((c) => c.doc_id),
-        embeddings,
-        paths: job.chunks.map((c) => c.path),
-        languages: job.chunks.map((c) => c.language),
-        chunk_ids: job.chunks.map((c) => c.chunk_index),
-        start_lines: job.chunks.map((c) => c.start_line),
-        end_lines: job.chunks.map((c) => c.end_line),
-      });
+      // Store in Milvus in batches to avoid RESOURCE_EXHAUSTED
+      for (let i = 0; i < job.chunks.length; i += this.MILVUS_BATCH_SIZE) {
+        const batchEnd = Math.min(i + this.MILVUS_BATCH_SIZE, job.chunks.length);
+        const batchChunks = job.chunks.slice(i, batchEnd);
+        const batchEmbeddings = embeddings.slice(i, batchEnd);
+
+        await this.milvus.upsert(job.store, {
+          doc_ids: batchChunks.map((c) => c.doc_id),
+          embeddings: batchEmbeddings,
+          paths: batchChunks.map((c) => c.path),
+          languages: batchChunks.map((c) => c.language),
+          chunk_ids: batchChunks.map((c) => c.chunk_index),
+          start_lines: batchChunks.map((c) => c.start_line),
+          end_lines: batchChunks.map((c) => c.end_line),
+        });
+      }
       
       const duration = Date.now() - startTime;
       this.logger.log(`Job ${job.id} completed: ${job.chunks.length} chunks in ${duration}ms`);
