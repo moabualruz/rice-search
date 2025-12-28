@@ -12,6 +12,7 @@ import { ServicesModule } from './services/services.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
 import { RankingModule } from './ranking/ranking.module';
 import { PostrankModule } from './postrank/postrank.module';
+import { LifecycleModule } from './lifecycle/lifecycle.module';
 
 @Module({
   imports: [
@@ -37,6 +38,9 @@ import { PostrankModule } from './postrank/postrank.module';
 
     // Post-rank processing (dedup, diversity, aggregation)
     PostrankModule,
+
+    // Store lifecycle (versioning, A/B testing, migrations)
+    LifecycleModule,
 
     // Feature modules
     StoresModule,

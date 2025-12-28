@@ -13,6 +13,7 @@ import { StrategySelectorService, RetrievalConfig } from "../intelligence/strate
 import { MultiPassRerankerService, RerankStats } from "../ranking/multi-pass-reranker.service";
 import { PostrankPipelineService, PostrankStats } from "../postrank/postrank-pipeline.service";
 import { AggregatedResult } from "../postrank/aggregation.service";
+import { StoreVersioningService } from "../lifecycle/store-versioning.service";
 import { SearchRequestDto } from "./dto/search-request.dto";
 
 /**
@@ -40,8 +41,9 @@ export class SearchService {
     private strategySelector: StrategySelectorService,
     private multiPassReranker: MultiPassRerankerService,
     private postrankPipeline: PostrankPipelineService,
+    private storeVersioning: StoreVersioningService,
   ) {
-    this.logger.log("Search service initialized (Intelligence Pipeline v2 + PostRank)");
+    this.logger.log("Search service initialized (Intelligence Pipeline v2 + PostRank + Lifecycle)");
   }
 
   async search(store: string, request: SearchRequestDto) {
@@ -363,6 +365,135 @@ export class SearchService {
       denseResults: denseResultsRaw,
       sparseTime,
       denseTime,
+    };
+  }
+
+  /**
+   * Search a specific version of a store (for A/B testing)
+   * Uses versioned collection/index names instead of active version
+   */
+  async searchVersion(
+    storeName: string,
+    versionId: string,
+    request: SearchRequestDto,
+  ): Promise<HybridSearchResult[]> {
+    const startTime = Date.now();
+    const { query, top_k = 20, filters } = request;
+
+    // Get versioned names
+    const versionNames = this.storeVersioning.getVersionNames(storeName, versionId);
+
+    // Normalize query
+    const normalized = this.queryNormalizer.normalize(query);
+
+    // Normalize path filter
+    const normalizedPathPrefix = filters?.path_prefix
+      ? normalizePath(filters.path_prefix)
+      : undefined;
+
+    // Classify intent and select strategy
+    const intent = this.intentClassifier.classify(normalized.normalized);
+    let config = this.strategySelector.selectStrategy(intent);
+    config = this.strategySelector.adjustCandidates(config, intent);
+
+    // Execute search using versioned names
+    const { fusedResults } = await this.executeHybridSearchWithVersionedNames(
+      versionNames.tantivyIndex,
+      versionNames.milvusCollection,
+      normalized.normalized,
+      config,
+      normalizedPathPrefix,
+      filters?.languages,
+    );
+
+    // Rerank if enabled
+    let rankedResults = fusedResults;
+    if (request.enable_reranking !== false && fusedResults.length > 0) {
+      const rerankResult = await this.multiPassReranker.rerank(
+        normalized.normalized,
+        fusedResults,
+        config,
+      );
+      rankedResults = rerankResult.results;
+    }
+
+    this.logger.debug(
+      `searchVersion: ${storeName}@${versionId} "${query.substring(0, 30)}..." ` +
+      `→ ${rankedResults.length} results in ${Date.now() - startTime}ms`
+    );
+
+    return rankedResults.slice(0, top_k);
+  }
+
+  /**
+   * Execute hybrid search using explicit versioned names
+   */
+  private async executeHybridSearchWithVersionedNames(
+    tantivyIndex: string,
+    milvusCollection: string,
+    query: string,
+    config: RetrievalConfig,
+    pathPrefix?: string,
+    languages?: string[],
+  ): Promise<{
+    fusedResults: HybridSearchResult[];
+    sparseResults: TantivySearchResult[];
+    denseResults: MilvusSearchResult[];
+  }> {
+    // Get embedding (skip if sparse-only)
+    let queryEmbedding: number[] | undefined;
+    if (config.denseTopK > 0) {
+      const queryEmbeddings = await this.embeddings.embed([query]);
+      queryEmbedding = queryEmbeddings[0];
+    }
+
+    // Execute parallel search
+    const [sparseResultsRaw, denseResultsRaw] = await Promise.all([
+      config.sparseTopK > 0
+        ? this.tantivy.search(
+            tantivyIndex,
+            query,
+            config.sparseTopK,
+            pathPrefix,
+            languages?.[0],
+          )
+        : Promise.resolve([]),
+      config.denseTopK > 0 && queryEmbedding
+        ? this.milvus.search(
+            milvusCollection,
+            queryEmbedding,
+            config.denseTopK,
+            pathPrefix,
+            languages,
+          )
+        : Promise.resolve([]),
+    ]);
+
+    // Build content map
+    const contentMap = new Map<string, { content: string; symbols: string[] }>();
+    for (const result of sparseResultsRaw) {
+      contentMap.set(result.doc_id, {
+        content: result.content,
+        symbols: result.symbols,
+      });
+    }
+
+    // Fuse results
+    const fusedResults = this.hybridRanker.fuseResults(
+      sparseResultsRaw,
+      denseResultsRaw,
+      contentMap,
+      query,
+      {
+        sparseWeight: config.sparseWeight,
+        denseWeight: config.denseWeight,
+      },
+    );
+
+    return {
+      fusedResults,
+      sparseResults: sparseResultsRaw,
+      denseResults: denseResultsRaw,
     };
   }
 }

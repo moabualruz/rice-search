@@ -5,9 +5,10 @@ import { ServicesModule } from '../services/services.module';
 import { IntelligenceModule } from '../intelligence/intelligence.module';
 import { RankingModule } from '../ranking/ranking.module';
 import { PostrankModule } from '../postrank/postrank.module';
+import { LifecycleModule } from '../lifecycle/lifecycle.module';
 
 @Module({
-  imports: [ServicesModule, IntelligenceModule, RankingModule, PostrankModule],
+  imports: [ServicesModule, IntelligenceModule, RankingModule, PostrankModule, LifecycleModule],
   controllers: [SearchController],
   providers: [SearchService],
   exports: [SearchService],
