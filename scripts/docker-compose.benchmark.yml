@@ -1,13 +1,26 @@
-# Rice Search Platform - Docker Compose
-# Cross-platform: Windows+WSL2, Linux, macOS (CPU)
-# All data persisted to ./data via bind mounts
+# Rice Search Benchmark - Standalone Docker Compose
+# This is a STANDALONE compose file - no base compose dependency
+# Uses named volumes for data (cleaned on teardown)
+# Uses bind mounts for model caches (persist across builds)
+#
+# Usage:
+#   docker compose -f scripts/docker-compose.benchmark.yml --profile bge-m3 up -d
+#   docker compose -f scripts/docker-compose.benchmark.yml down -v
+
+volumes:
+  bench-etcd:
+  bench-redis:
+  bench-minio:
+  bench-milvus:
+  bench-api-data:
+  bench-tantivy:
 
 services:
   # ============================================
   # Infrastructure: etcd (Milvus metadata store)
   # ============================================
   etcd:
-    container_name: rice-etcd
+    container_name: bench-etcd
     image: quay.io/coreos/etcd:v3.5.17
     environment:
       - ETCD_AUTO_COMPACTION_MODE=revision
@@ -15,7 +28,7 @@ services:
       - ETCD_QUOTA_BACKEND_BYTES=4294967296
       - ETCD_SNAPSHOT_COUNT=50000
     volumes:
-      - ./data/etcd:/etcd
+      - bench-etcd:/etcd
     command: >
       etcd
       --data-dir=/etcd
@@ -31,19 +44,17 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - rice-network
+      - bench-network
 
   # ============================================
   # Infrastructure: Redis (Job queue for BullMQ)
   # ============================================
   redis:
-    container_name: rice-redis
+    container_name: bench-redis
     image: redis:7-alpine
     command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
     volumes:
-      - ./data/redis:/data
-    ports:
-      - "6379:6379"
+      - bench-redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -51,23 +62,20 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - rice-network
+      - bench-network
 
   # ============================================
   # Infrastructure: MinIO (Milvus object storage)
   # ============================================
   minio:
-    container_name: rice-minio
-    image: minio/minio:RELEASE.2024-12-18T13-15-44Z
+    container_name: bench-minio
+    image: minio/minio:RELEASE.2024-12-18T13-15-00Z
     environment:
       MINIO_ACCESS_KEY: minioadmin
       MINIO_SECRET_KEY: minioadmin
     volumes:
-      - ./data/minio:/minio_data
+      - bench-minio:/minio_data
     command: minio server /minio_data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
       interval: 30s
@@ -75,13 +83,13 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - rice-network
+      - bench-network
 
   # ============================================
   # Milvus: Vector database (standalone mode)
   # ============================================
   milvus:
-    container_name: rice-milvus
+    container_name: bench-milvus
     image: milvusdb/milvus:v2.4.15
     command: ["milvus", "run", "standalone"]
     security_opt:
@@ -93,23 +101,16 @@ services:
       MINIO_SECRET_ACCESS_KEY: minioadmin
       MINIO_USE_SSL: "false"
       MINIO_REGION: us-east-1
-      # Performance tuning
-      QUERY_NODE_MAX_CONCURRENT: "256"         # Max concurrent queries
-      PROXY_MAX_TASK_NUM: "1024"               # Max queued tasks
-      COMMON_GRACEFUL_TIME: "5000"             # Faster shutdown
+      QUERY_NODE_MAX_CONCURRENT: "256"
+      PROXY_MAX_TASK_NUM: "1024"
+      COMMON_GRACEFUL_TIME: "5000"
       COMMON_GRACEFUL_STOP_TIMEOUT: "30"
-      # Query cache - cache search results
       QUERYCOORD_ENABLE_ACTIVE_STANDBY: "false"
-      # Memory management
       QUERYNODE_CACHE_ENABLED: "true"
-      QUERYNODE_CACHE_SIZE: "1073741824"       # 1GB query cache
-      # Connection handling
-      PROXY_MAX_CONNECTIONS: "65535"           # Max client connections
+      QUERYNODE_CACHE_SIZE: "1073741824"
+      PROXY_MAX_CONNECTIONS: "65535"
     volumes:
-      - ./data/milvus:/var/lib/milvus
-    ports:
-      - "19530:19530"
-      - "9091:9091"
+      - bench-milvus:/var/lib/milvus
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
       interval: 30s
@@ -123,50 +124,26 @@ services:
         condition: service_healthy
     restart: unless-stopped
     networks:
-      - rice-network
-
-  # ============================================
-  # Attu: Milvus admin UI
-  # ============================================
-  attu:
-    container_name: rice-attu
-    image: zilliz/attu:v2.4
-    environment:
-      MILVUS_URL: milvus:19530
-    ports:
-      - "8000:3000"
-    depends_on:
-      milvus:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - rice-network
+      - bench-network
 
   # ============================================
   # Infinity: Embedding + Reranking Server (CPU)
-  # Latest stable versions (Dec 2025):
-  # - mixedbread-ai/mxbai-embed-large-v1 (1024d embeddings, SOTA quality)
-  # - mixedbread-ai/mxbai-rerank-xsmall-v1 (officially supported reranker)
-  # For GPU, use docker-compose.gpu.yml override
+  # Model cache persists to ../data/ for faster rebuilds
   # ============================================
   infinity:
-    container_name: rice-infinity
+    container_name: bench-infinity
     image: michaelf34/infinity:latest-cpu
     command: >
       v2
       --model-id mixedbread-ai/mxbai-embed-large-v1
       --model-id mixedbread-ai/mxbai-rerank-xsmall-v1
-      --engine torch
       --port 80
       --batch-size 32
     volumes:
-      - ./data/infinity-cache:/app/.cache
-    ports:
-      - "8081:80"
+      - ../data/infinity-cache:/app/.cache
     environment:
       - HF_HOME=/app/.cache
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
-      - INFINITY_ENGINE=torch
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
@@ -175,115 +152,77 @@ services:
       retries: 5
     restart: unless-stopped
     networks:
-      - rice-network
+      - bench-network
 
   # ============================================
-  # BGE-M3: Alternative embedding service (Phase 2)
-  # Supports dense + sparse + ColBERT in one model
-  # Uses persistent storage for models and dependencies
-  # 
-  # IMPORTANT: Before first run, copy requirements.txt:
-  #   mkdir -p ./persistent-data/bge-m3
-  #   cp ./docker/bge-m3/requirements.txt ./persistent-data/bge-m3/
+  # BGE-M3: Alternative embedding service
+  # Uses image built by main docker-compose.yml
+  # Model cache persists to ../data/ for faster rebuilds
   # ============================================
   bge-m3:
-    container_name: rice-bge-m3
-    build:
-      context: ./docker/bge-m3
-      dockerfile: Dockerfile
+    container_name: bench-bge-m3
+    image: rice-search-bge-m3:latest
     ports:
       - "8083:80"
     volumes:
-      # Pip cache - packages download once, install from cache on restart
-      - ./persistent-data/bge-m3/pip-cache:/root/.cache/pip
-      # HuggingFace cache - models persist across container restarts
-      - ./persistent-data/bge-m3/models:/root/.cache/huggingface
+      - ../data/bge-m3-cache:/app/.cache
     environment:
       - MODEL_NAME=BAAI/bge-m3
       - DEVICE=cpu
       - USE_FP16=true
       - BATCH_SIZE=32
       - MAX_LENGTH=8192
-      - UVICORN_HOST=0.0.0.0
-      - UVICORN_PORT=80
-      - UVICORN_WORKERS=1
+      - HF_HOME=/app/.cache
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:80/health"]
       interval: 30s
-      start_period: 300s  # Increased for initial model download
+      start_period: 180s
       timeout: 10s
       retries: 5
     restart: unless-stopped
     profiles:
-      - bge-m3  # Only start with: docker-compose --profile bge-m3 up
+      - bge-m3
     networks:
-      - rice-network
+      - bench-network
 
   # ============================================
   # API: Main integration point
-  # All clients connect here (8080)
+  # Port configurable via API_PORT env var (default 8085)
+  # Uses image built by main docker-compose.yml
   # ============================================
   api:
-    container_name: rice-api
-    build:
-      context: ./api
-      dockerfile: Dockerfile
+    container_name: bench-api
+    image: rice-search-api:latest
     environment:
-      # Service connections
       MILVUS_HOST: milvus
       MILVUS_PORT: "19530"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      
-      # Infinity (embedding + reranking)
       INFINITY_URL: http://infinity:80
       INFINITY_EMBED_MODEL: mixedbread-ai/mxbai-embed-large-v1
       INFINITY_RERANK_MODEL: mixedbread-ai/mxbai-rerank-xsmall-v1
-      
-      # BGE-M3 (alternative mode)
       BGE_M3_URL: http://bge-m3:80
-      
-      # Data directories
       DATA_DIR: /data
       TANTIVY_INDEX_DIR: /tantivy
-      
-      # Model configuration
       EMBEDDING_DIM: "1024"
-      
-      # Search configuration
       SEARCH_MODE: mixedbread
       SPARSE_TOPK: "100"
       DENSE_TOPK: "100"
       FINAL_TOPK: "20"
       RRF_K: "60"
-      
-      # Reranking configuration
-      # Neural reranking improves NL query results by 20-35%
-      # Uses mixedbread-ai/mxbai-rerank-xsmall-v1 (Mixedbread mode) or ColBERT (BGE-M3 mode)
       RERANK_ENABLED: "true"
       RERANK_CANDIDATES: "30"
       RERANK_TIMEOUT_MS: "100"
-      
-      # Auth (disabled by default)
       AUTH_MODE: none
-      
-      # Logging
       LOG_LEVEL: INFO
-      
-      # Single process mode - Bun async I/O handles concurrency well
-      # Clustering disabled to simplify Tantivy queue serialization
       CLUSTER_MODE: "false"
       NODE_ENV: production
-      
-      # Bun runtime tuning
       BUN_CONFIG_MAX_HTTP_CONNECTIONS: "1024"
     volumes:
-      - ./data/api:/data
-      - ./data/tantivy:/tantivy
-      # Mount repos for server-side indexing (optional)
-      - ${REPOS_PATH:-./repos}:/repos:ro
+      - bench-api-data:/data
+      - bench-tantivy:/tantivy
     ports:
-      - "8080:8080"
+      - "${API_PORT:-8085}:8080"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
       interval: 15s
@@ -304,30 +243,9 @@ services:
         reservations:
           memory: 1G
     networks:
-      - rice-network
-
-  # ============================================
-  # Web UI: Simple search interface
-  # Commented out for initial testing - can access API directly
-  # ============================================
-  web-ui:
-    container_name: rice-web-ui
-    build:
-      context: ./web-ui
-      dockerfile: Dockerfile
-    environment:
-      # For server-side proxying within Docker network
-      API_URL: http://api:8080
-    ports:
-      - "3000:3000"
-    depends_on:
-      api:
-          condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - rice-network
+      - bench-network
 
 networks:
-  rice-network:
+  bench-network:
     driver: bridge
-    name: rice-search
+    name: rice-benchmark

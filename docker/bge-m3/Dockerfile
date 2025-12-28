@@ -5,26 +5,22 @@ WORKDIR /app
 # Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-RUN pip install --no-cache-dir \
-    fastapi==0.109.0 \
-    uvicorn[standard]==0.27.0 \
-    FlagEmbedding==1.2.10 \
-    torch==2.1.2 \
-    numpy \
-    pydantic==2.5.3
+# Upgrade pip
+RUN pip install --upgrade pip
 
 # Copy application files
-COPY main.py .
+COPY requirements.txt main.py entrypoint.sh ./
+RUN chmod +x entrypoint.sh
 
 # Expose port
 EXPOSE 80
 
 # Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-    CMD python -c "import requests; requests.get('http://localhost:80/health').raise_for_status()"
+HEALTHCHECK --interval=30s --timeout=10s --start-period=180s --retries=3 \
+    CMD curl -f http://localhost:80/health || exit 1
 
-# Run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "80", "--workers", "1"]
+# Install deps at runtime (uses mounted pip cache), then start server
+ENTRYPOINT ["/app/entrypoint.sh"]

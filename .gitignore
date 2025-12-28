@@ -3,6 +3,10 @@
 # Data directories (bind mounts)
 data/
 !data/.gitkeep
+persistent-data/bge-m3/
+!persistent-data/bge-m3/.gitkeep
+!persistent-data/bge-m3/requirements.txt
+
 
 # Python
 __pycache__/
@@ -68,5 +72,6 @@ jspm_packages/
 **/jspm_packages/
 
 # Benchmark data
-benchmark_data/*
-!benchmark_data/docker-compose.benchmark.yml
+benchmark_data/
+.rice-benchmark-data/
+benchmark_results/

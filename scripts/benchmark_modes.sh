@@ -23,7 +23,6 @@ set -e
 # ============================================
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-BENCHMARK_DATA_DIR="$PROJECT_DIR/benchmark_data"
 RESULTS_DIR="$PROJECT_DIR/benchmark_results"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 REPORT_FILE="$RESULTS_DIR/benchmark_report_${TIMESTAMP}.md"
@@ -62,6 +61,7 @@ QUERIES=(
 CPU_ONLY=false
 GPU_ONLY=false
 SKIP_INDEX=false
+SKIP_BUILD=false
 
 while [[ $# -gt 0 ]]; do
   case $1 in
@@ -81,6 +81,10 @@ while [[ $# -gt 0 ]]; do
       SKIP_INDEX=true
       shift
       ;;
+    --skip-build)
+      SKIP_BUILD=true
+      shift
+      ;;
     --help|-h)
       echo "Usage: $0 [OPTIONS]"
       echo ""
@@ -89,6 +93,7 @@ while [[ $# -gt 0 ]]; do
       echo "  --gpu-only      Run GPU benchmarks only"
       echo "  --path DIR      Directory to index (default: project root)"
       echo "  --skip-index    Skip indexing, use existing data"
+      echo "  --skip-build    Skip image building, use existing images"
       echo ""
       exit 0
       ;;
@@ -160,46 +165,41 @@ check_gpu_available() {
 # ============================================
 # Docker Compose Management
 # ============================================
-create_benchmark_compose() {
-  local gpu_mode=$1
-  local compose_file="$BENCHMARK_DATA_DIR/docker-compose.benchmark.yml"
+# Using standalone compose files in scripts/ directory:
+# - docker-compose.benchmark.yml (CPU, standalone - no base compose)
+# - docker-compose.benchmark.gpu.yml (GPU override)
+BENCHMARK_COMPOSE="$SCRIPT_DIR/docker-compose.benchmark.yml"
+BENCHMARK_COMPOSE_GPU="$SCRIPT_DIR/docker-compose.benchmark.gpu.yml"
+
+build_images() {
+  log_info "Checking for pre-built images..."
   
-  mkdir -p "$BENCHMARK_DATA_DIR"
+  cd "$PROJECT_DIR"
   
-  cat > "$compose_file" << 'COMPOSE_EOF'
-# Benchmark-specific docker-compose override
-# Uses isolated data folder for benchmarking
-
-services:
-  etcd:
-    volumes:
-      - ./etcd:/etcd
-
-  minio:
-    volumes:
-      - ./minio:/minio_data
-
-  milvus:
-    volumes:
-      - ./milvus:/var/lib/milvus
-
-  infinity:
-    volumes:
-      - ./infinity-cache:/app/.cache
-
-  bge-m3:
-    volumes:
-      - ./bge-m3-cache:/app/.cache
-
-  api:
-    ports:
-      - "8085:8080"
-    volumes:
-      - ./api:/data
-      - ./tantivy:/tantivy
-COMPOSE_EOF
+  # Check if API image exists
+  if docker images rice-search-api:latest -q | grep -q .; then
+    log_pass "API image already exists (rice-search-api:latest)"
+  else
+    log_info "API image not found, building..."
+    if docker compose build api; then
+      log_pass "API image built"
+    else
+      log_fail "API image build failed - benchmark will fail"
+      return 1
+    fi
+  fi
   
-  echo "$compose_file"
+  # Check if BGE-M3 image exists
+  if docker images rice-search-bge-m3:latest -q | grep -q .; then
+    log_pass "BGE-M3 image already exists (rice-search-bge-m3:latest)"
+  else
+    log_info "BGE-M3 image not found, building..."
+    if docker compose --profile bge-m3 build bge-m3; then
+      log_pass "BGE-M3 image built"
+    else
+      log_warn "BGE-M3 image build failed - bge-m3 benchmarks may fail"
+    fi
+  fi
 }
 
 start_services() {
@@ -208,13 +208,12 @@ start_services() {
   
   log_info "Starting services in $mode mode for $embed_mode..."
   
-  cd "$BENCHMARK_DATA_DIR"
-  
-  # Build compose command
-  local compose_cmd="docker compose -f $PROJECT_DIR/docker-compose.yml -f docker-compose.benchmark.yml"
+  # Build compose command using standalone benchmark compose
+  # This avoids WSL2 bind mount issues by not using base compose
+  local compose_cmd="docker compose -f $BENCHMARK_COMPOSE"
   
   if [ "$mode" = "gpu" ]; then
-    compose_cmd="$compose_cmd -f $PROJECT_DIR/docker-compose.gpu.yml"
+    compose_cmd="$compose_cmd -f $BENCHMARK_COMPOSE_GPU"
   fi
   
   # Add bge-m3 profile if needed
@@ -222,30 +221,37 @@ start_services() {
     compose_cmd="$compose_cmd --profile bge-m3"
   fi
   
+  # Export API_PORT for compose file
+  export API_PORT
+  
   # Stop any existing containers
   $compose_cmd down --remove-orphans 2>/dev/null || true
   
-  # Start services
+  # Start services (no --build, images should be pre-built)
   log_info "Running: $compose_cmd up -d"
   $compose_cmd up -d
   
   # Wait for services to be healthy
   wait_for_services "$embed_mode"
-  
-  cd "$PROJECT_DIR"
 }
 
 stop_services() {
   log_info "Stopping benchmark services..."
   
-  if [ -d "$BENCHMARK_DATA_DIR" ]; then
-    cd "$BENCHMARK_DATA_DIR"
-    
-    # Try to stop with all possible profiles
-    docker compose -f "$PROJECT_DIR/docker-compose.yml" -f docker-compose.benchmark.yml --profile bge-m3 down --remove-orphans 2>/dev/null || true
-    
-    cd "$PROJECT_DIR"
-  fi
+  # Stop using standalone benchmark compose (with all profiles)
+  docker compose -f "$BENCHMARK_COMPOSE" --profile bge-m3 down --remove-orphans --volumes 2>/dev/null || true
+  
+  # Also try with GPU override in case it was used
+  docker compose -f "$BENCHMARK_COMPOSE" -f "$BENCHMARK_COMPOSE_GPU" --profile bge-m3 down --remove-orphans --volumes 2>/dev/null || true
+  
+  # Clean up any dangling containers with bench- prefix
+  docker ps -a --filter "name=bench-" -q | xargs -r docker rm -f 2>/dev/null || true
+  
+  # Clean up the benchmark network if it exists
+  docker network rm rice-benchmark 2>/dev/null || true
+  
+  # Clean up benchmark named volumes (data only, cache dirs are bind mounts)
+  docker volume rm bench-etcd bench-redis bench-minio bench-milvus bench-api-data bench-tantivy 2>/dev/null || true
 }
 
 wait_for_services() {
@@ -292,20 +298,8 @@ wait_for_services() {
 cleanup_data() {
   log_info "Cleaning up benchmark data..."
   
-  # Stop services first
+  # Stop services first (this also removes named volumes)
   stop_services
-  
-  # Remove data directories (keep compose file and caches)
-  if [ -d "$BENCHMARK_DATA_DIR" ]; then
-    rm -rf "$BENCHMARK_DATA_DIR/etcd" 2>/dev/null || true
-    rm -rf "$BENCHMARK_DATA_DIR/minio" 2>/dev/null || true
-    rm -rf "$BENCHMARK_DATA_DIR/milvus" 2>/dev/null || true
-    rm -rf "$BENCHMARK_DATA_DIR/api" 2>/dev/null || true
-    rm -rf "$BENCHMARK_DATA_DIR/tantivy" 2>/dev/null || true
-    # Keep cache folders for faster re-runs
-    # rm -rf "$BENCHMARK_DATA_DIR/infinity-cache" 2>/dev/null || true
-    # rm -rf "$BENCHMARK_DATA_DIR/bge-m3-cache" 2>/dev/null || true
-  fi
   
   log_pass "Benchmark data cleaned"
 }
@@ -486,13 +480,10 @@ run_benchmark_for_mode() {
   
   log_header "Benchmark: $hw_mode + $embed_mode"
   
-  # Clean up previous data
+  # Clean up previous data (stops services and removes volumes)
   cleanup_data
   
-  # Create compose file
-  create_benchmark_compose "$hw_mode"
-  
-  # Start services
+  # Start services (uses standalone compose, no base compose)
   if ! start_services "$hw_mode" "$embed_mode"; then
     log_fail "Failed to start services for $hw_mode + $embed_mode"
     stop_services
@@ -529,6 +520,10 @@ main() {
   # Prerequisites
   check_prerequisites
   
+  # Initial cleanup - stop any existing benchmark services
+  log_info "Initial cleanup..."
+  stop_services
+  
   # Check GPU availability
   local has_gpu=false
   if check_gpu_available; then
@@ -540,6 +535,14 @@ main() {
   
   # Create results directory
   mkdir -p "$RESULTS_DIR"
+  
+  # ========== Pre-build Images ==========
+  if [ "$SKIP_BUILD" = false ]; then
+    log_header "Building Images"
+    build_images
+  else
+    log_info "Skipping image build (--skip-build)"
+  fi
   
   # ========== CPU Benchmarks ==========
   if [ "$GPU_ONLY" = false ]; then
@@ -568,7 +571,6 @@ main() {
   # ========== Final Cleanup ==========
   log_header "Cleanup"
   cleanup_data
-  rm -rf "$BENCHMARK_DATA_DIR" 2>/dev/null || true
   log_pass "Benchmark data cleaned up"
   
   # ========== Generate Report ==========

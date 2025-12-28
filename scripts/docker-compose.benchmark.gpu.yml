@@ -1,16 +1,5 @@
-# GPU Override for Rice Search Platform
-# Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
-#
-# Requirements:
-#   - NVIDIA GPU with CUDA support
-#   - nvidia-container-toolkit installed
-#   - Docker configured with nvidia runtime
-#
-# GPU Memory Requirements (approximate):
-#   - Infinity (embeddings + reranking): ~4-6GB VRAM
-#   - BGE-M3 (if using): ~4-6GB VRAM
-#   - Milvus: ~2-4GB VRAM depending on index size
-#   - Total recommended: 8GB+ VRAM
+# Rice Search Benchmark - GPU Override
+# Use with: docker compose -f scripts/docker-compose.benchmark.yml -f scripts/docker-compose.benchmark.gpu.yml up -d
 
 services:
   # ============================================
@@ -45,27 +34,17 @@ services:
               capabilities: [gpu]
 
   # ============================================
-  # Infinity with GPU acceleration
-  # Latest stable versions (Dec 2025):
-  # - mixedbread-ai/mxbai-embed-large-v1 (1024d embeddings, SOTA quality)
-  # - mixedbread-ai/mxbai-rerank-xsmall-v1 (officially supported reranker)
-  # ~10x faster embedding generation with GPU
+  # Infinity: GPU-accelerated embedding + reranking
   # ============================================
   infinity:
+    container_name: bench-infinity-gpu
     image: michaelf34/infinity:latest
     command: >
       v2
       --model-id mixedbread-ai/mxbai-embed-large-v1
       --model-id mixedbread-ai/mxbai-rerank-xsmall-v1
-      --engine torch
       --port 80
       --batch-size 64
-      --device cuda
-    environment:
-      - HF_HOME=/app/.cache
-      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
-      - CUDA_VISIBLE_DEVICES=0
-      - INFINITY_ENGINE=torch
     deploy:
       resources:
         reservations:
@@ -75,14 +54,13 @@ services:
               capabilities: [gpu]
 
   # ============================================
-  # BGE-M3 with GPU acceleration (Phase 2)
-  # Dense + Sparse + ColBERT in one model
+  # BGE-M3: GPU-accelerated embeddings
   # ============================================
   bge-m3:
+    container_name: bench-bge-m3-gpu
     environment:
       - DEVICE=cuda
       - USE_FP16=true
-      - CUDA_VISIBLE_DEVICES=0
     deploy:
       resources:
         reservations:

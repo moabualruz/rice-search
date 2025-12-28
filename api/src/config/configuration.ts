@@ -20,7 +20,7 @@ export default () => ({
   infinity: {
     url: process.env.INFINITY_URL || 'http://infinity:80',
     embedModel: process.env.INFINITY_EMBED_MODEL || 'mixedbread-ai/mxbai-embed-large-v1',
-    rerankModel: process.env.INFINITY_RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-base-v2',
+    rerankModel: process.env.INFINITY_RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-xsmall-v1',
     timeout: parseInt(process.env.INFINITY_TIMEOUT_MS || '30000', 10),
   },
 
@@ -75,7 +75,7 @@ export default () => ({
     enabled: process.env.RERANK_ENABLED !== 'false', // Default: true
     timeoutMs: parseInt(process.env.RERANK_TIMEOUT_MS || '100', 10),
     candidates: parseInt(process.env.RERANK_CANDIDATES || '30', 10),
-    model: process.env.RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-base-v2',
+    model: process.env.RERANK_MODEL || 'mixedbread-ai/mxbai-rerank-xsmall-v1',
   },
 });
 
