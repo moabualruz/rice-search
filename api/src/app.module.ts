@@ -11,6 +11,7 @@ import { McpModule } from './mcp/mcp.module';
 import { ServicesModule } from './services/services.module';
 import { IntelligenceModule } from './intelligence/intelligence.module';
 import { RankingModule } from './ranking/ranking.module';
+import { PostrankModule } from './postrank/postrank.module';
 
 @Module({
   imports: [
@@ -33,6 +34,9 @@ import { RankingModule } from './ranking/ranking.module';
 
     // Ranking (multi-pass reranking)
     RankingModule,
+
+    // Post-rank processing (dedup, diversity, aggregation)
+    PostrankModule,
 
     // Feature modules
     StoresModule,

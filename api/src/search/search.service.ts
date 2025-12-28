@@ -8,9 +8,11 @@ import { HybridRankerService, HybridSearchResult } from "../services/hybrid-rank
 import { StoreManagerService } from "../services/store-manager.service";
 import { QueryNormalizerService } from "../services/query-normalizer.service";
 import { TelemetryService, SearchTelemetryRecord } from "../services/telemetry.service";
-import { IntentClassifierService, IntentClassification } from "../intelligence/intent-classifier.service";
+import { IntentClassifierService } from "../intelligence/intent-classifier.service";
 import { StrategySelectorService, RetrievalConfig } from "../intelligence/strategy-selector.service";
 import { MultiPassRerankerService, RerankStats } from "../ranking/multi-pass-reranker.service";
+import { PostrankPipelineService, PostrankStats } from "../postrank/postrank-pipeline.service";
+import { AggregatedResult } from "../postrank/aggregation.service";
 import { SearchRequestDto } from "./dto/search-request.dto";
 
 /**
@@ -37,8 +39,9 @@ export class SearchService {
     private intentClassifier: IntentClassifierService,
     private strategySelector: StrategySelectorService,
     private multiPassReranker: MultiPassRerankerService,
+    private postrankPipeline: PostrankPipelineService,
   ) {
-    this.logger.log("Search service initialized (Intelligence Pipeline v1)");
+    this.logger.log("Search service initialized (Intelligence Pipeline v2 + PostRank)");
   }
 
   async search(store: string, request: SearchRequestDto) {
@@ -104,7 +107,7 @@ export class SearchService {
     const fusionStats = this.hybridRanker.computeFusionStats(fusedResults);
 
     // 7. Multi-pass rerank (Phase 1 - Task 1.4, 1.5)
-    let rankedResults = fusedResults;
+    let rankedResults: HybridSearchResult[] = fusedResults;
     if (request.enable_reranking !== false && fusedResults.length > 0) {
       const rerankResult = await this.multiPassReranker.rerank(
         normalized.normalized,
@@ -115,8 +118,40 @@ export class SearchService {
       rerankStats = rerankResult.stats;
     }
 
+    // 8. Post-rank processing (Phase 2 - dedup, diversity, aggregation)
+    let postrankStats: PostrankStats | undefined;
+    let processedResults: AggregatedResult[] = rankedResults;
+
+    // Only run postrank if we have results and at least one feature is enabled
+    const shouldRunPostrank = rankedResults.length > 0 && (
+      request.enable_dedup !== false ||
+      request.enable_diversity !== false ||
+      request.group_by_file === true
+    );
+
+    if (shouldRunPostrank) {
+      const postrankResult = await this.postrankPipeline.process(rankedResults, {
+        dedup: request.enable_dedup !== false ? {
+          similarityThreshold: request.dedup_threshold,
+          preserveTop: 3,
+          preferLonger: true,
+        } : { similarityThreshold: 1.0 }, // threshold=1.0 effectively disables
+        diversity: {
+          enabled: request.enable_diversity !== false,
+          lambda: request.diversity_lambda,
+        },
+        aggregation: {
+          groupByFile: request.group_by_file ?? false,
+          maxChunksPerFile: request.max_chunks_per_file ?? 3,
+          aggregateScores: true,
+        },
+      });
+      processedResults = postrankResult.results;
+      postrankStats = postrankResult.stats;
+    }
+
     // Limit to top_k
-    const finalResults = rankedResults.slice(0, top_k);
+    const finalResults = processedResults.slice(0, top_k);
     const totalLatencyMs = Date.now() - startTime;
 
     // Compute score stats for telemetry
@@ -171,7 +206,7 @@ export class SearchService {
 
     return {
       query,
-      results: finalResults.map((r: HybridSearchResult) => ({
+      results: finalResults.map((r: AggregatedResult) => ({
         doc_id: r.doc_id,
         path: r.path,
         language: r.language,
@@ -184,6 +219,13 @@ export class SearchService {
         dense_score: r.dense_score,
         sparse_rank: r.sparse_rank,
         dense_rank: r.dense_rank,
+        // Aggregation info (Phase 2)
+        aggregation: r.aggregation ? {
+          is_representative: r.aggregation.isRepresentative,
+          related_chunks: r.aggregation.relatedChunks,
+          file_score: r.aggregation.fileScore,
+          chunk_rank_in_file: r.aggregation.chunkRankInFile,
+        } : undefined,
       })),
       total: finalResults.length,
       store,
@@ -205,6 +247,25 @@ export class SearchService {
         early_exit: rerankStats?.earlyExitTriggered ?? false,
         early_exit_reason: rerankStats?.earlyExitReason,
       },
+      // Post-rank processing stats (Phase 2)
+      postrank: postrankStats ? {
+        dedup: {
+          input_count: postrankStats.dedupStats.inputCount,
+          output_count: postrankStats.dedupStats.outputCount,
+          removed: postrankStats.dedupStats.removedCount,
+          latency_ms: postrankStats.dedupStats.latencyMs,
+        },
+        diversity: {
+          enabled: request.enable_diversity !== false,
+          avg_diversity: postrankStats.diversityStats.avgDiversity,
+          latency_ms: postrankStats.diversityStats.latencyMs,
+        },
+        aggregation: {
+          unique_files: postrankStats.aggregationStats.uniqueFiles,
+          chunks_dropped: postrankStats.aggregationStats.chunksDropped,
+        },
+        total_latency_ms: postrankStats.totalLatencyMs,
+      } : undefined,
     };
   }
 

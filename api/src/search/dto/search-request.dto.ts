@@ -72,4 +72,37 @@ export class SearchRequestDto {
   @IsOptional()
   @IsBoolean()
   include_content?: boolean = true;
+
+  // Post-rank options (Phase 2)
+
+  @ApiPropertyOptional({ description: 'Enable result diversity (MMR)', default: true })
+  @IsOptional()
+  @IsBoolean()
+  enable_diversity?: boolean;
+
+  @ApiPropertyOptional({ description: 'Diversity lambda (0=diverse, 1=relevant)', default: 0.7 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  diversity_lambda?: number;
+
+  @ApiPropertyOptional({ description: 'Deduplication similarity threshold', default: 0.85 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  dedup_threshold?: number;
+
+  @ApiPropertyOptional({ description: 'Enable semantic deduplication', default: true })
+  @IsOptional()
+  @IsBoolean()
+  enable_dedup?: boolean;
+
+  @ApiPropertyOptional({ description: 'Max chunks per file when grouping', default: 3 })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  max_chunks_per_file?: number;
 }
