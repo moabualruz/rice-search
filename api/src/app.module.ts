@@ -14,6 +14,7 @@ import { RankingModule } from './ranking/ranking.module';
 import { PostrankModule } from './postrank/postrank.module';
 import { LifecycleModule } from './lifecycle/lifecycle.module';
 import { ObservabilityModule } from './observability/observability.module';
+import { SparseModule } from './sparse/sparse.module';
 
 @Module({
   imports: [
@@ -45,6 +46,9 @@ import { ObservabilityModule } from './observability/observability.module';
 
     // Observability (query logging, metrics, evaluation)
     ObservabilityModule,
+
+    // Advanced sparse (query expansion, learned sparse encoders)
+    SparseModule,
 
     // Feature modules
     StoresModule,

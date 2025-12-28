@@ -36,6 +36,29 @@ export interface FusionStats {
   resultCount: number;
 }
 
+/**
+ * Confidence metrics for a single retrieval modality
+ */
+export interface ModalityConfidence {
+  modality: "sparse" | "dense";
+  confidence: number;      // 0-1 confidence score
+  scoreGap: number;        // Gap between top and second result
+  scoreVariance: number;   // Variance of top scores
+  resultCount: number;     // Number of results
+}
+
+/**
+ * Configuration for confidence-weighted fusion
+ */
+export interface ConfidenceWeightedFusionConfig {
+  sparseBaseWeight: number;
+  denseBaseWeight: number;
+  useScoreConfidence: boolean;  // Adjust by score distribution
+  useResultOverlap: boolean;    // Adjust by result agreement
+  minConfidenceWeight: number;  // Floor for confidence weight (0.1-0.5)
+  maxConfidenceBoost: number;   // Ceiling for confidence boost (1.5-2.0)
+}
+
 @Injectable()
 export class HybridRankerService {
   private readonly logger = new Logger(HybridRankerService.name);
@@ -167,6 +190,195 @@ export class HybridRankerService {
     }
 
     return results;
+  }
+
+  /**
+   * Fuse results with confidence-weighted modality adjustment
+   *
+   * High-confidence modalities get boosted weight, low-confidence get reduced.
+   * This helps when one retrieval method is clearly more reliable for a query.
+   *
+   * @param sparseResults Results from Tantivy (BM25)
+   * @param denseResults Results from Milvus (vector)
+   * @param contentMap Map of doc_id to content
+   * @param query Original search query
+   * @param config Confidence-weighted fusion config
+   * @returns Fused results with confidence info
+   */
+  fuseResultsWithConfidence(
+    sparseResults: TantivySearchResult[],
+    denseResults: MilvusSearchResult[],
+    contentMap: Map<string, { content: string; symbols: string[] }>,
+    query: string,
+    config: ConfidenceWeightedFusionConfig,
+  ): {
+    results: HybridSearchResult[];
+    sparseConfidence: ModalityConfidence;
+    denseConfidence: ModalityConfidence;
+    adjustedWeights: { sparse: number; dense: number };
+  } {
+    // Compute confidence for each modality
+    const sparseConfidence = this.computeModalityConfidence(
+      "sparse",
+      sparseResults.map((r) => r.bm25_score),
+    );
+    const denseConfidence = this.computeModalityConfidence(
+      "dense",
+      denseResults.map((r) => r.dense_score),
+    );
+
+    // Compute overlap confidence if enabled
+    let overlapBonus = 0;
+    if (config.useResultOverlap) {
+      overlapBonus = this.computeOverlapConfidence(
+        sparseResults.slice(0, 20).map((r) => r.doc_id),
+        denseResults.slice(0, 20).map((r) => r.doc_id),
+      );
+    }
+
+    // Adjust weights based on confidence
+    let adjustedSparseWeight = config.sparseBaseWeight;
+    let adjustedDenseWeight = config.denseBaseWeight;
+
+    if (config.useScoreConfidence) {
+      const totalConfidence = sparseConfidence.confidence + denseConfidence.confidence;
+      if (totalConfidence > 0) {
+        // Scale weights by relative confidence
+        const sparseRatio = sparseConfidence.confidence / totalConfidence;
+        const denseRatio = denseConfidence.confidence / totalConfidence;
+
+        // Apply with bounds
+        adjustedSparseWeight = this.boundWeight(
+          config.sparseBaseWeight * (1 + (sparseRatio - 0.5) * config.maxConfidenceBoost),
+          config.minConfidenceWeight,
+          config.sparseBaseWeight * config.maxConfidenceBoost,
+        );
+        adjustedDenseWeight = this.boundWeight(
+          config.denseBaseWeight * (1 + (denseRatio - 0.5) * config.maxConfidenceBoost),
+          config.minConfidenceWeight,
+          config.denseBaseWeight * config.maxConfidenceBoost,
+        );
+      }
+    }
+
+    // Apply overlap bonus (boost both if they agree)
+    if (overlapBonus > 0.3) {
+      adjustedSparseWeight *= 1 + overlapBonus * 0.2;
+      adjustedDenseWeight *= 1 + overlapBonus * 0.2;
+    }
+
+    // Normalize weights to sum to 1
+    const totalWeight = adjustedSparseWeight + adjustedDenseWeight;
+    adjustedSparseWeight /= totalWeight;
+    adjustedDenseWeight /= totalWeight;
+
+    this.logger.debug(
+      `Confidence fusion: sparse=${sparseConfidence.confidence.toFixed(2)} ` +
+      `dense=${denseConfidence.confidence.toFixed(2)} ` +
+      `overlap=${overlapBonus.toFixed(2)} → ` +
+      `weights sparse=${adjustedSparseWeight.toFixed(2)} dense=${adjustedDenseWeight.toFixed(2)}`,
+    );
+
+    // Fuse with adjusted weights
+    const results = this.fuseResults(sparseResults, denseResults, contentMap, query, {
+      sparseWeight: adjustedSparseWeight,
+      denseWeight: adjustedDenseWeight,
+    });
+
+    return {
+      results,
+      sparseConfidence,
+      denseConfidence,
+      adjustedWeights: {
+        sparse: adjustedSparseWeight,
+        dense: adjustedDenseWeight,
+      },
+    };
+  }
+
+  /**
+   * Compute confidence for a single modality based on score distribution
+   *
+   * High confidence signals:
+   * - Large gap between top and second result
+   * - Low variance in top scores (clear winners)
+   * - Reasonable number of results
+   */
+  computeModalityConfidence(
+    modality: "sparse" | "dense",
+    scores: number[],
+  ): ModalityConfidence {
+    if (scores.length === 0) {
+      return {
+        modality,
+        confidence: 0,
+        scoreGap: 0,
+        scoreVariance: 0,
+        resultCount: 0,
+      };
+    }
+
+    // Sort descending
+    const sorted = [...scores].sort((a, b) => b - a);
+
+    // Score gap between #1 and #2
+    const topScore = sorted[0];
+    const secondScore = sorted[1] ?? 0;
+    const scoreGap = topScore - secondScore;
+
+    // Normalized gap (relative to top score)
+    const normalizedGap = topScore > 0 ? scoreGap / topScore : 0;
+
+    // Variance of top 10 scores
+    const topScores = sorted.slice(0, Math.min(10, sorted.length));
+    const mean = topScores.reduce((a, b) => a + b, 0) / topScores.length;
+    const variance =
+      topScores.reduce((sum, s) => sum + Math.pow(s - mean, 2), 0) / topScores.length;
+    const normalizedVariance = mean > 0 ? Math.sqrt(variance) / mean : 0;
+
+    // Result count factor (more results = potentially more confidence, up to a point)
+    const countFactor = Math.min(1, scores.length / 20);
+
+    // Combine factors into confidence score (0-1)
+    // Higher gap = more confident, lower variance = more confident
+    const confidence = Math.min(
+      1,
+      normalizedGap * 0.5 +          // Gap contributes 50%
+      (1 - Math.min(1, normalizedVariance)) * 0.3 +  // Low variance contributes 30%
+      countFactor * 0.2,             // Count contributes 20%
+    );
+
+    return {
+      modality,
+      confidence,
+      scoreGap,
+      scoreVariance: variance,
+      resultCount: scores.length,
+    };
+  }
+
+  /**
+   * Compute overlap between top results from both modalities
+   *
+   * Higher overlap = both modalities agree = higher confidence in fusion
+   */
+  private computeOverlapConfidence(
+    sparseDocIds: string[],
+    denseDocIds: string[],
+  ): number {
+    const sparseSet = new Set(sparseDocIds);
+    const overlapCount = denseDocIds.filter((id) => sparseSet.has(id)).length;
+
+    // Normalized overlap (0-1)
+    const maxOverlap = Math.min(sparseDocIds.length, denseDocIds.length);
+    return maxOverlap > 0 ? overlapCount / maxOverlap : 0;
+  }
+
+  /**
+   * Bound a weight between min and max
+   */
+  private boundWeight(weight: number, min: number, max: number): number {
+    return Math.max(min, Math.min(max, weight));
   }
 
   /**

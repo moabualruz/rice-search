@@ -105,4 +105,11 @@ export class SearchRequestDto {
   @Min(1)
   @Max(10)
   max_chunks_per_file?: number;
+
+  // Advanced Sparse options (Phase 5)
+
+  @ApiPropertyOptional({ description: 'Enable query expansion (synonyms, camelCase splitting)', default: true })
+  @IsOptional()
+  @IsBoolean()
+  enable_expansion?: boolean;
 }

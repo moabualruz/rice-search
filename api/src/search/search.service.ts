@@ -15,6 +15,7 @@ import { PostrankPipelineService, PostrankStats } from "../postrank/postrank-pip
 import { AggregatedResult } from "../postrank/aggregation.service";
 import { StoreVersioningService } from "../lifecycle/store-versioning.service";
 import { QueryLogService, QueryLogEntry } from "../observability/query-log.service";
+import { QueryExpansionService } from "../sparse/query-expansion.service";
 import { SearchRequestDto } from "./dto/search-request.dto";
 
 /**
@@ -44,8 +45,9 @@ export class SearchService {
     private postrankPipeline: PostrankPipelineService,
     private storeVersioning: StoreVersioningService,
     private queryLog: QueryLogService,
+    private queryExpansion: QueryExpansionService,
   ) {
-    this.logger.log("Search service initialized (Intelligence Pipeline v2 + PostRank + Lifecycle + Observability)");
+    this.logger.log("Search service initialized (Intelligence Pipeline v2 + PostRank + Lifecycle + Observability + Sparse)");
   }
 
   async search(store: string, request: SearchRequestDto) {
@@ -81,9 +83,21 @@ export class SearchService {
       enableReranking: request.enable_reranking,
     });
 
+    // 6. Query expansion for BM25 (Phase 5 - Advanced Sparse)
+    // Expand for BM25 to improve recall with synonyms and camelCase splitting
+    const expandedQuery = request.enable_expansion !== false
+      ? this.queryExpansion.expandForBM25(normalized.normalized)
+      : normalized.normalized;
+    
+    // For dense search, use lightly expanded query
+    const denseQuery = request.enable_expansion !== false
+      ? this.queryExpansion.expandForDense(normalized.normalized)
+      : normalized.normalized;
+
     this.logger.debug(
       `Query "${query.substring(0, 30)}..." intent=${intent.intent} ` +
-      `(difficulty=${intent.difficulty}), strategy=${config.strategy}`
+      `(difficulty=${intent.difficulty}), strategy=${config.strategy}, ` +
+      `expanded=${expandedQuery.length > normalized.normalized.length}`
     );
 
     // Timing trackers
@@ -92,12 +106,13 @@ export class SearchService {
     let fusionLatencyMs = 0;
     let rerankStats: RerankStats | undefined;
 
-    // 6. Execute hybrid search with strategy config
+    // 7. Execute hybrid search with strategy config
     const hybridStartTime = Date.now();
     const { fusedResults, sparseResults, denseResults, sparseTime, denseTime } =
       await this.executeHybridSearchWithConfig(
         store,
-        normalized.normalized,
+        expandedQuery,
+        denseQuery,
         config,
         normalizedPathPrefix,
         filters?.languages,
@@ -304,10 +319,19 @@ export class SearchService {
   /**
    * Execute hybrid search using strategy config
    * Respects config's topK values and weights
+   *
+   * @param store - Store name
+   * @param sparseQuery - Query for BM25 (may be expanded)
+   * @param denseQuery - Query for embedding (may have light expansion)
+   * @param config - Retrieval configuration
+   * @param pathPrefix - Optional path filter
+   * @param languages - Optional language filter
+   * @param groupByFile - Whether to group results by file
    */
   private async executeHybridSearchWithConfig(
     store: string,
-    query: string,
+    sparseQuery: string,
+    denseQuery: string,
     config: RetrievalConfig,
     pathPrefix?: string,
     languages?: string[],
@@ -319,10 +343,10 @@ export class SearchService {
     sparseTime: number;
     denseTime: number;
   }> {
-    // Get embedding from Infinity (skip if sparse-only strategy)
+    // Get embedding from Infinity using dense query (skip if sparse-only strategy)
     let queryEmbedding: number[] | undefined;
     if (config.denseTopK > 0) {
-      const queryEmbeddings = await this.embeddings.embed([query]);
+      const queryEmbeddings = await this.embeddings.embed([denseQuery]);
       queryEmbedding = queryEmbeddings[0];
     }
 
@@ -333,7 +357,7 @@ export class SearchService {
     let denseTime = 0;
 
     const [sparseResultsRaw, denseResultsRaw] = await Promise.all([
-      // Sparse search (always runs unless sparseTopK is 0)
+      // Sparse search uses expanded query for better recall
       (async () => {
         if (config.sparseTopK === 0) {
           sparseTime = 0;
@@ -341,7 +365,7 @@ export class SearchService {
         }
         const result = await this.tantivy.search(
           store,
-          query,
+          sparseQuery,
           config.sparseTopK,
           pathPrefix,
           languages?.[0],
@@ -376,12 +400,12 @@ export class SearchService {
       });
     }
 
-    // Fuse results using RRF with config weights
+    // Fuse results using RRF with config weights (use original sparse query for symbol matching)
     const fusedResults = this.hybridRanker.fuseResults(
       sparseResultsRaw,
       denseResultsRaw,
       contentMap,
-      query,
+      sparseQuery,
       {
         sparseWeight: config.sparseWeight,
         denseWeight: config.denseWeight,
@@ -421,6 +445,14 @@ export class SearchService {
       ? normalizePath(filters.path_prefix)
       : undefined;
 
+    // Query expansion for versioned search
+    const expandedQuery = request.enable_expansion !== false
+      ? this.queryExpansion.expandForBM25(normalized.normalized)
+      : normalized.normalized;
+    const denseQuery = request.enable_expansion !== false
+      ? this.queryExpansion.expandForDense(normalized.normalized)
+      : normalized.normalized;
+
     // Classify intent and select strategy
     const intent = this.intentClassifier.classify(normalized.normalized);
     let config = this.strategySelector.selectStrategy(intent);
@@ -430,7 +462,8 @@ export class SearchService {
     const { fusedResults } = await this.executeHybridSearchWithVersionedNames(
       versionNames.tantivyIndex,
       versionNames.milvusCollection,
-      normalized.normalized,
+      expandedQuery,
+      denseQuery,
       config,
       normalizedPathPrefix,
       filters?.languages,
@@ -457,11 +490,20 @@ export class SearchService {
 
   /**
    * Execute hybrid search using explicit versioned names
+   *
+   * @param tantivyIndex - Tantivy index name
+   * @param milvusCollection - Milvus collection name
+   * @param sparseQuery - Query for BM25 (may be expanded)
+   * @param denseQuery - Query for embedding
+   * @param config - Retrieval configuration
+   * @param pathPrefix - Optional path filter
+   * @param languages - Optional language filter
    */
   private async executeHybridSearchWithVersionedNames(
     tantivyIndex: string,
     milvusCollection: string,
-    query: string,
+    sparseQuery: string,
+    denseQuery: string,
     config: RetrievalConfig,
     pathPrefix?: string,
     languages?: string[],
@@ -470,10 +512,10 @@ export class SearchService {
     sparseResults: TantivySearchResult[];
     denseResults: MilvusSearchResult[];
   }> {
-    // Get embedding (skip if sparse-only)
+    // Get embedding using dense query (skip if sparse-only)
     let queryEmbedding: number[] | undefined;
     if (config.denseTopK > 0) {
-      const queryEmbeddings = await this.embeddings.embed([query]);
+      const queryEmbeddings = await this.embeddings.embed([denseQuery]);
       queryEmbedding = queryEmbeddings[0];
     }
 
@@ -482,7 +524,7 @@ export class SearchService {
       config.sparseTopK > 0
         ? this.tantivy.search(
             tantivyIndex,
-            query,
+            sparseQuery,
             config.sparseTopK,
             pathPrefix,
             languages?.[0],
@@ -513,7 +555,7 @@ export class SearchService {
       sparseResultsRaw,
       denseResultsRaw,
       contentMap,
-      query,
+      sparseQuery,
       {
         sparseWeight: config.sparseWeight,
         denseWeight: config.denseWeight,
