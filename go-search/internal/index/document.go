@@ -11,30 +11,32 @@ import (
 
 // Document represents a source file to be indexed.
 type Document struct {
-	Path     string   `json:"path"`
-	Content  string   `json:"content"`
-	Language string   `json:"language"`
-	Symbols  []string `json:"symbols"`
-	Hash     string   `json:"hash"`
-	Size     int64    `json:"size"`
+	Path         string   `json:"path"`
+	Content      string   `json:"content"`
+	Language     string   `json:"language"`
+	Symbols      []string `json:"symbols"`
+	Hash         string   `json:"hash"`
+	Size         int64    `json:"size"`
+	ConnectionID string   `json:"connection_id,omitempty"` // Originating connection (optional)
 }
 
 // Chunk represents a searchable unit extracted from a document.
 type Chunk struct {
-	ID         string    `json:"id"`
-	DocumentID string    `json:"document_id"`
-	Store      string    `json:"store"`
-	Path       string    `json:"path"`
-	Language   string    `json:"language"`
-	Content    string    `json:"content"`
-	Symbols    []string  `json:"symbols"`
-	StartLine  int       `json:"start_line"`
-	EndLine    int       `json:"end_line"`
-	StartChar  int       `json:"start_char"`
-	EndChar    int       `json:"end_char"`
-	TokenCount int       `json:"token_count"`
-	Hash       string    `json:"hash"`
-	IndexedAt  time.Time `json:"indexed_at"`
+	ID           string    `json:"id"`
+	DocumentID   string    `json:"document_id"`
+	Store        string    `json:"store"`
+	Path         string    `json:"path"`
+	Language     string    `json:"language"`
+	Content      string    `json:"content"`
+	Symbols      []string  `json:"symbols"`
+	StartLine    int       `json:"start_line"`
+	EndLine      int       `json:"end_line"`
+	StartChar    int       `json:"start_char"`
+	EndChar      int       `json:"end_char"`
+	TokenCount   int       `json:"token_count"`
+	Hash         string    `json:"hash"`
+	IndexedAt    time.Time `json:"indexed_at"`
+	ConnectionID string    `json:"connection_id,omitempty"` // Originating connection (optional)
 }
 
 // NewDocument creates a new document from path and content.

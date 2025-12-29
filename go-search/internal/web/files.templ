@@ -15,6 +15,7 @@ type FilesPageData struct {
 	PageSize    int
 	TotalPages  int
 	Filters     FileFilters
+	Connections []ConnectionOption // Available connections for filtering
 	Error       string
 }
 
@@ -108,7 +109,7 @@ templ FilesPage(data FilesPageData) {
 			<!-- Filters -->
 			<div class="bg-white shadow rounded-lg mb-6">
 				<div class="px-6 py-4">
-					@FilesFilters(data.Filters)
+					@FilesFilters(data.Filters, data.Connections)
 				</div>
 			</div>
 
@@ -155,12 +156,12 @@ templ FilesPage(data FilesPageData) {
 }
 
 // FilesFilters renders the filter form
-templ FilesFilters(filters FileFilters) {
+templ FilesFilters(filters FileFilters, connections []ConnectionOption) {
 	<form
 		hx-get={ getCurrentPath() }
 		hx-target="#files-table-container"
 		hx-trigger="change from:select, submit"
-		class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5"
+		class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-6"
 	>
 		<!-- Path prefix -->
 		<div>
@@ -232,6 +233,21 @@ templ FilesFilters(filters FileFilters) {
 			>
 				<option value="asc" selected?={ filters.SortOrder == "asc" }>Ascending</option>
 				<option value="desc" selected?={ filters.SortOrder == "desc" }>Descending</option>
+			</select>
+		</div>
+
+		<!-- Connection filter -->
+		<div>
+			<label for="connection_id" class="block text-sm font-medium text-gray-700">Connection</label>
+			<select
+				id="connection_id"
+				name="connection_id"
+				class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+			>
+				<option value="">All Connections</option>
+				for _, conn := range connections {
+					<option value={ conn.ID } selected?={ filters.ConnectionID == conn.ID }>{ conn.Name }</option>
+				}
 			</select>
 		</div>
 

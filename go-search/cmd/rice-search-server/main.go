@@ -183,6 +183,9 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	searchCfg := search.DefaultConfig()
 	searchSvc := search.NewService(mlSvc, qc, log, searchCfg, querySvc, eventBus)
 
+	// Wire monitoring service to search service (will be set after monSvc is created)
+	var monitoringSvc *connection.MonitoringService
+
 	// Initialize metrics
 	metricsSvc := metrics.New()
 	log.Info("Initialized metrics")
@@ -239,6 +242,50 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	} else {
 		log.Info("Initialized settings service")
 	}
+
+	// Initialize connection monitoring service
+	if connSvc != nil {
+		monCfg := connection.DefaultMonitoringConfig()
+		monitoringSvc = connection.NewMonitoringService(connSvc, eventBus, log, monCfg)
+		ctx := context.Background()
+		monitoringSvc.Start(ctx)
+		log.Info("Initialized connection monitoring service",
+			"search_spike_multiplier", monCfg.SearchSpikeMultiplier,
+			"inactivity_threshold", monCfg.InactivityThreshold,
+		)
+
+		// Subscribe to alert events and log them
+		err := eventBus.Subscribe(ctx, bus.TopicAlertTriggered, func(alertCtx context.Context, event bus.Event) error {
+			alert, ok := event.Payload.(connection.Alert)
+			if !ok {
+				return nil
+			}
+
+			logFields := []interface{}{
+				"type", alert.Type,
+				"severity", alert.Severity,
+				"connection_id", alert.ConnectionID,
+				"message", alert.Message,
+			}
+
+			switch alert.Severity {
+			case "high", "critical":
+				log.Warn("Connection security alert", logFields...)
+			case "medium":
+				log.Info("Connection security alert", logFields...)
+			default:
+				log.Debug("Connection security alert", logFields...)
+			}
+
+			return nil
+		})
+		if err != nil {
+			log.Warn("Failed to subscribe to alert events", "error", err)
+		}
+	}
+
+	// Wire monitoring service to search service
+	searchSvc.SetMonitoringService(monitoringSvc)
 
 	// Start gRPC server
 	grpcCfg := grpcserver.Config{

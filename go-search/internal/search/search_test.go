@@ -267,3 +267,88 @@ func TestFilter_Fields(t *testing.T) {
 		t.Errorf("unexpected Languages length: %d", len(filter.Languages))
 	}
 }
+
+func TestApplyDefaultConnectionScope(t *testing.T) {
+	handler := &Handler{}
+
+	tests := []struct {
+		name           string
+		headerConnID   string
+		filterConnID   string
+		expectedConnID string
+		description    string
+	}{
+		{
+			name:           "No header, no filter",
+			headerConnID:   "",
+			filterConnID:   "",
+			expectedConnID: "",
+			description:    "Should remain empty when no header and no filter",
+		},
+		{
+			name:           "Header present, no filter",
+			headerConnID:   "conn-123",
+			filterConnID:   "",
+			expectedConnID: "conn-123",
+			description:    "Should use header when filter is empty",
+		},
+		{
+			name:           "Header present, explicit filter",
+			headerConnID:   "conn-123",
+			filterConnID:   "conn-456",
+			expectedConnID: "conn-456",
+			description:    "Should respect explicit filter over header",
+		},
+		{
+			name:           "Header present, filter is '*'",
+			headerConnID:   "conn-123",
+			filterConnID:   "*",
+			expectedConnID: "",
+			description:    "Should clear filter when '*' is used (opt-out)",
+		},
+		{
+			name:           "Header present, filter is 'all'",
+			headerConnID:   "conn-123",
+			filterConnID:   "all",
+			expectedConnID: "",
+			description:    "Should clear filter when 'all' is used (opt-out)",
+		},
+		{
+			name:           "No header, explicit filter",
+			headerConnID:   "",
+			filterConnID:   "conn-456",
+			expectedConnID: "conn-456",
+			description:    "Should use explicit filter when no header",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create request with header
+			r := httptest.NewRequest(http.MethodPost, "/search", nil)
+			if tt.headerConnID != "" {
+				r.Header.Set("X-Connection-ID", tt.headerConnID)
+			}
+
+			// Create search request with filter
+			req := &SearchRequest{}
+			if tt.filterConnID != "" {
+				req.Filter = &Filter{ConnectionID: tt.filterConnID}
+			}
+
+			// Apply default scoping
+			handler.applyDefaultConnectionScope(r, req)
+
+			// Check result
+			var actualConnID string
+			if req.Filter != nil {
+				actualConnID = req.Filter.ConnectionID
+			}
+
+			if actualConnID != tt.expectedConnID {
+				t.Errorf("%s: expected ConnectionID '%s', got '%s'",
+					tt.description, tt.expectedConnID, actualConnID)
+			}
+		})
+	}
+}

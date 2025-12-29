@@ -44,6 +44,23 @@ services:
       retries: 5
       start_period: 5s
 
+  # ===========================================================================
+  # Redis (for distributed cache/bus)
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: rice-redis-dev
+    ports:
+      - "6379:6379"
+    volumes:
+      - ../data/redis-dev:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 networks:
   default:
     name: rice-dev-network

@@ -6,7 +6,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -134,6 +136,15 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Settings REST API (JSON)
 	mux.HandleFunc("GET /api/v1/settings", h.handleAPIGetSettings)
 	mux.HandleFunc("PUT /api/v1/settings", h.handleAPIPutSettings)
+
+	// Stats JSON API (for Grafana/monitoring)
+	mux.HandleFunc("GET /api/v1/stats/overview", h.handleAPIStatsOverview)
+	mux.HandleFunc("GET /api/v1/stats/search-timeseries", h.handleAPIStatsSearchTimeseries)
+	mux.HandleFunc("GET /api/v1/stats/index-timeseries", h.handleAPIStatsIndexTimeseries)
+	mux.HandleFunc("GET /api/v1/stats/latency-timeseries", h.handleAPIStatsLatencyTimeseries)
+	mux.HandleFunc("GET /api/v1/stats/stores", h.handleAPIStatsStores)
+	mux.HandleFunc("GET /api/v1/stats/languages", h.handleAPIStatsLanguages)
+	mux.HandleFunc("GET /api/v1/stats/connections", h.handleAPIStatsConnections)
 
 	// Stats API (HTMX)
 	mux.HandleFunc("GET /stats/refresh", h.handleStatsRefresh)
@@ -278,7 +289,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 				Path:      f.Path,
 				Language:  f.Language,
 				Chunks:    int(f.ChunkCount),
-				IndexedAt: f.GetIndexedAt(),
+				IndexedAt: f.GetIndexedAt().AsTime(),
 			})
 		}
 	}
@@ -437,7 +448,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	results := make([]SearchResult, len(resp.Results))
 	for i, res := range resp.Results {
 		sr := SearchResult{
-			ID:        res.ID,
+			ID:        res.Id,
 			Path:      res.Path,
 			Language:  res.Language,
 			StartLine: int(res.StartLine),
@@ -645,12 +656,32 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 		Page:     page,
 		PageSize: pageSize,
 		Filters: FileFilters{
-			Store:      store,
-			PathPrefix: r.URL.Query().Get("path"),
-			Language:   r.URL.Query().Get("language"),
-			SortBy:     r.URL.Query().Get("sort_by"),
-			SortOrder:  r.URL.Query().Get("sort_order"),
+			Store:        store,
+			PathPrefix:   r.URL.Query().Get("path"),
+			Language:     r.URL.Query().Get("language"),
+			ConnectionID: r.URL.Query().Get("connection_id"),
+			SortBy:       r.URL.Query().Get("sort_by"),
+			SortOrder:    r.URL.Query().Get("sort_order"),
 		},
+	}
+
+	// Populate available connections for filter dropdown
+	if h.connSvc != nil {
+		conns, err := h.connSvc.ListConnections(ctx, connection.ConnectionFilter{})
+		if err == nil {
+			for _, c := range conns {
+				name := c.Name
+				if name == "" && len(c.ID) > 8 {
+					name = c.ID[:8] + "..."
+				} else if name == "" {
+					name = c.ID
+				}
+				data.Connections = append(data.Connections, ConnectionOption{
+					ID:   c.ID,
+					Name: name,
+				})
+			}
+		}
 	}
 
 	// Fetch files from gRPC service
@@ -674,7 +705,7 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 				Language:  f.Language,
 				Size:      f.Size,
 				Hash:      f.Hash,
-				IndexedAt: f.GetIndexedAt(),
+				IndexedAt: f.GetIndexedAt().AsTime(),
 				Status:    f.Status,
 			})
 		}
@@ -721,7 +752,7 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 				Language:     f.Language,
 				Size:         f.Size,
 				ChunkCount:   int(f.ChunkCount),
-				ConnectionID: f.ConnectionID,
+				ConnectionID: f.ConnectionId,
 				Hash:         f.Hash,
 				Status:       "indexed",
 			}
@@ -730,8 +761,8 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 			}
 
 			// Get connection info if available
-			if h.connSvc != nil && f.ConnectionID != "" {
-				conn, err := h.connSvc.GetConnection(ctx, f.ConnectionID)
+			if h.connSvc != nil && f.ConnectionId != "" {
+				conn, err := h.connSvc.GetConnection(ctx, f.ConnectionId)
 				if err == nil && conn != nil {
 					data.Connection = ConnectionDetail{
 						ID:           conn.ID,
@@ -848,7 +879,7 @@ func (h *Handler) handleExportFiles(w http.ResponseWriter, r *http.Request) {
 				Size:       f.Size,
 				ChunkCount: f.ChunkCount,
 				Hash:       f.Hash,
-				IndexedAt:  f.GetIndexedAt().Format(time.RFC3339),
+				IndexedAt:  f.GetIndexedAt().AsTime().Format(time.RFC3339),
 			}
 		}
 
@@ -865,7 +896,7 @@ func (h *Handler) handleExportFiles(w http.ResponseWriter, r *http.Request) {
 		// Write data rows
 		for _, f := range allFiles {
 			line := fmt.Sprintf("%q,%s,%d,%d,%s,%s\n",
-				f.Path, f.Language, f.Size, f.ChunkCount, f.Hash, f.GetIndexedAt().Format(time.RFC3339))
+				f.Path, f.Language, f.Size, f.ChunkCount, f.Hash, f.GetIndexedAt().AsTime().Format(time.RFC3339))
 			w.Write([]byte(line))
 		}
 	}
@@ -1828,6 +1859,9 @@ func (h *Handler) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 			ConnectionEnabled: h.cfg.Connection.Enabled,
 			MaxInactiveHours:  h.cfg.Connection.MaxInactive * 24, // days to hours
 		}
+
+		// Determine source for each setting
+		data.Sources = h.determineSettingSources(ctx)
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1835,6 +1869,82 @@ func (h *Handler) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 		h.log.Error("Failed to render settings page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
+}
+
+// determineSettingSources checks each setting to determine if it came from
+// admin override, environment variable, config file, or default value
+func (h *Handler) determineSettingSources(ctx context.Context) SettingSources {
+	sources := SettingSources{}
+
+	// Helper to check if env var is set
+	envSet := func(key string) bool {
+		_, exists := os.LookupEnv(key)
+		return exists
+	}
+
+	// Helper to determine source: admin > env > config > default
+	determineSource := func(fieldName, envVar string, configValue, defaultValue interface{}) string {
+		// Check if admin has override
+		if h.settingsSvc != nil && h.settingsSvc.HasAdminOverride(fieldName, configValue) {
+			return "admin"
+		}
+		// Check if env var is set
+		if envSet(envVar) {
+			return "env"
+		}
+		// Check if different from default (config file)
+		if configValue != defaultValue {
+			return "config"
+		}
+		return "default"
+	}
+
+	// Server settings
+	sources.ServerHost = determineSource("server_host", "RICE_HOST", h.cfg.Host, "0.0.0.0")
+	sources.ServerPort = determineSource("server_port", "RICE_PORT", h.cfg.Port, 8080)
+	sources.LogLevel = determineSource("log_level", "RICE_LOG_LEVEL", h.cfg.Log.Level, "info")
+	sources.LogFormat = determineSource("log_format", "RICE_LOG_FORMAT", h.cfg.Log.Format, "text")
+
+	// ML settings
+	sources.EmbedModel = determineSource("embed_model", "RICE_EMBED_MODEL", h.cfg.ML.EmbedModel, "jinaai/jina-code-embeddings-1.5b")
+	sources.RerankModel = determineSource("rerank_model", "RICE_RERANK_MODEL", h.cfg.ML.RerankModel, "jinaai/jina-reranker-v2-base-multilingual")
+	sources.QueryModel = determineSource("query_model", "RICE_QUERY_MODEL", h.cfg.ML.QueryModel, "Salesforce/codet5p-220m")
+	sources.EmbedGPU = determineSource("embed_gpu", "RICE_EMBED_GPU", h.cfg.ML.EmbedGPU, true)
+	sources.RerankGPU = determineSource("rerank_gpu", "RICE_RERANK_GPU", h.cfg.ML.RerankGPU, true)
+	sources.QueryGPU = determineSource("query_gpu", "RICE_QUERY_GPU", h.cfg.ML.QueryGPU, false)
+	sources.QueryEnabled = determineSource("query_enabled", "RICE_QUERY_MODEL_ENABLED", h.cfg.ML.QueryModelEnabled, false)
+	sources.BatchSize = determineSource("batch_size", "RICE_EMBED_BATCH_SIZE", h.cfg.ML.EmbedBatchSize, 32)
+	sources.MaxConcurrent = determineSource("max_concurrent", "RICE_INDEX_WORKERS", h.cfg.Index.Workers, 4)
+
+	// Qdrant settings
+	sources.QdrantURL = determineSource("qdrant_url", "QDRANT_URL", h.cfg.Qdrant.URL, "http://localhost:6333")
+	sources.QdrantCollection = determineSource("qdrant_collection", "QDRANT_COLLECTION_PREFIX", h.cfg.Qdrant.CollectionPrefix, "rice_")
+	sources.QdrantTimeout = "default" // No env var for this
+
+	// Search settings - most don't have env vars, will show as admin or default
+	sources.DefaultTopK = determineSource("default_top_k", "RICE_DEFAULT_TOP_K", h.cfg.Search.DefaultTopK, 20)
+	sources.RerankCandidates = determineSource("rerank_candidates", "RICE_RERANK_CANDIDATES", h.cfg.Search.RerankCandidates, 30)
+	sources.MaxChunksPerFile = "default" // No base config equivalent
+	sources.DefaultRerank = determineSource("default_rerank", "RICE_ENABLE_RERANKING", h.cfg.Search.EnableReranking, true)
+	sources.DefaultDedup = "default"     // Only in admin settings
+	sources.DefaultDiversity = "default" // Only in admin settings
+	sources.SparseWeight = determineSource("sparse_weight", "RICE_DEFAULT_SPARSE_WEIGHT", h.cfg.Search.DefaultSparseWeight, 0.5)
+	sources.DenseWeight = determineSource("dense_weight", "RICE_DEFAULT_DENSE_WEIGHT", h.cfg.Search.DefaultDenseWeight, 0.5)
+	sources.DedupThreshold = "default"  // Only in admin settings
+	sources.DiversityLambda = "default" // Only in admin settings
+
+	// Index settings
+	sources.ChunkSize = determineSource("chunk_size", "RICE_CHUNK_SIZE", h.cfg.Index.ChunkSize, 512)
+	sources.ChunkOverlap = determineSource("chunk_overlap", "RICE_CHUNK_OVERLAP", h.cfg.Index.ChunkOverlap, 64)
+	sources.MaxFileSize = "default"     // Only in admin settings
+	sources.ExcludePatterns = "default" // Only in admin settings
+	sources.SupportedLangs = "default"  // Only in admin settings
+
+	// Connection settings
+	sources.ConnectionEnabled = determineSource("connection_enabled", "RICE_CONNECTIONS_ENABLED", h.cfg.Connection.Enabled, true)
+	sources.MaxInactiveHours = determineSource("max_inactive_hours", "RICE_CONNECTIONS_MAX_INACTIVE", h.cfg.Connection.MaxInactive, 30)
+
+	return sources
 }
 
 func (h *Handler) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
@@ -2278,6 +2388,28 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 
 		// Get total searches from metrics
 		data.TotalSearches = h.metrics.SearchRequests.Value()
+
+		// Calculate growth indicators (percentage change from 1 hour ago)
+		oneHourAgo := time.Now().Add(-1 * time.Hour)
+
+		// Get historical totals from 1 hour ago
+		var prevFiles, prevChunks, prevConnections int64
+		indexHistory := h.metrics.TimeSeries.IndexRate.GetHistorySince(oneHourAgo)
+		if len(indexHistory) > 0 {
+			// Sum up total files indexed in the past hour
+			var filesIndexedLastHour int64
+			for _, dp := range indexHistory {
+				filesIndexedLastHour += int64(dp.Value)
+			}
+			prevFiles = data.TotalFiles - filesIndexedLastHour
+		}
+
+		// Calculate growth percentages
+		data.FilesGrowth = calculateGrowth(data.TotalFiles, prevFiles)
+		data.ChunksGrowth = calculateGrowth(data.TotalChunks, prevChunks)
+		data.ConnectionsGrowth = calculateGrowth(int64(data.TotalConnections), prevConnections)
+		// Store growth calculation would require tracking store creation/deletion events
+		data.StoresGrowth = 0.0
 	}
 
 	// Build per-store metrics (filtered or all)
@@ -2299,7 +2431,376 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 		}
 	}
 
+	// Build language breakdown by aggregating from all indexed files
+	// Note: This requires querying Qdrant for language metadata which is expensive
+	// For now, we'll provide a placeholder implementation that could be populated
+	// via background aggregation or cached stats
+	data.FilesByLanguage = h.getLanguageBreakdown(ctx, storeFilter, storesResp)
+
 	return data
+}
+
+// =============================================================================
+// Stats JSON API Handlers (for Grafana/monitoring)
+// =============================================================================
+
+// handleAPIStatsOverview returns overall stats as JSON
+// GET /api/v1/stats/overview?store=default&time_range=1h
+func (h *Handler) handleAPIStatsOverview(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	store := r.URL.Query().Get("store")
+	timeRange := r.URL.Query().Get("time_range")
+	if timeRange == "" {
+		timeRange = "1h"
+	}
+
+	// Collect overview data
+	var totalFiles, totalChunks, totalSearches int64
+	var totalStores, totalConnections int
+
+	// Get stores stats
+	storesResp, err := h.grpc.ListStores(ctx, &pb.ListStoresRequest{})
+	if err == nil {
+		totalStores = len(storesResp.Stores)
+		for _, s := range storesResp.Stores {
+			if store != "" && s.Name != store {
+				continue
+			}
+			if s.Stats != nil {
+				totalFiles += s.Stats.DocumentCount
+				totalChunks += s.Stats.ChunkCount
+			}
+		}
+	}
+
+	// Get connections count
+	if h.connSvc != nil {
+		conns, _ := h.connSvc.ListAllConnections(ctx)
+		totalConnections = len(conns)
+	}
+
+	// Get total searches from metrics
+	if h.metrics != nil {
+		totalSearches = h.metrics.SearchRequests.Value()
+	}
+
+	response := map[string]interface{}{
+		"data": map[string]interface{}{
+			"total_stores":      totalStores,
+			"total_files":       totalFiles,
+			"total_chunks":      totalChunks,
+			"total_connections": totalConnections,
+			"total_searches":    totalSearches,
+		},
+		"meta": map[string]interface{}{
+			"store":        store,
+			"time_range":   timeRange,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode overview stats", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleAPIStatsSearchTimeseries returns search rate over time as JSON
+// GET /api/v1/stats/search-timeseries?store=default&time_range=1h&granularity=5m
+func (h *Handler) handleAPIStatsSearchTimeseries(w http.ResponseWriter, r *http.Request) {
+	store := r.URL.Query().Get("store")
+	timeRange := r.URL.Query().Get("time_range")
+	granularity := r.URL.Query().Get("granularity")
+	if timeRange == "" {
+		timeRange = "1h"
+	}
+	if granularity == "" {
+		granularity = "5m"
+	}
+
+	var dataPoints []map[string]interface{}
+
+	// Get search rate from metrics
+	if h.metrics != nil && h.metrics.TimeSeries != nil {
+		history := h.metrics.TimeSeries.SearchRate.GetHistoryWithCurrent()
+		for _, dp := range history {
+			dataPoints = append(dataPoints, map[string]interface{}{
+				"timestamp": dp.Timestamp.Format(time.RFC3339),
+				"value":     dp.Value,
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"data": dataPoints,
+		"meta": map[string]interface{}{
+			"store":        store,
+			"time_range":   timeRange,
+			"granularity":  granularity,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode search timeseries", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleAPIStatsIndexTimeseries returns indexing rate over time as JSON
+// GET /api/v1/stats/index-timeseries?store=default&time_range=1h&granularity=5m
+func (h *Handler) handleAPIStatsIndexTimeseries(w http.ResponseWriter, r *http.Request) {
+	store := r.URL.Query().Get("store")
+	timeRange := r.URL.Query().Get("time_range")
+	granularity := r.URL.Query().Get("granularity")
+	if timeRange == "" {
+		timeRange = "1h"
+	}
+	if granularity == "" {
+		granularity = "5m"
+	}
+
+	var dataPoints []map[string]interface{}
+
+	// Get index rate from metrics
+	if h.metrics != nil && h.metrics.TimeSeries != nil {
+		history := h.metrics.TimeSeries.IndexRate.GetHistoryWithCurrent()
+		for _, dp := range history {
+			dataPoints = append(dataPoints, map[string]interface{}{
+				"timestamp": dp.Timestamp.Format(time.RFC3339),
+				"value":     dp.Value,
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"data": dataPoints,
+		"meta": map[string]interface{}{
+			"store":        store,
+			"time_range":   timeRange,
+			"granularity":  granularity,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode index timeseries", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleAPIStatsLatencyTimeseries returns search latency over time as JSON
+// GET /api/v1/stats/latency-timeseries?store=default&time_range=1h&granularity=5m
+func (h *Handler) handleAPIStatsLatencyTimeseries(w http.ResponseWriter, r *http.Request) {
+	store := r.URL.Query().Get("store")
+	timeRange := r.URL.Query().Get("time_range")
+	granularity := r.URL.Query().Get("granularity")
+	if timeRange == "" {
+		timeRange = "1h"
+	}
+	if granularity == "" {
+		granularity = "5m"
+	}
+
+	var dataPoints []map[string]interface{}
+
+	// Get latency from metrics
+	if h.metrics != nil && h.metrics.TimeSeries != nil {
+		history := h.metrics.TimeSeries.SearchLatency.GetHistoryWithCurrent()
+		for _, dp := range history {
+			dataPoints = append(dataPoints, map[string]interface{}{
+				"timestamp": dp.Timestamp.Format(time.RFC3339),
+				"value":     dp.Value,
+			})
+		}
+	}
+
+	response := map[string]interface{}{
+		"data": dataPoints,
+		"meta": map[string]interface{}{
+			"store":        store,
+			"time_range":   timeRange,
+			"granularity":  granularity,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode latency timeseries", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleAPIStatsStores returns per-store breakdown as JSON
+// GET /api/v1/stats/stores?time_range=1h
+func (h *Handler) handleAPIStatsStores(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	timeRange := r.URL.Query().Get("time_range")
+	if timeRange == "" {
+		timeRange = "1h"
+	}
+
+	var storeMetrics []map[string]interface{}
+
+	// Get stores stats
+	storesResp, err := h.grpc.ListStores(ctx, &pb.ListStoresRequest{})
+	if err == nil {
+		for _, s := range storesResp.Stores {
+			metric := map[string]interface{}{
+				"store":       s.Name,
+				"file_count":  int64(0),
+				"chunk_count": int64(0),
+			}
+			if s.Stats != nil {
+				metric["file_count"] = s.Stats.DocumentCount
+				metric["chunk_count"] = s.Stats.ChunkCount
+			}
+			storeMetrics = append(storeMetrics, metric)
+		}
+	}
+
+	response := map[string]interface{}{
+		"data": storeMetrics,
+		"meta": map[string]interface{}{
+			"time_range":   timeRange,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode stores stats", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleAPIStatsLanguages returns per-language file breakdown as JSON
+// GET /api/v1/stats/languages?store=default&time_range=1h
+func (h *Handler) handleAPIStatsLanguages(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	store := r.URL.Query().Get("store")
+	timeRange := r.URL.Query().Get("time_range")
+	if store == "" {
+		store = "default"
+	}
+	if timeRange == "" {
+		timeRange = "1h"
+	}
+
+	// Collect language stats from files
+	languageStats := make(map[string]struct {
+		FileCount  int64
+		ChunkCount int64
+	})
+
+	var totalFiles int64
+
+	// Get files and aggregate by language
+	page := int32(1)
+	for {
+		filesResp, err := h.grpc.ListFiles(ctx, &pb.ListFilesRequest{
+			Store:    store,
+			Page:     page,
+			PageSize: 100,
+		})
+		if err != nil {
+			break
+		}
+
+		for _, f := range filesResp.Files {
+			lang := f.Language
+			if lang == "" {
+				lang = "unknown"
+			}
+			stats := languageStats[lang]
+			stats.FileCount++
+			stats.ChunkCount += int64(f.ChunkCount)
+			languageStats[lang] = stats
+			totalFiles++
+		}
+
+		if int32(len(filesResp.Files)) < 100 {
+			break
+		}
+		page++
+	}
+
+	// Convert to response format with percentages
+	var languageMetrics []map[string]interface{}
+	for lang, stats := range languageStats {
+		percentage := float64(0)
+		if totalFiles > 0 {
+			percentage = (float64(stats.FileCount) / float64(totalFiles)) * 100
+		}
+		languageMetrics = append(languageMetrics, map[string]interface{}{
+			"language":    lang,
+			"file_count":  stats.FileCount,
+			"chunk_count": stats.ChunkCount,
+			"percentage":  percentage,
+		})
+	}
+
+	response := map[string]interface{}{
+		"data": languageMetrics,
+		"meta": map[string]interface{}{
+			"store":        store,
+			"time_range":   timeRange,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode language stats", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// handleAPIStatsConnections returns connection activity metrics as JSON
+// GET /api/v1/stats/connections?time_range=1h
+func (h *Handler) handleAPIStatsConnections(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	timeRange := r.URL.Query().Get("time_range")
+	if timeRange == "" {
+		timeRange = "1h"
+	}
+
+	var connectionMetrics []map[string]interface{}
+
+	// Get connections
+	if h.connSvc != nil {
+		conns, err := h.connSvc.ListAllConnections(ctx)
+		if err == nil {
+			for _, c := range conns {
+				connectionMetrics = append(connectionMetrics, map[string]interface{}{
+					"connection_id":   c.ID,
+					"connection_name": c.Name,
+					"files_indexed":   c.IndexedFiles,
+					"search_count":    c.SearchCount,
+					"is_active":       c.IsActive,
+					"last_active":     c.LastSeenAt.Format(time.RFC3339),
+				})
+			}
+		}
+	}
+
+	response := map[string]interface{}{
+		"data": connectionMetrics,
+		"meta": map[string]interface{}{
+			"time_range":   timeRange,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode connection stats", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 // =============================================================================
@@ -2453,4 +2954,67 @@ func getOrDefaultFloat(val float32, defaultVal float32) float32 {
 		return defaultVal
 	}
 	return val
+}
+
+// calculateGrowth calculates percentage change from previous to current value
+func calculateGrowth(current, previous int64) float64 {
+	if previous == 0 {
+		if current > 0 {
+			return 100.0 // 100% growth from zero
+		}
+		return 0.0
+	}
+	return float64(current-previous) / float64(previous) * 100.0
+}
+
+// getLanguageBreakdown aggregates file counts by programming language
+func (h *Handler) getLanguageBreakdown(ctx context.Context, storeFilter string, storesResp *pb.ListStoresResponse) []LanguageMetric {
+	// For now, return a placeholder implementation
+	// TODO: Implement proper language aggregation by:
+	// 1. Option A: Query Qdrant for language field aggregation (expensive)
+	// 2. Option B: Maintain language stats in StoreStats (requires schema change)
+	// 3. Option C: Build language index in background and cache results
+
+	// Placeholder with sample data structure
+	// In production, this would query indexed documents and aggregate by language field
+	languageCounts := make(map[string]int64)
+
+	// This would be replaced with actual Qdrant query or cached stats lookup
+	// For now, we return empty to avoid showing incorrect data
+	if storesResp == nil || len(storesResp.Stores) == 0 {
+		return nil
+	}
+
+	// Calculate total files for percentage
+	var totalFiles int64
+	for _, s := range storesResp.Stores {
+		if storeFilter != "" && s.Name != storeFilter {
+			continue
+		}
+		if s.Stats != nil {
+			totalFiles += s.Stats.DocumentCount
+		}
+	}
+
+	if totalFiles == 0 {
+		return nil
+	}
+
+	// Build sorted language metrics
+	var metrics []LanguageMetric
+	for lang, count := range languageCounts {
+		metrics = append(metrics, LanguageMetric{
+			Language:   lang,
+			FileCount:  count,
+			ChunkCount: 0, // Would be populated from actual data
+			Percentage: float64(count) / float64(totalFiles) * 100.0,
+		})
+	}
+
+	// Sort by file count descending
+	sort.Slice(metrics, func(i, j int) bool {
+		return metrics[i].FileCount > metrics[j].FileCount
+	})
+
+	return metrics
 }

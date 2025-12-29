@@ -4,10 +4,49 @@ import "fmt"
 
 // SettingsPageData holds data for the admin settings page
 type SettingsPageData struct {
-	Layout  LayoutData
-	Config  RuntimeConfig
-	Error   string
-	Success string
+	Layout           LayoutData
+	Config           RuntimeConfig
+	Sources          SettingSources            // Source tracking for each setting
+	ValidationErrors map[string]string         // Field name -> error message
+	Error            string
+	Success          string
+}
+
+// SettingSources tracks where each setting value comes from
+type SettingSources struct {
+	ServerHost        string
+	ServerPort        string
+	LogLevel          string
+	LogFormat         string
+	EmbedModel        string
+	RerankModel       string
+	QueryModel        string
+	EmbedGPU          string
+	RerankGPU         string
+	QueryGPU          string
+	QueryEnabled      string
+	BatchSize         string
+	MaxConcurrent     string
+	QdrantURL         string
+	QdrantCollection  string
+	QdrantTimeout     string
+	DefaultTopK       string
+	DefaultRerank     string
+	DefaultDedup      string
+	DefaultDiversity  string
+	DedupThreshold    string
+	DiversityLambda   string
+	RerankCandidates  string
+	MaxChunksPerFile  string
+	SparseWeight      string
+	DenseWeight       string
+	ChunkSize         string
+	ChunkOverlap      string
+	MaxFileSize       string
+	ExcludePatterns   string
+	SupportedLangs    string
+	ConnectionEnabled string
+	MaxInactiveHours  string
 }
 
 // RuntimeConfig represents all configurable runtime settings
@@ -427,10 +466,30 @@ templ SettingsSection(title, id string) {
 	</div>
 }
 
-// TextInput renders a text input field
+// TextInput renders a text input field with source badge
 templ TextInput(label, name, value, placeholder string) {
 	<div class="setting-item" data-label={ label } data-name={ name }>
-		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+		</div>
+		<input
+			type="text"
+			name={ name }
+			id={ name }
+			value={ value }
+			placeholder={ placeholder }
+			class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+		/>
+	</div>
+}
+
+// TextInputWithSource renders a text input field with source badge
+templ TextInputWithSource(label, name, value, placeholder, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+			@SourceBadge(source)
+		</div>
 		<input
 			type="text"
 			name={ name }
@@ -456,10 +515,49 @@ templ NumberInput(label, name string, value, defaultVal int) {
 	</div>
 }
 
+// NumberInputWithSource renders a number input field with source badge
+templ NumberInputWithSource(label, name string, value, defaultVal int, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+			@SourceBadge(source)
+		</div>
+		<input
+			type="number"
+			name={ name }
+			id={ name }
+			value={ intToStr(value, defaultVal) }
+			class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+		/>
+	</div>
+}
+
 // ToggleInput renders a toggle switch
 templ ToggleInput(label, name string, checked bool) {
 	<div class="setting-item flex items-center justify-between" data-label={ label } data-name={ name }>
 		<span class="text-sm font-medium text-gray-700">{ label }</span>
+		<button
+			type="button"
+			role="switch"
+			aria-checked={ boolToStr(checked) }
+			onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); this.nextElementSibling.value = this.getAttribute('aria-checked');"
+			class={ "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2", toggleBgClass(checked) }
+		>
+			<span
+				class={ "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out", toggleKnobClass(checked) }
+			></span>
+		</button>
+		<input type="hidden" name={ name } value={ boolToStr(checked) }/>
+	</div>
+}
+
+// ToggleInputWithSource renders a toggle switch with source badge
+templ ToggleInputWithSource(label, name string, checked bool, source string) {
+	<div class="setting-item flex items-center justify-between" data-label={ label } data-name={ name }>
+		<div class="flex items-center gap-2">
+			<span class="text-sm font-medium text-gray-700">{ label }</span>
+			@SourceBadge(source)
+		</div>
 		<button
 			type="button"
 			role="switch"
@@ -491,11 +589,55 @@ templ SelectInput(label, name, value string, options []SelectOption) {
 	</div>
 }
 
+// SelectInputWithSource renders a select dropdown with source badge
+templ SelectInputWithSource(label, name, value string, options []SelectOption, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+			@SourceBadge(source)
+		</div>
+		<select
+			name={ name }
+			id={ name }
+			class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+		>
+			for _, opt := range options {
+				<option value={ opt.Value } selected?={ value == opt.Value }>{ opt.Label }</option>
+			}
+		</select>
+	</div>
+}
+
 // RangeInput renders a range slider with value display
 templ RangeInput(label, name string, value float32, min, max, step float64) {
 	<div class="setting-item" data-label={ label } data-name={ name }>
 		<div class="flex justify-between">
 			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+		</div>
+		<input
+			type="range"
+			name={ name }
+			id={ name }
+			value={ floatToStr(value) }
+			min={ floatToStr(float32(min)) }
+			max={ floatToStr(float32(max)) }
+			step={ floatToStr(float32(step)) }
+			oninput="document.getElementById(this.dataset.target).textContent = this.value"
+			data-target={ name + "_value" }
+			class="mt-1 block w-full"
+		/>
+	</div>
+}
+
+// RangeInputWithSource renders a range slider with value display and source badge
+templ RangeInputWithSource(label, name string, value float32, min, max, step float64, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex justify-between items-center">
+			<div class="flex items-center gap-2">
+				<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+				@SourceBadge(source)
+			</div>
 			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
 		</div>
 		<input
@@ -545,4 +687,130 @@ func toggleKnobClass(checked bool) string {
 		return "translate-x-5"
 	}
 	return "translate-x-0"
+}
+
+// SourceBadge renders a small badge showing where a setting value comes from
+templ SourceBadge(source string) {
+	if source == "admin" {
+		<span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800" title="Overridden by admin settings">
+			Admin
+		</span>
+	} else if source == "env" {
+		<span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800" title="From environment variable">
+			ENV
+		</span>
+	} else if source == "config" {
+		<span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800" title="From config file">
+			Config
+		</span>
+	} else if source == "default" {
+		<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600" title="Using default value">
+			Default
+		</span>
+	}
+}
+
+// inputBorderClass returns the appropriate border class based on error state
+func inputBorderClass(err string) string {
+	if err != "" {
+		return "border-red-300 focus:border-red-500 focus:ring-red-500"
+	}
+	return "border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+}
+
+// TextInputWithError renders a text input field with optional error display
+templ TextInputWithError(label, name, value, placeholder, err string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+		</div>
+		<input
+			type="text"
+			name={ name }
+			id={ name }
+			value={ value }
+			placeholder={ placeholder }
+			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border", inputBorderClass(err) }
+		/>
+		if err != "" {
+			<p class="mt-1 text-sm text-red-600">{ err }</p>
+		}
+	</div>
+}
+
+// NumberInputWithError renders a number input field with optional error display
+templ NumberInputWithError(label, name string, value, defaultVal int, err string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+		<input
+			type="number"
+			name={ name }
+			id={ name }
+			value={ intToStr(value, defaultVal) }
+			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border", inputBorderClass(err) }
+		/>
+		if err != "" {
+			<p class="mt-1 text-sm text-red-600">{ err }</p>
+		}
+	</div>
+}
+
+// RangeInputWithError renders a range slider with optional error display
+templ RangeInputWithError(label, name string, value float32, min, max, step float64, err string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+		</div>
+		<input
+			type="range"
+			name={ name }
+			id={ name }
+			value={ floatToStr(value) }
+			min={ floatToStr(float32(min)) }
+			max={ floatToStr(float32(max)) }
+			step={ floatToStr(float32(step)) }
+			oninput="document.getElementById(this.dataset.target).textContent = this.value"
+			data-target={ name + "_value" }
+			class="mt-1 block w-full"
+		/>
+		if err != "" {
+			<p class="mt-1 text-sm text-red-600">{ err }</p>
+		}
+	</div>
+}
+
+// validationErrorCount formats the error count message
+func validationErrorCount(count int) string {
+	if count == 1 {
+		return "There is 1 validation error"
+	}
+	return fmt.Sprintf("There are %d validation errors", count)
+}
+
+// ValidationSummary renders a summary of validation errors at the top of the form
+templ ValidationSummary(errors map[string]string) {
+	if len(errors) > 0 {
+		<div class="rounded-md bg-red-50 p-4 mb-6">
+			<div class="flex">
+				<div class="flex-shrink-0">
+					<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd"/>
+					</svg>
+				</div>
+				<div class="ml-3">
+					<h3 class="text-sm font-medium text-red-800">
+						{ validationErrorCount(len(errors)) }
+					</h3>
+					<div class="mt-2 text-sm text-red-700">
+						<ul class="list-disc space-y-1 pl-5">
+							for field, msg := range errors {
+								<li>{ field }: { msg }</li>
+							}
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
 }

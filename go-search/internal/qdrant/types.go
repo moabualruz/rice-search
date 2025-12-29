@@ -65,6 +65,7 @@ type PointPayload struct {
 	DocumentHash string    `json:"document_hash"`
 	ChunkHash    string    `json:"chunk_hash"`
 	IndexedAt    time.Time `json:"indexed_at"`
+	ConnectionID string    `json:"connection_id,omitempty"` // Originating connection (optional)
 }
 
 // SearchRequest defines parameters for a hybrid search.
@@ -104,6 +105,9 @@ type SearchFilter struct {
 
 	// DocumentHash filters by document hash.
 	DocumentHash string
+
+	// ConnectionID filters by connection.
+	ConnectionID string
 }
 
 // SearchResult represents a single search result.

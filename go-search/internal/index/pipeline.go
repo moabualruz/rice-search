@@ -232,6 +232,33 @@ func (p *Pipeline) publishIndexEvent(ctx context.Context, result *IndexResult) {
 	}
 }
 
+// publishChunkCreatedEvent publishes a chunk.created event to the event bus.
+func (p *Pipeline) publishChunkCreatedEvent(ctx context.Context, chunk *Chunk) {
+	if p.bus == nil {
+		return
+	}
+
+	event := bus.Event{
+		Type:   bus.TopicChunkCreated,
+		Source: "index",
+		Payload: map[string]interface{}{
+			"store":         chunk.Store,
+			"chunk_id":      chunk.ID,
+			"document_id":   chunk.DocumentID,
+			"path":          chunk.Path,
+			"language":      chunk.Language,
+			"start_line":    chunk.StartLine,
+			"end_line":      chunk.EndLine,
+			"token_count":   chunk.TokenCount,
+			"connection_id": chunk.ConnectionID,
+		},
+	}
+
+	if err := p.bus.Publish(ctx, bus.TopicChunkCreated, event); err != nil {
+		p.log.Debug("Failed to publish chunk.created event", "error", err, "chunk_id", chunk.ID)
+	}
+}
+
 // processDocuments converts documents to chunks.
 func (p *Pipeline) processDocuments(ctx context.Context, store string, docs []*Document) ([]*Chunk, []DocInfo, []IndexError) {
 	var allChunks []*Chunk
@@ -255,6 +282,11 @@ func (p *Pipeline) processDocuments(ctx context.Context, store string, docs []*D
 				Status: "failed",
 			})
 			continue
+		}
+
+		// Publish chunk.created events for each chunk
+		for _, chunk := range chunks {
+			p.publishChunkCreatedEvent(ctx, chunk)
 		}
 
 		allChunks = append(allChunks, chunks...)
@@ -310,6 +342,7 @@ func (p *Pipeline) generateEmbeddings(ctx context.Context, chunks []*Chunk) ([]q
 				DocumentHash: chunk.DocumentID,
 				ChunkHash:    chunk.Hash,
 				IndexedAt:    chunk.IndexedAt,
+				ConnectionID: chunk.ConnectionID,
 			},
 		}
 

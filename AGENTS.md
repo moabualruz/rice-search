@@ -426,11 +426,12 @@ Pure Go rewrite of Rice Search. Single binary, no Python/Node dependencies.
 ```bash
 cd go-search
 
-# 1. Start Qdrant only
+# 1. Start Qdrant and Redis
 docker-compose -f deployments/docker-compose.dev.yml up -d
 
-# 2. Verify Qdrant is running
-curl http://localhost:6333/healthz
+# 2. Verify services are running
+curl http://localhost:6333/healthz    # Qdrant
+docker exec rice-redis-dev redis-cli ping  # Redis
 # Dashboard: http://localhost:6333/dashboard
 
 # 3. Download ML models (first time only)
@@ -521,6 +522,7 @@ rg "TODO|FIXME|XXX|HACK" --type go
 | Rice Search Server | 8080 | HTTP API + Web UI |
 | Qdrant HTTP | 6333 | Vector DB API + Dashboard |
 | Qdrant gRPC | 6334 | Vector DB gRPC |
+| Redis | 6379 | Cache/Bus (distributed mode) |
 
 ### Directory Structure
 
@@ -531,7 +533,7 @@ go-search/
 │   ├── rice-search/        # CLI binary
 │   └── rice-search-server/ # Server binary
 ├── deployments/
-│   └── docker-compose.dev.yml  # Qdrant only (dev)
+│   └── docker-compose.dev.yml  # Qdrant + Redis (dev)
 ├── internal/
 │   ├── bus/                # Event bus
 │   ├── client/             # HTTP client
@@ -580,10 +582,10 @@ RICE_CACHE_TYPE=memory        # memory, redis
 ### Troubleshooting (go-search)
 
 ```bash
-# Reset Qdrant (loses all data)
+# Reset all dev data (loses all data)
 cd go-search
 docker-compose -f deployments/docker-compose.dev.yml down
-rm -rf data/qdrant-dev
+rm -rf data/qdrant-dev data/redis-dev
 docker-compose -f deployments/docker-compose.dev.yml up -d
 
 # Check Qdrant collections

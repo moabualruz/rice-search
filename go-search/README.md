@@ -78,6 +78,7 @@ Pure Go code search platform. Single binary. Event-driven microservices.
 | [Performance](docs/18-performance.md) | Targets, benchmarks, optimization | ✅ |
 | [Testing](docs/19-testing.md) | Unit, integration, e2e strategy | ✅ |
 | [Migration](docs/20-migration.md) | Migrating from current NestJS/Milvus | ✅ |
+| [Default Connection Scoping](docs/21-default-connection-scoping.md) | Automatic search scoping to client connections | ✅ |
 
 ## Quick Start
 

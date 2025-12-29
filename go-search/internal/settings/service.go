@@ -16,6 +16,16 @@ import (
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 )
 
+// FeatureFlags controls experimental and optional features.
+type FeatureFlags struct {
+	EnableQueryUnderstanding bool `json:"enable_query_understanding" yaml:"enable_query_understanding"`
+	EnableDiversity          bool `json:"enable_diversity" yaml:"enable_diversity"`
+	EnableDedup              bool `json:"enable_dedup" yaml:"enable_dedup"`
+	EnableReranking          bool `json:"enable_reranking" yaml:"enable_reranking"`
+	EnableABTesting          bool `json:"enable_ab_testing" yaml:"enable_ab_testing"`
+	EnableExperimental       bool `json:"enable_experimental" yaml:"enable_experimental"`
+}
+
 // RuntimeConfig represents all configurable runtime settings.
 // This matches the web.RuntimeConfig structure.
 type RuntimeConfig struct {
@@ -63,6 +73,9 @@ type RuntimeConfig struct {
 	// Connection Settings
 	ConnectionEnabled bool `json:"connection_enabled" yaml:"connection_enabled"`
 	MaxInactiveHours  int  `json:"max_inactive_hours" yaml:"max_inactive_hours"`
+
+	// Feature Flags
+	Features FeatureFlags `json:"features" yaml:"features"`
 
 	// Metadata
 	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
@@ -116,6 +129,16 @@ func DefaultConfig() RuntimeConfig {
 		// Connection
 		ConnectionEnabled: true,
 		MaxInactiveHours:  168, // 7 days
+
+		// Feature Flags
+		Features: FeatureFlags{
+			EnableQueryUnderstanding: true,
+			EnableDiversity:          true,
+			EnableDedup:              true,
+			EnableReranking:          true,
+			EnableABTesting:          false,
+			EnableExperimental:       false,
+		},
 
 		// Metadata
 		UpdatedAt: time.Now(),
@@ -416,6 +439,92 @@ func (s *Service) IsEmpty() bool {
 	return s.config.Version == 0
 }
 
+// HasAdminOverride checks if a specific field has been overridden by admin.
+// Returns true if the field differs from the default value.
+func (s *Service) HasAdminOverride(fieldName string, currentValue interface{}) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	// If no admin config exists (version 0), no overrides
+	if s.config.Version == 0 {
+		return false
+	}
+
+	defaults := DefaultConfig()
+
+	// Compare current admin config value with default
+	switch fieldName {
+	case "server_host":
+		return s.config.ServerHost != "" && s.config.ServerHost != defaults.ServerHost
+	case "server_port":
+		return s.config.ServerPort != 0 && s.config.ServerPort != defaults.ServerPort
+	case "log_level":
+		return s.config.LogLevel != "" && s.config.LogLevel != defaults.LogLevel
+	case "log_format":
+		return s.config.LogFormat != "" && s.config.LogFormat != defaults.LogFormat
+	case "embed_model":
+		return s.config.EmbedModel != "" && s.config.EmbedModel != defaults.EmbedModel
+	case "rerank_model":
+		return s.config.RerankModel != "" && s.config.RerankModel != defaults.RerankModel
+	case "query_model":
+		return s.config.QueryModel != "" && s.config.QueryModel != defaults.QueryModel
+	case "embed_gpu":
+		return s.config.EmbedGPU != defaults.EmbedGPU
+	case "rerank_gpu":
+		return s.config.RerankGPU != defaults.RerankGPU
+	case "query_gpu":
+		return s.config.QueryGPU != defaults.QueryGPU
+	case "query_enabled":
+		return s.config.QueryEnabled != defaults.QueryEnabled
+	case "batch_size":
+		return s.config.BatchSize != 0 && s.config.BatchSize != defaults.BatchSize
+	case "max_concurrent":
+		return s.config.MaxConcurrent != 0 && s.config.MaxConcurrent != defaults.MaxConcurrent
+	case "qdrant_url":
+		return s.config.QdrantURL != "" && s.config.QdrantURL != defaults.QdrantURL
+	case "qdrant_collection":
+		return s.config.QdrantCollection != "" && s.config.QdrantCollection != defaults.QdrantCollection
+	case "qdrant_timeout":
+		return s.config.QdrantTimeout != 0 && s.config.QdrantTimeout != defaults.QdrantTimeout
+	case "default_top_k":
+		return s.config.DefaultTopK != 0 && s.config.DefaultTopK != defaults.DefaultTopK
+	case "default_rerank":
+		return s.config.DefaultRerank != defaults.DefaultRerank
+	case "default_dedup":
+		return s.config.DefaultDedup != defaults.DefaultDedup
+	case "default_diversity":
+		return s.config.DefaultDiversity != defaults.DefaultDiversity
+	case "dedup_threshold":
+		return s.config.DedupThreshold != 0 && s.config.DedupThreshold != defaults.DedupThreshold
+	case "diversity_lambda":
+		return s.config.DiversityLambda != 0 && s.config.DiversityLambda != defaults.DiversityLambda
+	case "rerank_candidates":
+		return s.config.RerankCandidates != 0 && s.config.RerankCandidates != defaults.RerankCandidates
+	case "max_chunks_per_file":
+		return s.config.MaxChunksPerFile != 0 && s.config.MaxChunksPerFile != defaults.MaxChunksPerFile
+	case "sparse_weight":
+		return s.config.SparseWeight != 0 && s.config.SparseWeight != defaults.SparseWeight
+	case "dense_weight":
+		return s.config.DenseWeight != 0 && s.config.DenseWeight != defaults.DenseWeight
+	case "chunk_size":
+		return s.config.ChunkSize != 0 && s.config.ChunkSize != defaults.ChunkSize
+	case "chunk_overlap":
+		return s.config.ChunkOverlap != 0 && s.config.ChunkOverlap != defaults.ChunkOverlap
+	case "max_file_size":
+		return s.config.MaxFileSize != 0 && s.config.MaxFileSize != defaults.MaxFileSize
+	case "exclude_patterns":
+		return s.config.ExcludePatterns != "" && s.config.ExcludePatterns != defaults.ExcludePatterns
+	case "supported_langs":
+		return s.config.SupportedLangs != "" && s.config.SupportedLangs != defaults.SupportedLangs
+	case "connection_enabled":
+		return s.config.ConnectionEnabled != defaults.ConnectionEnabled
+	case "max_inactive_hours":
+		return s.config.MaxInactiveHours != 0 && s.config.MaxInactiveHours != defaults.MaxInactiveHours
+	default:
+		return false
+	}
+}
+
 // ExportYAML exports settings as YAML bytes.
 func (s *Service) ExportYAML(ctx context.Context) ([]byte, error) {
 	s.mu.RLock()
@@ -591,6 +700,37 @@ func (cfg *RuntimeConfig) Validate() ValidationResult {
 		})
 	}
 
+	// Feature flags validation
+	// Feature flags are boolean, so no range validation needed
+	// However, we can add logical validations
+	if !cfg.Features.EnableReranking && cfg.DefaultRerank {
+		result.Errors = append(result.Errors, ValidationError{
+			Field:   "features.enable_reranking",
+			Message: "reranking feature is disabled but default_rerank is enabled",
+		})
+	}
+
+	if !cfg.Features.EnableDedup && cfg.DefaultDedup {
+		result.Errors = append(result.Errors, ValidationError{
+			Field:   "features.enable_dedup",
+			Message: "dedup feature is disabled but default_dedup is enabled",
+		})
+	}
+
+	if !cfg.Features.EnableDiversity && cfg.DefaultDiversity {
+		result.Errors = append(result.Errors, ValidationError{
+			Field:   "features.enable_diversity",
+			Message: "diversity feature is disabled but default_diversity is enabled",
+		})
+	}
+
+	if !cfg.Features.EnableQueryUnderstanding && cfg.QueryEnabled {
+		result.Errors = append(result.Errors, ValidationError{
+			Field:   "features.enable_query_understanding",
+			Message: "query understanding feature is disabled but query_enabled is true",
+		})
+	}
+
 	result.Valid = len(result.Errors) == 0
 	return result
 }
@@ -602,4 +742,74 @@ func (s *Service) ValidateAndUpdate(ctx context.Context, cfg RuntimeConfig, chan
 		return result, fmt.Errorf("validation failed with %d errors", len(result.Errors))
 	}
 	return result, s.Update(ctx, cfg, changedBy)
+}
+
+// IsFeatureEnabled checks if a feature flag is enabled.
+// Supported feature names: query_understanding, diversity, dedup, reranking, ab_testing, experimental.
+func (s *Service) IsFeatureEnabled(feature string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	switch feature {
+	case "query_understanding":
+		return s.config.Features.EnableQueryUnderstanding
+	case "diversity":
+		return s.config.Features.EnableDiversity
+	case "dedup":
+		return s.config.Features.EnableDedup
+	case "reranking":
+		return s.config.Features.EnableReranking
+	case "ab_testing":
+		return s.config.Features.EnableABTesting
+	case "experimental":
+		return s.config.Features.EnableExperimental
+	default:
+		return false
+	}
+}
+
+// SetFeature sets a feature flag value and persists the change.
+// Supported feature names: query_understanding, diversity, dedup, reranking, ab_testing, experimental.
+func (s *Service) SetFeature(ctx context.Context, feature string, enabled bool, changedBy string) error {
+	s.mu.Lock()
+	cfg := s.config
+	s.mu.Unlock()
+
+	// Update the specific feature flag
+	switch feature {
+	case "query_understanding":
+		cfg.Features.EnableQueryUnderstanding = enabled
+	case "diversity":
+		cfg.Features.EnableDiversity = enabled
+	case "dedup":
+		cfg.Features.EnableDedup = enabled
+	case "reranking":
+		cfg.Features.EnableReranking = enabled
+	case "ab_testing":
+		cfg.Features.EnableABTesting = enabled
+	case "experimental":
+		cfg.Features.EnableExperimental = enabled
+	default:
+		return fmt.Errorf("unknown feature flag: %s", feature)
+	}
+
+	// Persist the change
+	return s.Update(ctx, cfg, changedBy)
+}
+
+// GetFeatures returns the current feature flags configuration.
+func (s *Service) GetFeatures(ctx context.Context) FeatureFlags {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.config.Features
+}
+
+// UpdateFeatures updates all feature flags at once.
+func (s *Service) UpdateFeatures(ctx context.Context, features FeatureFlags, changedBy string) error {
+	s.mu.Lock()
+	cfg := s.config
+	s.mu.Unlock()
+
+	cfg.Features = features
+	return s.Update(ctx, cfg, changedBy)
 }

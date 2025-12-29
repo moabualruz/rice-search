@@ -52,6 +52,9 @@ type Config struct {
 
 	// Observability configuration
 	Observability ObservabilityConfig `yaml:"observability"`
+
+	// Metrics configuration
+	Metrics MetricsConfig `yaml:"metrics"`
 }
 
 // QdrantConfig holds Qdrant connection settings.
@@ -152,6 +155,12 @@ type ObservabilityConfig struct {
 	MetricsPath     string `envconfig:"RICE_METRICS_PATH" yaml:"metrics_path"`
 	TracingEnabled  bool   `envconfig:"RICE_TRACING_ENABLED" yaml:"tracing_enabled"`
 	TracingEndpoint string `envconfig:"RICE_TRACING_ENDPOINT" yaml:"tracing_endpoint"`
+}
+
+// MetricsConfig holds metrics persistence settings.
+type MetricsConfig struct {
+	Persistence string `envconfig:"RICE_METRICS_PERSISTENCE" yaml:"persistence"` // "memory" or "redis"
+	RedisURL    string `envconfig:"RICE_METRICS_REDIS_URL" yaml:"redis_url"`     // Redis URL for persistence
 }
 
 // Load loads configuration from environment variables and optional config file.
@@ -275,6 +284,11 @@ func setDefaults(cfg *Config) {
 		MetricsEnabled: true,
 		MetricsPath:    "/metrics",
 		TracingEnabled: false,
+	}
+
+	cfg.Metrics = MetricsConfig{
+		Persistence: "memory",
+		RedisURL:    "redis://localhost:6379/0",
 	}
 }
 

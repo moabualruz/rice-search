@@ -205,7 +205,7 @@ func (c *Client) Search(ctx context.Context, store, query string, opts SearchOpt
 	results := make([]SearchResult, len(resp.Results))
 	for i, r := range resp.Results {
 		results[i] = SearchResult{
-			ID:          r.ID,
+			ID:          r.Id,
 			Path:        r.Path,
 			Language:    r.Language,
 			StartLine:   int(r.StartLine),
@@ -293,7 +293,7 @@ func (c *Client) Index(ctx context.Context, store string, docs []IndexDocument, 
 		Skipped:     int(resp.Skipped),
 		Failed:      int(resp.Failed),
 		ChunksTotal: int(resp.ChunksTotal),
-		Duration:    resp.GetDuration(),
+		Duration:    resp.GetDuration().AsDuration(),
 		Errors:      errors,
 	}, nil
 }
@@ -388,8 +388,8 @@ func (c *Client) ListStores(ctx context.Context) ([]Store, error) {
 			Name:        s.Name,
 			DisplayName: s.DisplayName,
 			Description: s.Description,
-			CreatedAt:   s.GetCreatedAt(),
-			UpdatedAt:   s.GetUpdatedAt(),
+			CreatedAt:   s.GetCreatedAt().AsTime(),
+			UpdatedAt:   s.GetUpdatedAt().AsTime(),
 		}
 	}
 
@@ -410,8 +410,8 @@ func (c *Client) CreateStore(ctx context.Context, name, description string) (*St
 		Name:        resp.Name,
 		DisplayName: resp.DisplayName,
 		Description: resp.Description,
-		CreatedAt:   resp.GetCreatedAt(),
-		UpdatedAt:   resp.GetUpdatedAt(),
+		CreatedAt:   resp.GetCreatedAt().AsTime(),
+		UpdatedAt:   resp.GetUpdatedAt().AsTime(),
 	}, nil
 }
 
@@ -428,8 +428,8 @@ func (c *Client) GetStore(ctx context.Context, name string) (*Store, error) {
 		Name:        resp.Name,
 		DisplayName: resp.DisplayName,
 		Description: resp.Description,
-		CreatedAt:   resp.GetCreatedAt(),
-		UpdatedAt:   resp.GetUpdatedAt(),
+		CreatedAt:   resp.GetCreatedAt().AsTime(),
+		UpdatedAt:   resp.GetUpdatedAt().AsTime(),
 	}, nil
 }
 
@@ -454,7 +454,7 @@ func (c *Client) GetStoreStats(ctx context.Context, name string) (*StoreStats, e
 		DocumentCount: resp.DocumentCount,
 		ChunkCount:    resp.ChunkCount,
 		TotalSize:     resp.TotalSize,
-		LastIndexed:   resp.GetLastIndexed(),
+		LastIndexed:   resp.GetLastIndexed().AsTime(),
 	}, nil
 }
 
@@ -511,7 +511,7 @@ func (c *Client) Health(ctx context.Context) (*HealthResponse, error) {
 		components[name] = ComponentHealth{
 			Status:  pbStatusToStatus(comp.Status),
 			Message: comp.Message,
-			Latency: comp.GetLatency(),
+			Latency: comp.GetLatency().AsDuration(),
 		}
 	}
 
@@ -556,4 +556,121 @@ func pbStatusToStatus(s pb.HealthStatus) HealthStatus {
 	default:
 		return HealthStatusUnknown
 	}
+}
+
+// =============================================================================
+// Model Management Methods
+// =============================================================================
+
+// ModelInfo represents information about a model.
+type ModelInfo struct {
+	ID          string
+	Type        string
+	DisplayName string
+	Description string
+	OutputDim   int
+	MaxTokens   int
+	Downloaded  bool
+	IsDefault   bool
+	GPUEnabled  bool
+	Size        int64
+}
+
+// ListModels returns all available models.
+func (c *Client) ListModels(ctx context.Context, typeFilter string) ([]ModelInfo, error) {
+	resp, err := c.client.ListModels(ctx, &pb.ListModelsRequest{
+		TypeFilter: typeFilter,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	models := make([]ModelInfo, len(resp.Models))
+	for i, m := range resp.Models {
+		models[i] = ModelInfo{
+			ID:          m.Id,
+			Type:        m.Type,
+			DisplayName: m.DisplayName,
+			Description: m.Description,
+			OutputDim:   int(m.OutputDim),
+			MaxTokens:   int(m.MaxTokens),
+			Downloaded:  m.Downloaded,
+			IsDefault:   m.IsDefault,
+			GPUEnabled:  m.GpuEnabled,
+			Size:        m.Size,
+		}
+	}
+
+	return models, nil
+}
+
+// DownloadModel downloads a specific model.
+func (c *Client) DownloadModel(ctx context.Context, modelID string) (*DownloadModelResult, error) {
+	resp, err := c.client.DownloadModel(ctx, &pb.DownloadModelRequest{
+		ModelId: modelID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &DownloadModelResult{
+		Success:  resp.Success,
+		Message:  resp.Message,
+		Progress: int(resp.Progress),
+	}, nil
+}
+
+// DownloadModelResult represents the result of a model download.
+type DownloadModelResult struct {
+	Success  bool
+	Message  string
+	Progress int
+}
+
+// SetDefaultModel sets the default model for a model type.
+func (c *Client) SetDefaultModel(ctx context.Context, modelType, modelID string) (*ModelInfo, error) {
+	resp, err := c.client.SetDefaultModel(ctx, &pb.SetDefaultModelRequest{
+		ModelType: modelType,
+		ModelId:   modelID,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &ModelInfo{
+		ID:          resp.Id,
+		Type:        resp.Type,
+		DisplayName: resp.DisplayName,
+		Description: resp.Description,
+		OutputDim:   int(resp.OutputDim),
+		MaxTokens:   int(resp.MaxTokens),
+		Downloaded:  resp.Downloaded,
+		IsDefault:   resp.IsDefault,
+		GPUEnabled:  resp.GpuEnabled,
+		Size:        resp.Size,
+	}, nil
+}
+
+// ToggleGPU toggles GPU acceleration for a model.
+func (c *Client) ToggleGPU(ctx context.Context, modelID string, enabled bool) (*ModelInfo, error) {
+	resp, err := c.client.ToggleGPU(ctx, &pb.ToggleGPURequest{
+		ModelId: modelID,
+		Enabled: enabled,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &ModelInfo{
+		ID:          resp.Id,
+		Type:        resp.Type,
+		DisplayName: resp.DisplayName,
+		Description: resp.Description,
+		OutputDim:   int(resp.OutputDim),
+		MaxTokens:   int(resp.MaxTokens),
+		Downloaded:  resp.Downloaded,
+		IsDefault:   resp.IsDefault,
+		GPUEnabled:  resp.GpuEnabled,
+		Size:        resp.Size,
+	}, nil
 }

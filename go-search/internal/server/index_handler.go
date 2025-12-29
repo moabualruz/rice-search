@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ricesearch/rice-search/internal/index"
+	pkgctx "github.com/ricesearch/rice-search/internal/pkg/context"
 	"github.com/ricesearch/rice-search/internal/store"
 )
 
@@ -128,14 +129,25 @@ func (h *IndexHandler) handleIndex(w http.ResponseWriter, r *http.Request, store
 		return
 	}
 
+	// Extract connection ID from request header
+	connectionID := r.Header.Get("X-Connection-ID")
+
 	// Convert to documents
 	docs := make([]*index.Document, len(req.Files))
 	for i, f := range req.Files {
-		docs[i] = index.NewDocument(f.Path, f.Content)
+		doc := index.NewDocument(f.Path, f.Content)
+		doc.ConnectionID = connectionID
+		docs[i] = doc
+	}
+
+	// Add connection ID to context for logging/events
+	ctx := r.Context()
+	if connectionID != "" {
+		ctx = pkgctx.WithConnectionID(ctx, connectionID)
 	}
 
 	// Index
-	result, err := h.pipeline.Index(r.Context(), index.IndexRequest{
+	result, err := h.pipeline.Index(ctx, index.IndexRequest{
 		Store:     storeName,
 		Documents: docs,
 		Force:     req.Force,
@@ -200,13 +212,24 @@ func (h *IndexHandler) handleReindex(w http.ResponseWriter, r *http.Request, sto
 		return
 	}
 
+	// Extract connection ID from request header
+	connectionID := r.Header.Get("X-Connection-ID")
+
 	// Convert to documents
 	docs := make([]*index.Document, len(req.Files))
 	for i, f := range req.Files {
-		docs[i] = index.NewDocument(f.Path, f.Content)
+		doc := index.NewDocument(f.Path, f.Content)
+		doc.ConnectionID = connectionID
+		docs[i] = doc
 	}
 
-	result, err := h.pipeline.Reindex(r.Context(), index.IndexRequest{
+	// Add connection ID to context for logging/events
+	ctx := r.Context()
+	if connectionID != "" {
+		ctx = pkgctx.WithConnectionID(ctx, connectionID)
+	}
+
+	result, err := h.pipeline.Reindex(ctx, index.IndexRequest{
 		Store:     storeName,
 		Documents: docs,
 	})

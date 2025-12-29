@@ -4,12 +4,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
+	"github.com/ricesearch/rice-search/internal/onnx"
 	"github.com/ricesearch/rice-search/internal/pkg/errors"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 )
@@ -419,6 +421,85 @@ func (r *Registry) DownloadModel(ctx context.Context, modelID string) (<-chan Do
 	return progressChan, nil
 }
 
+// ValidateInference validates a model by running test inference.
+func (r *Registry) ValidateInference(ctx context.Context, modelID string) error {
+	r.mu.RLock()
+	model, exists := r.models[modelID]
+	r.mu.RUnlock()
+
+	if !exists {
+		return errors.NotFoundError(fmt.Sprintf("model: %s", modelID))
+	}
+
+	if !model.Downloaded {
+		return fmt.Errorf("model not downloaded: %s", modelID)
+	}
+
+	modelDir := filepath.Join("./models", modelID)
+	modelPath := filepath.Join(modelDir, "model.onnx")
+
+	// Create temporary runtime for validation (CPU only for safety)
+	runtimeCfg := onnx.DefaultRuntimeConfig()
+	runtimeCfg.Device = onnx.DeviceCPU
+
+	runtime, err := onnx.NewRuntime(runtimeCfg)
+	if err != nil {
+		return fmt.Errorf("failed to create runtime: %w", err)
+	}
+	defer runtime.Close()
+
+	// Load session
+	session, err := runtime.LoadSession(modelID, modelPath)
+	if err != nil {
+		return fmt.Errorf("failed to load model: %w", err)
+	}
+	defer session.Close()
+
+	// Load tokenizer if available (required for text models)
+	tokenizerPath := filepath.Join(modelDir, "tokenizer.json")
+	if _, statErr := os.Stat(tokenizerPath); statErr == nil {
+		tokCfg := onnx.DefaultTokenizerConfig()
+		tokCfg.MaxLength = 512 // Use reasonable default
+
+		tokenizer, tokErr := onnx.NewTokenizer(modelDir, tokCfg)
+		if tokErr != nil {
+			return fmt.Errorf("failed to load tokenizer: %w", tokErr)
+		}
+		defer tokenizer.Close()
+
+		// Run dummy inference with tokenizer
+		dummyTexts := []string{"test validation input"}
+		encoding, encErr := tokenizer.EncodePadded(dummyTexts, true)
+		if encErr != nil {
+			return fmt.Errorf("tokenization failed: %w", encErr)
+		}
+
+		outputs, runErr := session.RunFloat32(encoding.InputIDs, encoding.AttentionMask, encoding.Shape())
+		if runErr != nil {
+			return fmt.Errorf("inference failed: %w", runErr)
+		}
+
+		// Validate output
+		if len(outputs) == 0 {
+			return fmt.Errorf("model produced empty output")
+		}
+
+		// Check for NaN/Inf
+		for i, v := range outputs {
+			if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+				return fmt.Errorf("model output contains NaN/Inf at index %d", i)
+			}
+		}
+
+		r.log.Info("Model inference validation passed", "model", modelID, "output_size", len(outputs))
+	} else {
+		// For models without tokenizer, just verify session loaded successfully
+		r.log.Info("Model validation passed (no tokenizer test)", "model", modelID)
+	}
+
+	return nil
+}
+
 // ValidateModel validates that a model's files are present and valid.
 func (r *Registry) ValidateModel(ctx context.Context, modelID string) error {
 	r.mu.RLock()
@@ -453,6 +534,11 @@ func (r *Registry) ValidateModel(ctx context.Context, modelID string) error {
 	if _, err := os.Stat(configPath); err != nil {
 		r.log.Warn("config.json not found", "model", modelID)
 		// Not a fatal error
+	}
+
+	// Run inference validation
+	if err := r.ValidateInference(ctx, modelID); err != nil {
+		return fmt.Errorf("inference validation failed: %w", err)
 	}
 
 	// Update model validation status

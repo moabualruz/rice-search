@@ -226,7 +226,7 @@ func (s *Server) Search(ctx context.Context, req *pb.SearchRequest) (*pb.SearchR
 	results := make([]*pb.SearchResult, len(resp.Results))
 	for i, r := range resp.Results {
 		results[i] = &pb.SearchResult{
-			ID:          r.ID,
+			Id:          r.ID,
 			Path:        r.Path,
 			Language:    r.Language,
 			StartLine:   int32(r.StartLine),

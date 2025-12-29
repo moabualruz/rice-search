@@ -173,7 +173,7 @@ dev-logs: ## View dev logs
 
 .PHONY: dev-reset
 dev-reset: dev-down ## Reset dev environment (deletes data)
-	rm -rf data/qdrant-dev
+	rm -rf data/qdrant-dev data/redis-dev
 	docker-compose -f deployments/docker-compose.dev.yml up -d
 
 ##@ Code Generation

@@ -28,6 +28,10 @@ type Service interface {
 	// ReloadModels reloads all models (for hot-reload after download).
 	ReloadModels() error
 
+	// ReloadModelsWithConfig reloads models with new configuration.
+	// This enables changing model paths or GPU settings at runtime without restart.
+	ReloadModelsWithConfig(cfg config.MLConfig) error
+
 	// Close releases resources.
 	Close() error
 }
@@ -244,10 +248,28 @@ func (s *ServiceImpl) Health() HealthStatus {
 // ReloadModels unloads existing models and reloads them from disk.
 // This enables hot-reload after model download without server restart.
 func (s *ServiceImpl) ReloadModels() error {
+	return s.ReloadModelsWithConfig(s.cfg)
+}
+
+// ReloadModelsWithConfig reloads models with new configuration.
+// This enables changing model paths or GPU settings at runtime without restart.
+func (s *ServiceImpl) ReloadModelsWithConfig(newCfg config.MLConfig) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.log.Info("Reloading ML models...")
+	s.log.Info("Reloading ML models with new config",
+		"old_embed_gpu", s.cfg.EmbedGPU,
+		"new_embed_gpu", newCfg.EmbedGPU,
+		"old_rerank_gpu", s.cfg.RerankGPU,
+		"new_rerank_gpu", newCfg.RerankGPU,
+		"old_embed_model", s.cfg.EmbedModel,
+		"new_embed_model", newCfg.EmbedModel,
+		"old_rerank_model", s.cfg.RerankModel,
+		"new_rerank_model", newCfg.RerankModel,
+	)
+
+	// Update config
+	s.cfg = newCfg
 
 	// Close existing models
 	if s.embedder != nil {
@@ -271,10 +293,10 @@ func (s *ServiceImpl) ReloadModels() error {
 		s.reranker = nil
 	}
 
-	// Clear embedding cache
+	// Clear embedding cache (models changed, old embeddings may be incompatible)
 	s.cache = NewEmbeddingCache(10000)
 
-	// Reload models
+	// Reload models with new config
 	var lastErr error
 
 	embedder, err := NewEmbedder(s.runtime, s.cfg, s.log)

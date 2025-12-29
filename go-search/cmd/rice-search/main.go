@@ -71,6 +71,7 @@ Then use this CLI:
 		indexCmd(),
 		storesCmd(),
 		healthCmd(),
+		modelsCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -643,4 +644,220 @@ func isBinaryContent(content []byte) bool {
 		}
 	}
 	return false
+}
+
+// =============================================================================
+// Models Commands
+// =============================================================================
+
+func modelsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "models",
+		Short: "Manage ML models",
+		Long:  "Download, list, and check ML models used for embeddings, reranking, and query understanding.",
+	}
+
+	cmd.AddCommand(
+		modelsListCmd(),
+		modelsDownloadCmd(),
+		modelsCheckCmd(),
+	)
+
+	return cmd
+}
+
+func modelsListCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "list",
+		Short: "List available models",
+		Long: `List all available ML models.
+
+Examples:
+  rice-search models list              # List all models
+  rice-search models list --format json # JSON output`,
+		RunE: runModelsList,
+	}
+	return cmd
+}
+
+func runModelsList(cmd *cobra.Command, args []string) error {
+	format, _ := cmd.Flags().GetString("format")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	models, err := client.ListModels(ctx, "")
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+
+	if format == "json" {
+		data, _ := json.MarshalIndent(models, "", "  ")
+		fmt.Println(string(data))
+		return nil
+	}
+
+	fmt.Println("AVAILABLE MODELS:")
+	fmt.Println()
+	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	_, _ = fmt.Fprintln(w, "TYPE\tNAME\tSIZE\tSTATUS\tDEFAULT\tGPU")
+	_, _ = fmt.Fprintln(w, "----\t----\t----\t------\t-------\t---")
+
+	for _, m := range models {
+		status := "✗ not downloaded"
+		if m.Downloaded {
+			status = "✓ downloaded"
+		}
+
+		defaultMark := ""
+		if m.IsDefault {
+			defaultMark = "✓"
+		}
+
+		gpuMark := ""
+		if m.GPUEnabled {
+			gpuMark = "✓"
+		}
+
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+			m.Type, m.DisplayName, formatBytes(m.Size), status, defaultMark, gpuMark)
+	}
+	_ = w.Flush()
+	return nil
+}
+
+func modelsDownloadCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "download [model-id]",
+		Short: "Download ML models",
+		Long: `Download one or all ML models.
+
+Examples:
+  rice-search models download                    # Download all models
+  rice-search models download jina-embeddings-v2 # Download specific model`,
+		RunE: runModelsDownload,
+	}
+	return cmd
+}
+
+func runModelsDownload(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	// If no model ID provided, download all
+	if len(args) == 0 {
+		models, err := client.ListModels(ctx, "")
+		if err != nil {
+			return fmt.Errorf("failed to list models: %w", err)
+		}
+
+		fmt.Printf("Downloading %d models...\n\n", len(models))
+
+		for _, m := range models {
+			if m.Downloaded {
+				fmt.Printf("✓ %s: already downloaded\n", m.DisplayName)
+				continue
+			}
+
+			fmt.Printf("Downloading %s (%s)...\n", m.DisplayName, formatBytes(m.Size))
+			result, err := client.DownloadModel(ctx, m.ID)
+			if err != nil {
+				fmt.Printf("✗ %s: %v\n", m.DisplayName, err)
+				continue
+			}
+
+			if result.Success {
+				fmt.Printf("✓ %s: downloaded\n", m.DisplayName)
+			} else {
+				fmt.Printf("✗ %s: %s\n", m.DisplayName, result.Message)
+			}
+		}
+
+		fmt.Println("\nDone!")
+		return nil
+	}
+
+	// Download specific model
+	modelID := args[0]
+	fmt.Printf("Downloading model: %s\n", modelID)
+
+	result, err := client.DownloadModel(ctx, modelID)
+	if err != nil {
+		return fmt.Errorf("download failed: %w", err)
+	}
+
+	if result.Success {
+		fmt.Printf("✓ Downloaded successfully\n")
+	} else {
+		fmt.Printf("✗ Download failed: %s\n", result.Message)
+	}
+
+	return nil
+}
+
+func modelsCheckCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check installed models",
+		Long: `Check which models are installed and their status.
+
+Examples:
+  rice-search models check`,
+		RunE: runModelsCheck,
+	}
+	return cmd
+}
+
+func runModelsCheck(cmd *cobra.Command, args []string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	models, err := client.ListModels(ctx, "")
+	if err != nil {
+		return fmt.Errorf("failed to list models: %w", err)
+	}
+
+	downloadedCount := 0
+	totalSize := int64(0)
+
+	fmt.Println("MODEL STATUS:")
+	fmt.Println()
+
+	for _, m := range models {
+		if m.Downloaded {
+			downloadedCount++
+			totalSize += m.Size
+			fmt.Printf("✓ %s (%s)\n", m.DisplayName, m.Type)
+			if m.IsDefault {
+				fmt.Printf("  Default model for %s\n", m.Type)
+			}
+			if m.GPUEnabled {
+				fmt.Printf("  GPU acceleration: enabled\n")
+			}
+		} else {
+			fmt.Printf("✗ %s (%s) - not downloaded\n", m.DisplayName, m.Type)
+		}
+	}
+
+	fmt.Printf("\nTotal: %d/%d models downloaded (%s)\n",
+		downloadedCount, len(models), formatBytes(totalSize))
+
+	if downloadedCount < len(models) {
+		fmt.Println("\nRun 'rice-search models download' to download missing models")
+	}
+
+	return nil
+}
+
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
 }

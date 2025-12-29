@@ -22,8 +22,8 @@ services:
       - RICE_CACHE_TYPE=memory
       - RICE_BUS_TYPE=memory
     volumes:
-      - rice-models:/app/models
-      - rice-data:/app/data
+      - ../data/models:/app/models
+      - ../data/rice-search:/app/data
     depends_on:
       qdrant:
         condition: service_healthy
@@ -39,6 +39,7 @@ services:
 
   # ===========================================================================
   # Qdrant Vector Database
+  # Dashboard: http://localhost:6333/dashboard (built-in, no separate UI needed)
   # GPU support requires v1.13.0+. Switch images by commenting/uncommenting:
   # ===========================================================================
   qdrant:
@@ -80,21 +81,6 @@ services:
     restart: unless-stopped
 
   # ===========================================================================
-  # Qdrant Web UI (optional, for debugging)
-  # ===========================================================================
-  qdrant-ui:
-    image: qdrant/qdrant-web-ui:latest
-    container_name: rice-qdrant-ui
-    ports:
-      - "8001:80"
-    environment:
-      - QDRANT_URL=http://qdrant:6333
-    depends_on:
-      - qdrant
-    profiles:
-      - dev
-
-  # ===========================================================================
   # Redis (optional, for distributed cache/bus)
   # ===========================================================================
   redis:
@@ -103,7 +89,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - ../data/redis:/data
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -113,14 +99,6 @@ services:
     restart: unless-stopped
     profiles:
       - distributed
-
-volumes:
-  rice-models:
-    name: rice-models
-  rice-data:
-    name: rice-data
-  redis-data:
-    name: rice-redis-data
 
 networks:
   default:

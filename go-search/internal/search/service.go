@@ -17,13 +17,20 @@ import (
 
 // Service provides search capabilities.
 type Service struct {
-	ml       ml.Service
-	qdrant   *qdrant.Client
-	querySvc *query.Service
-	bus      bus.Bus
-	log      *logger.Logger
-	cfg      Config
-	mu       sync.RWMutex
+	ml          ml.Service
+	qdrant      *qdrant.Client
+	querySvc    *query.Service
+	bus         bus.Bus
+	log         *logger.Logger
+	cfg         Config
+	mu          sync.RWMutex
+	monitorSvc  MonitoringService
+	monitorOnce sync.Once
+}
+
+// MonitoringService defines the interface for connection monitoring.
+type MonitoringService interface {
+	RecordSearch(connectionID string)
 }
 
 // Config configures the search service.
@@ -104,6 +111,12 @@ type Request struct {
 
 	// DenseWeight overrides the dense weight (0-1).
 	DenseWeight *float32 `json:"dense_weight,omitempty"`
+
+	// GroupByConnection groups results by connection_id.
+	GroupByConnection bool `json:"group_by_connection,omitempty"`
+
+	// MaxChunksPerConnection limits chunks per connection when grouping (default: 3).
+	MaxChunksPerConnection int `json:"max_chunks_per_connection,omitempty"`
 }
 
 // Filter defines search filters.
@@ -113,6 +126,9 @@ type Filter struct {
 
 	// Languages filters by programming language.
 	Languages []string `json:"languages,omitempty"`
+
+	// ConnectionID filters by connection.
+	ConnectionID string `json:"connection_id,omitempty"`
 }
 
 // Result represents a single search result.
@@ -143,6 +159,24 @@ type Result struct {
 
 	// RerankScore is the reranker score (if reranking was applied).
 	RerankScore *float32 `json:"rerank_score,omitempty"`
+
+	// ConnectionID is the connection that indexed this chunk.
+	ConnectionID string `json:"connection_id,omitempty"`
+}
+
+// ConnectionGroup represents results grouped by connection.
+type ConnectionGroup struct {
+	// ConnectionID is the connection identifier.
+	ConnectionID string `json:"connection_id"`
+
+	// ConnectionName is the human-readable connection name (if available).
+	ConnectionName string `json:"connection_name,omitempty"`
+
+	// ResultCount is the total number of results from this connection.
+	ResultCount int `json:"result_count"`
+
+	// TopResults are the top-scoring results from this connection.
+	TopResults []Result `json:"top_results"`
 }
 
 // Response represents a search response.
@@ -164,6 +198,9 @@ type Response struct {
 
 	// ParsedQuery contains query understanding results (if available).
 	ParsedQuery *query.ParsedQuery `json:"parsed_query,omitempty"`
+
+	// ConnectionGroups contains results grouped by connection (if requested).
+	ConnectionGroups []ConnectionGroup `json:"connection_groups,omitempty"`
 }
 
 // SearchMetadata contains information about how the search was performed.
@@ -278,8 +315,9 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	// Apply filter
 	if req.Filter != nil {
 		searchReq.Filter = &qdrant.SearchFilter{
-			PathPrefix: req.Filter.PathPrefix,
-			Languages:  req.Filter.Languages,
+			PathPrefix:   req.Filter.PathPrefix,
+			Languages:    req.Filter.Languages,
+			ConnectionID: req.Filter.ConnectionID,
 		}
 	}
 
@@ -295,13 +333,14 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	results := make([]Result, len(qdrantResults))
 	for i, qr := range qdrantResults {
 		results[i] = Result{
-			ID:        qr.ID,
-			Path:      qr.Payload.Path,
-			Language:  qr.Payload.Language,
-			StartLine: qr.Payload.StartLine,
-			EndLine:   qr.Payload.EndLine,
-			Symbols:   qr.Payload.Symbols,
-			Score:     qr.Score,
+			ID:           qr.ID,
+			Path:         qr.Payload.Path,
+			Language:     qr.Payload.Language,
+			StartLine:    qr.Payload.StartLine,
+			EndLine:      qr.Payload.EndLine,
+			Symbols:      qr.Payload.Symbols,
+			Score:        qr.Score,
+			ConnectionID: qr.Payload.ConnectionID,
 		}
 		if req.IncludeContent {
 			results[i].Content = qr.Payload.Content
@@ -342,6 +381,16 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		}
 	}
 
+	// Apply connection grouping if requested
+	var connectionGroups []ConnectionGroup
+	if req.GroupByConnection {
+		maxPerConnection := req.MaxChunksPerConnection
+		if maxPerConnection <= 0 {
+			maxPerConnection = 3
+		}
+		connectionGroups = groupByConnection(results, maxPerConnection, s)
+	}
+
 	// Limit to topK
 	if len(results) > topK {
 		results = results[:topK]
@@ -350,13 +399,17 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	metadata.SearchTimeMs = time.Since(start).Milliseconds()
 
 	resp := &Response{
-		Query:       req.Query,
-		Store:       req.Store,
-		Results:     results,
-		Total:       len(qdrantResults),
-		Metadata:    metadata,
-		ParsedQuery: parsedQuery,
+		Query:            req.Query,
+		Store:            req.Store,
+		Results:          results,
+		Total:            len(qdrantResults),
+		Metadata:         metadata,
+		ParsedQuery:      parsedQuery,
+		ConnectionGroups: connectionGroups,
 	}
+
+	// Record search activity for connection monitoring
+	s.recordSearchActivity(req.Filter)
 
 	// Publish search response event for metrics
 	s.publishSearchEvent(ctx, resp, nil)
@@ -429,8 +482,9 @@ func (s *Service) SearchDenseOnly(ctx context.Context, req Request) (*Response, 
 
 	if req.Filter != nil {
 		searchReq.Filter = &qdrant.SearchFilter{
-			PathPrefix: req.Filter.PathPrefix,
-			Languages:  req.Filter.Languages,
+			PathPrefix:   req.Filter.PathPrefix,
+			Languages:    req.Filter.Languages,
+			ConnectionID: req.Filter.ConnectionID,
 		}
 	}
 
@@ -444,24 +498,39 @@ func (s *Service) SearchDenseOnly(ctx context.Context, req Request) (*Response, 
 	results := make([]Result, len(qdrantResults))
 	for i, qr := range qdrantResults {
 		results[i] = Result{
-			ID:        qr.ID,
-			Path:      qr.Payload.Path,
-			Language:  qr.Payload.Language,
-			StartLine: qr.Payload.StartLine,
-			EndLine:   qr.Payload.EndLine,
-			Symbols:   qr.Payload.Symbols,
-			Score:     qr.Score,
+			ID:           qr.ID,
+			Path:         qr.Payload.Path,
+			Language:     qr.Payload.Language,
+			StartLine:    qr.Payload.StartLine,
+			EndLine:      qr.Payload.EndLine,
+			Symbols:      qr.Payload.Symbols,
+			Score:        qr.Score,
+			ConnectionID: qr.Payload.ConnectionID,
 		}
 		if req.IncludeContent {
 			results[i].Content = qr.Payload.Content
 		}
 	}
 
+	// Apply connection grouping if requested
+	var connectionGroups []ConnectionGroup
+	if req.GroupByConnection {
+		maxPerConnection := req.MaxChunksPerConnection
+		if maxPerConnection <= 0 {
+			maxPerConnection = 3
+		}
+		connectionGroups = groupByConnection(results, maxPerConnection, s)
+	}
+
+	// Record search activity for connection monitoring
+	s.recordSearchActivity(req.Filter)
+
 	return &Response{
-		Query:   req.Query,
-		Store:   req.Store,
-		Results: results,
-		Total:   len(results),
+		Query:            req.Query,
+		Store:            req.Store,
+		Results:          results,
+		Total:            len(results),
+		ConnectionGroups: connectionGroups,
 		Metadata: SearchMetadata{
 			SearchTimeMs:    time.Since(start).Milliseconds(),
 			EmbedTimeMs:     embedTime.Milliseconds(),
@@ -505,8 +574,9 @@ func (s *Service) SearchSparseOnly(ctx context.Context, req Request) (*Response,
 
 	if req.Filter != nil {
 		searchReq.Filter = &qdrant.SearchFilter{
-			PathPrefix: req.Filter.PathPrefix,
-			Languages:  req.Filter.Languages,
+			PathPrefix:   req.Filter.PathPrefix,
+			Languages:    req.Filter.Languages,
+			ConnectionID: req.Filter.ConnectionID,
 		}
 	}
 
@@ -520,24 +590,39 @@ func (s *Service) SearchSparseOnly(ctx context.Context, req Request) (*Response,
 	results := make([]Result, len(qdrantResults))
 	for i, qr := range qdrantResults {
 		results[i] = Result{
-			ID:        qr.ID,
-			Path:      qr.Payload.Path,
-			Language:  qr.Payload.Language,
-			StartLine: qr.Payload.StartLine,
-			EndLine:   qr.Payload.EndLine,
-			Symbols:   qr.Payload.Symbols,
-			Score:     qr.Score,
+			ID:           qr.ID,
+			Path:         qr.Payload.Path,
+			Language:     qr.Payload.Language,
+			StartLine:    qr.Payload.StartLine,
+			EndLine:      qr.Payload.EndLine,
+			Symbols:      qr.Payload.Symbols,
+			Score:        qr.Score,
+			ConnectionID: qr.Payload.ConnectionID,
 		}
 		if req.IncludeContent {
 			results[i].Content = qr.Payload.Content
 		}
 	}
 
+	// Apply connection grouping if requested
+	var connectionGroups []ConnectionGroup
+	if req.GroupByConnection {
+		maxPerConnection := req.MaxChunksPerConnection
+		if maxPerConnection <= 0 {
+			maxPerConnection = 3
+		}
+		connectionGroups = groupByConnection(results, maxPerConnection, s)
+	}
+
+	// Record search activity for connection monitoring
+	s.recordSearchActivity(req.Filter)
+
 	return &Response{
-		Query:   req.Query,
-		Store:   req.Store,
-		Results: results,
-		Total:   len(results),
+		Query:            req.Query,
+		Store:            req.Store,
+		Results:          results,
+		Total:            len(results),
+		ConnectionGroups: connectionGroups,
 		Metadata: SearchMetadata{
 			SearchTimeMs:    time.Since(start).Milliseconds(),
 			EmbedTimeMs:     embedTime.Milliseconds(),
@@ -599,6 +684,63 @@ func GroupByFile(results []Result, maxPerFile int) []Result {
 	return grouped
 }
 
+// groupByConnection groups results by connection_id and creates connection summaries.
+func groupByConnection(results []Result, maxPerConnection int, svc *Service) []ConnectionGroup {
+	if maxPerConnection <= 0 {
+		maxPerConnection = 3
+	}
+
+	// Group results by connection_id
+	connGroups := make(map[string][]Result)
+	connOrder := make([]string, 0)
+
+	for _, r := range results {
+		connID := r.ConnectionID
+		if connID == "" {
+			connID = "unknown"
+		}
+		if _, exists := connGroups[connID]; !exists {
+			connOrder = append(connOrder, connID)
+		}
+		connGroups[connID] = append(connGroups[connID], r)
+	}
+
+	// Build connection groups
+	groups := make([]ConnectionGroup, 0, len(connGroups))
+	for _, connID := range connOrder {
+		chunks := connGroups[connID]
+
+		// Sort by score within connection
+		sort.Slice(chunks, func(i, j int) bool {
+			return chunks[i].Score > chunks[j].Score
+		})
+
+		// Take top N per connection
+		topResults := chunks
+		if len(topResults) > maxPerConnection {
+			topResults = chunks[:maxPerConnection]
+		}
+
+		// Try to get connection name (optional - requires connection service)
+		// For now, leave empty - can be enriched by API layer if needed
+		connectionName := ""
+
+		groups = append(groups, ConnectionGroup{
+			ConnectionID:   connID,
+			ConnectionName: connectionName,
+			ResultCount:    len(chunks),
+			TopResults:     topResults,
+		})
+	}
+
+	// Sort groups by total result count (descending)
+	sort.Slice(groups, func(i, j int) bool {
+		return groups[i].ResultCount > groups[j].ResultCount
+	})
+
+	return groups
+}
+
 // UpdateConfig updates the search configuration at runtime.
 // This is called when settings are changed via the admin UI.
 func (s *Service) UpdateConfig(cfg Config) {
@@ -619,4 +761,38 @@ func (s *Service) GetConfig() Config {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.cfg
+}
+
+// SetMonitoringService sets the monitoring service for search tracking.
+// This is called during server initialization after both services are created.
+func (s *Service) SetMonitoringService(monSvc MonitoringService) {
+	s.monitorOnce.Do(func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.monitorSvc = monSvc
+		if monSvc != nil {
+			s.log.Info("Monitoring service attached to search service")
+		}
+	})
+}
+
+// recordSearchActivity records search activity for connection monitoring.
+func (s *Service) recordSearchActivity(filter *Filter) {
+	s.mu.RLock()
+	monSvc := s.monitorSvc
+	s.mu.RUnlock()
+
+	if monSvc == nil {
+		return
+	}
+
+	// Extract connection ID from filter
+	connectionID := ""
+	if filter != nil {
+		connectionID = filter.ConnectionID
+	}
+
+	if connectionID != "" {
+		monSvc.RecordSearch(connectionID)
+	}
 }

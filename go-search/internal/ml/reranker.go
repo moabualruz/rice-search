@@ -24,8 +24,21 @@ func NewReranker(runtime *onnx.Runtime, cfg config.MLConfig, log *logger.Logger)
 	modelDir := filepath.Join(cfg.ModelsDir, cfg.RerankModel)
 	modelPath := filepath.Join(modelDir, "model.onnx")
 
-	// Load session
-	session, err := runtime.LoadSession("reranker", modelPath)
+	// Determine device for reranker based on config
+	device := onnx.DeviceCPU
+	if cfg.RerankGPU && (cfg.Device == "cuda" || cfg.Device == "tensorrt") {
+		if cfg.Device == "tensorrt" {
+			device = onnx.DeviceTensorRT
+		} else {
+			device = onnx.DeviceCUDA
+		}
+		log.Info("Loading reranker on GPU", "device", device)
+	} else {
+		log.Info("Loading reranker on CPU")
+	}
+
+	// Load session with device-specific setting
+	session, err := runtime.LoadSessionWithDevice("reranker", modelPath, device)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeMLError, "failed to load reranker model", err)
 	}

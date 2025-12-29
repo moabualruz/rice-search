@@ -69,20 +69,21 @@ func (c *Chunker) ChunkDocument(store string, doc *Document) []*Chunk {
 // createSingleChunk creates a single chunk from the entire document.
 func (c *Chunker) createSingleChunk(store string, doc *Document, lines []string) []*Chunk {
 	chunk := &Chunk{
-		ID:         ComputeChunkID(store, doc.Path, 1, len(lines)),
-		DocumentID: doc.Hash,
-		Store:      store,
-		Path:       doc.Path,
-		Language:   doc.Language,
-		Content:    doc.Content,
-		Symbols:    ExtractSymbols(doc.Content, doc.Language),
-		StartLine:  1,
-		EndLine:    len(lines),
-		StartChar:  0,
-		EndChar:    len(doc.Content),
-		TokenCount: c.estimateTokens(doc.Content),
-		Hash:       ComputeChunkHash(store, doc.Path, doc.Content, 1, len(lines)),
-		IndexedAt:  time.Now(),
+		ID:           ComputeChunkID(store, doc.Path, 1, len(lines)),
+		DocumentID:   doc.Hash,
+		Store:        store,
+		Path:         doc.Path,
+		Language:     doc.Language,
+		Content:      doc.Content,
+		Symbols:      ExtractSymbols(doc.Content, doc.Language),
+		StartLine:    1,
+		EndLine:      len(lines),
+		StartChar:    0,
+		EndChar:      len(doc.Content),
+		TokenCount:   c.estimateTokens(doc.Content),
+		Hash:         ComputeChunkHash(store, doc.Path, doc.Content, 1, len(lines)),
+		IndexedAt:    time.Now(),
+		ConnectionID: doc.ConnectionID,
 	}
 
 	return []*Chunk{chunk}
@@ -125,20 +126,21 @@ func (c *Chunker) chunkByBraces(store string, doc *Document, lines []string) []*
 
 				endChar := charOffset + len(content)
 				chunk := &Chunk{
-					ID:         ComputeChunkID(store, doc.Path, startLine, lineNum),
-					DocumentID: doc.Hash,
-					Store:      store,
-					Path:       doc.Path,
-					Language:   doc.Language,
-					Content:    content,
-					Symbols:    currentSymbols,
-					StartLine:  startLine,
-					EndLine:    lineNum,
-					StartChar:  charOffset,
-					EndChar:    endChar,
-					TokenCount: tokens,
-					Hash:       ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
-					IndexedAt:  time.Now(),
+					ID:           ComputeChunkID(store, doc.Path, startLine, lineNum),
+					DocumentID:   doc.Hash,
+					Store:        store,
+					Path:         doc.Path,
+					Language:     doc.Language,
+					Content:      content,
+					Symbols:      currentSymbols,
+					StartLine:    startLine,
+					EndLine:      lineNum,
+					StartChar:    charOffset,
+					EndChar:      endChar,
+					TokenCount:   tokens,
+					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
+					IndexedAt:    time.Now(),
+					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
 
@@ -196,20 +198,21 @@ func (c *Chunker) chunkByIndentation(store string, doc *Document, lines []string
 
 				endChar := charOffset + len(content)
 				chunk := &Chunk{
-					ID:         ComputeChunkID(store, doc.Path, startLine, lineNum),
-					DocumentID: doc.Hash,
-					Store:      store,
-					Path:       doc.Path,
-					Language:   doc.Language,
-					Content:    content,
-					Symbols:    symbols,
-					StartLine:  startLine,
-					EndLine:    lineNum,
-					StartChar:  charOffset,
-					EndChar:    endChar,
-					TokenCount: tokens,
-					Hash:       ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
-					IndexedAt:  time.Now(),
+					ID:           ComputeChunkID(store, doc.Path, startLine, lineNum),
+					DocumentID:   doc.Hash,
+					Store:        store,
+					Path:         doc.Path,
+					Language:     doc.Language,
+					Content:      content,
+					Symbols:      symbols,
+					StartLine:    startLine,
+					EndLine:      lineNum,
+					StartChar:    charOffset,
+					EndChar:      endChar,
+					TokenCount:   tokens,
+					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
+					IndexedAt:    time.Now(),
+					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
 
@@ -246,19 +249,20 @@ func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) [
 			if strings.TrimSpace(content) != "" {
 				endChar := charOffset + len(content)
 				chunk := &Chunk{
-					ID:         ComputeChunkID(store, doc.Path, startLine, lineNum-1),
-					DocumentID: doc.Hash,
-					Store:      store,
-					Path:       doc.Path,
-					Language:   doc.Language,
-					Content:    content,
-					StartLine:  startLine,
-					EndLine:    lineNum - 1,
-					StartChar:  charOffset,
-					EndChar:    endChar,
-					TokenCount: tokens,
-					Hash:       ComputeChunkHash(store, doc.Path, content, startLine, lineNum-1),
-					IndexedAt:  time.Now(),
+					ID:           ComputeChunkID(store, doc.Path, startLine, lineNum-1),
+					DocumentID:   doc.Hash,
+					Store:        store,
+					Path:         doc.Path,
+					Language:     doc.Language,
+					Content:      content,
+					StartLine:    startLine,
+					EndLine:      lineNum - 1,
+					StartChar:    charOffset,
+					EndChar:      endChar,
+					TokenCount:   tokens,
+					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum-1),
+					IndexedAt:    time.Now(),
+					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
 
@@ -279,19 +283,20 @@ func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) [
 	if strings.TrimSpace(content) != "" {
 		endChar := charOffset + len(content)
 		chunk := &Chunk{
-			ID:         ComputeChunkID(store, doc.Path, startLine, len(lines)),
-			DocumentID: doc.Hash,
-			Store:      store,
-			Path:       doc.Path,
-			Language:   doc.Language,
-			Content:    content,
-			StartLine:  startLine,
-			EndLine:    len(lines),
-			StartChar:  charOffset,
-			EndChar:    endChar,
-			TokenCount: c.estimateTokens(content),
-			Hash:       ComputeChunkHash(store, doc.Path, content, startLine, len(lines)),
-			IndexedAt:  time.Now(),
+			ID:           ComputeChunkID(store, doc.Path, startLine, len(lines)),
+			DocumentID:   doc.Hash,
+			Store:        store,
+			Path:         doc.Path,
+			Language:     doc.Language,
+			Content:      content,
+			StartLine:    startLine,
+			EndLine:      len(lines),
+			StartChar:    charOffset,
+			EndChar:      endChar,
+			TokenCount:   c.estimateTokens(content),
+			Hash:         ComputeChunkHash(store, doc.Path, content, startLine, len(lines)),
+			IndexedAt:    time.Now(),
+			ConnectionID: doc.ConnectionID,
 		}
 		chunks = append(chunks, chunk)
 	}
@@ -330,20 +335,21 @@ func (c *Chunker) chunkByLines(store string, doc *Document, lines []string) []*C
 
 				endChar := charOffset + len(content)
 				chunk := &Chunk{
-					ID:         ComputeChunkID(store, doc.Path, startLine, lineNum),
-					DocumentID: doc.Hash,
-					Store:      store,
-					Path:       doc.Path,
-					Language:   doc.Language,
-					Content:    content,
-					Symbols:    symbols,
-					StartLine:  startLine,
-					EndLine:    lineNum,
-					StartChar:  charOffset,
-					EndChar:    endChar,
-					TokenCount: tokens,
-					Hash:       ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
-					IndexedAt:  time.Now(),
+					ID:           ComputeChunkID(store, doc.Path, startLine, lineNum),
+					DocumentID:   doc.Hash,
+					Store:        store,
+					Path:         doc.Path,
+					Language:     doc.Language,
+					Content:      content,
+					Symbols:      symbols,
+					StartLine:    startLine,
+					EndLine:      lineNum,
+					StartChar:    charOffset,
+					EndChar:      endChar,
+					TokenCount:   tokens,
+					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
+					IndexedAt:    time.Now(),
+					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
 

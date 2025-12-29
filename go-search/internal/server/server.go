@@ -420,6 +420,41 @@ func (s *Server) Health() bool {
 	return s.started
 }
 
+// mlConfigChanged returns true if ML-related settings changed.
+func (s *Server) mlConfigChanged(old, new settings.RuntimeConfig) bool {
+	return old.EmbedGPU != new.EmbedGPU ||
+		old.RerankGPU != new.RerankGPU ||
+		old.QueryGPU != new.QueryGPU ||
+		old.EmbedModel != new.EmbedModel ||
+		old.RerankModel != new.RerankModel ||
+		old.QueryModel != new.QueryModel ||
+		old.QueryEnabled != new.QueryEnabled
+}
+
+// buildMLConfig constructs an MLConfig from RuntimeConfig settings.
+func (s *Server) buildMLConfig(rc settings.RuntimeConfig) config.MLConfig {
+	// Start with current ML config to preserve non-runtime-configurable fields
+	mlCfg := s.appCfg.ML
+
+	// Override with runtime settings
+	if rc.EmbedModel != "" {
+		mlCfg.EmbedModel = rc.EmbedModel
+	}
+	if rc.RerankModel != "" {
+		mlCfg.RerankModel = rc.RerankModel
+	}
+	if rc.QueryModel != "" {
+		mlCfg.QueryModel = rc.QueryModel
+	}
+
+	mlCfg.EmbedGPU = rc.EmbedGPU
+	mlCfg.RerankGPU = rc.RerankGPU
+	mlCfg.QueryGPU = rc.QueryGPU
+	mlCfg.QueryModelEnabled = rc.QueryEnabled
+
+	return mlCfg
+}
+
 // subscribeToSettingsChanges subscribes to settings change events
 // and updates services with new configuration values.
 func (s *Server) subscribeToSettingsChanges() {
@@ -453,8 +488,18 @@ func (s *Server) subscribeToSettingsChanges() {
 			s.search.UpdateConfig(newSearchCfg)
 		}
 
-		// Note: ML service GPU changes require model reload and are handled
-		// by the admin UI directly through the models API
+		// Reload ML models if ML config changed
+		if s.mlConfigChanged(settingsEvent.OldConfig, settingsEvent.NewConfig) {
+			s.log.Info("ML config changed, reloading models...")
+			newMLCfg := s.buildMLConfig(settingsEvent.NewConfig)
+			if err := s.ml.ReloadModelsWithConfig(newMLCfg); err != nil {
+				s.log.Error("Failed to reload ML models with new config", "error", err)
+				// Don't fail the entire settings update - log and continue
+			} else {
+				s.log.Info("Successfully reloaded ML models with new config")
+			}
+		}
+
 		// Index service config changes would also be handled here if needed
 
 		return nil

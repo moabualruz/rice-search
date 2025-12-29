@@ -78,8 +78,14 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	return r, nil
 }
 
-// LoadSession loads an ONNX model and returns a session.
+// LoadSession loads an ONNX model and returns a session using the runtime's default device.
 func (r *Runtime) LoadSession(name, modelPath string, opts ...SessionOption) (*Session, error) {
+	return r.LoadSessionWithDevice(name, modelPath, r.device, opts...)
+}
+
+// LoadSessionWithDevice loads an ONNX model with a specific device override.
+// This allows per-model device selection (e.g., embeddings on GPU, reranker on CPU).
+func (r *Runtime) LoadSessionWithDevice(name, modelPath string, device Device, opts ...SessionOption) (*Session, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -94,8 +100,8 @@ func (r *Runtime) LoadSession(name, modelPath string, opts ...SessionOption) (*S
 		opt(&sessionOpts)
 	}
 
-	// Create the session using implementation
-	session, err := r.impl.createSession(name, modelPath, r.device, sessionOpts)
+	// Create the session using implementation with specified device
+	session, err := r.impl.createSession(name, modelPath, device, sessionOpts)
 	if err != nil {
 		return nil, err
 	}

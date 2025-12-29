@@ -174,7 +174,12 @@ message SearchResponse {
   
   // Metadata contains search metadata.
   SearchMetadata metadata = 5;
+  
+  // ParsedQuery contains query understanding results (if available).
+  optional ParsedQuery parsed_query = 6;
 }
+
+// NOTE: ParsedQuery is defined below in the Query Understanding section (line 843+)
 
 message SearchMetadata {
   // SearchTimeMs is the total search time in milliseconds.

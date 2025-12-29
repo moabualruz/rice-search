@@ -229,6 +229,21 @@ func buildSearchFilter(f *SearchFilter) *qdrant.Filter {
 		})
 	}
 
+	if f.ConnectionID != "" {
+		conditions = append(conditions, &qdrant.Condition{
+			ConditionOneOf: &qdrant.Condition_Field{
+				Field: &qdrant.FieldCondition{
+					Key: "connection_id",
+					Match: &qdrant.Match{
+						MatchValue: &qdrant.Match_Keyword{
+							Keyword: f.ConnectionID,
+						},
+					},
+				},
+			},
+		})
+	}
+
 	if len(conditions) == 0 {
 		return nil
 	}
@@ -307,6 +322,9 @@ func extractPayload(payload map[string]*qdrant.Value) PointPayload {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
 			result.IndexedAt = t
 		}
+	}
+	if v := getStringValue(payload, "connection_id"); v != "" {
+		result.ConnectionID = v
 	}
 
 	return result

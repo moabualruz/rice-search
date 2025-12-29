@@ -79,6 +79,9 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Apply default connection scoping
+	h.applyDefaultConnectionScope(r, &req)
+
 	// Build search request
 	searchReq := Request{
 		Query:           req.Query,
@@ -251,6 +254,9 @@ func (h *Handler) handleSearchWithStore(w http.ResponseWriter, r *http.Request, 
 		return
 	}
 
+	// Apply default connection scoping
+	h.applyDefaultConnectionScope(r, &req)
+
 	searchReq := Request{
 		Query:           req.Query,
 		Store:           store,
@@ -320,6 +326,34 @@ func (h *Handler) handleSparseWithStore(w http.ResponseWriter, r *http.Request, 
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// applyDefaultConnectionScope applies default connection scoping from X-Connection-ID header.
+// If the request has no explicit connection filter, it uses the header value.
+// Users can opt out by setting connection_id to "*" or "all" to search all connections.
+func (h *Handler) applyDefaultConnectionScope(r *http.Request, req *SearchRequest) {
+	// Extract connection ID from header
+	headerConnID := r.Header.Get("X-Connection-ID")
+	if headerConnID == "" {
+		return // No header, no default scoping
+	}
+
+	// Initialize filter if needed
+	if req.Filter == nil {
+		req.Filter = &Filter{}
+	}
+
+	// Apply default scoping only if not explicitly set
+	if req.Filter.ConnectionID == "" {
+		// Use header connection ID as default
+		req.Filter.ConnectionID = headerConnID
+		// Log when default scoping is applied (use structured logging in production)
+		// h.log.Debug("Applied default connection scoping", "connection_id", headerConnID)
+	} else if req.Filter.ConnectionID == "*" || req.Filter.ConnectionID == "all" {
+		// Explicit opt-out: search all connections
+		req.Filter.ConnectionID = ""
+	}
+	// If ConnectionID is explicitly set to a specific value, respect it
 }
 
 // Middleware provides common HTTP middleware.

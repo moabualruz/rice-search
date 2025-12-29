@@ -78,4 +78,7 @@ const (
 	TopicConnectionRegistered   = "connection.registered"
 	TopicConnectionUnregistered = "connection.unregistered"
 	TopicConnectionActivity     = "connection.activity"
+
+	// Alert topics.
+	TopicAlertTriggered = "alert.triggered"
 )

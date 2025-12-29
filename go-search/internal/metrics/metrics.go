@@ -49,12 +49,51 @@ type Metrics struct {
 	// Time-series data for charts
 	TimeSeries *TimeSeriesData
 
+	// Redis storage (optional)
+	redisStorage *RedisStorage
+
 	startTime time.Time
 	mu        sync.RWMutex
 }
 
 // New creates a new metrics instance with all metrics initialized.
+// Uses in-memory storage only.
 func New() *Metrics {
+	return NewWithConfig("memory", "")
+}
+
+// NewWithRedis creates a new metrics instance with Redis persistence.
+// Falls back to in-memory if Redis connection fails.
+func NewWithRedis(redisURL string) *Metrics {
+	return NewWithConfig("redis", redisURL)
+}
+
+// NewWithConfig creates a new metrics instance with specified persistence.
+// persistence: "memory" or "redis"
+// redisURL: Redis URL (only used if persistence = "redis")
+func NewWithConfig(persistence, redisURL string) *Metrics {
+	var redisStorage *RedisStorage
+	var timeSeries *TimeSeriesData
+
+	// Try to initialize Redis if configured
+	if persistence == "redis" && redisURL != "" {
+		storage, err := NewRedisStorage(redisURL)
+		if err != nil {
+			// Log warning but continue with in-memory
+			// TODO: use logger when available
+			println("WARNING: Failed to connect to Redis for metrics persistence:", err.Error())
+			println("         Falling back to in-memory metrics")
+		} else {
+			redisStorage = storage
+			timeSeries = NewTimeSeriesDataWithRedis(redisStorage)
+		}
+	}
+
+	// If Redis not available, use in-memory
+	if timeSeries == nil {
+		timeSeries = NewTimeSeriesData()
+	}
+
 	m := &Metrics{
 		// Search metrics
 		SearchRequests: NewCounter(
@@ -199,7 +238,10 @@ func New() *Metrics {
 		),
 
 		// Time-series data for charts
-		TimeSeries: NewTimeSeriesData(),
+		TimeSeries: timeSeries,
+
+		// Redis storage
+		redisStorage: redisStorage,
 
 		startTime: time.Now(),
 	}
@@ -345,4 +387,18 @@ func (m *Metrics) Reset() {
 	m.MemoryUsage.Set(0)
 
 	m.startTime = time.Now()
+}
+
+// Close closes the metrics instance and releases resources.
+// Must be called when shutting down if Redis is used.
+func (m *Metrics) Close() error {
+	if m.redisStorage != nil {
+		return m.redisStorage.Close()
+	}
+	return nil
+}
+
+// IsRedisPersisted returns true if metrics are persisted to Redis.
+func (m *Metrics) IsRedisPersisted() bool {
+	return m.redisStorage != nil
 }

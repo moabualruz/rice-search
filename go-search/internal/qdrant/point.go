@@ -171,6 +171,11 @@ func pointToQdrant(p Point) (*qdrant.PointStruct, error) {
 		"indexed_at":    p.Payload.IndexedAt.Format(time.RFC3339),
 	}
 
+	// Add connection_id if present
+	if p.Payload.ConnectionID != "" {
+		payload["connection_id"] = p.Payload.ConnectionID
+	}
+
 	// Build named vectors
 	vectors := &qdrant.Vectors{
 		VectorsOptions: &qdrant.Vectors_Vectors{
