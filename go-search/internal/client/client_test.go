@@ -48,10 +48,12 @@ func TestClientHealth(t *testing.T) {
 			t.Errorf("method = %q, want %q", r.Method, http.MethodGet)
 		}
 
-		json.NewEncoder(w).Encode(HealthResponse{
+		if err := json.NewEncoder(w).Encode(HealthResponse{
 			Status:  "ok",
 			Version: "1.0.0",
-		})
+		}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -75,12 +77,14 @@ func TestClientListStores(t *testing.T) {
 			t.Errorf("path = %q, want %q", r.URL.Path, "/v1/stores")
 		}
 
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"stores": []Store{
 				{Name: "default", CreatedAt: "2025-01-01T00:00:00Z"},
 				{Name: "test", Description: "Test store", CreatedAt: "2025-01-02T00:00:00Z"},
 			},
-		})
+		}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -105,18 +109,22 @@ func TestClientCreateStore(t *testing.T) {
 		}
 
 		var req map[string]string
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
 
 		if req["name"] != "mystore" {
 			t.Errorf("name = %q, want %q", req["name"], "mystore")
 		}
 
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(Store{
+		if err := json.NewEncoder(w).Encode(Store{
 			Name:        "mystore",
 			Description: req["description"],
 			CreatedAt:   "2025-01-01T00:00:00Z",
-		})
+		}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -161,13 +169,15 @@ func TestClientSearch(t *testing.T) {
 		}
 
 		var req SearchRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
 
 		if req.Query != "authentication" {
 			t.Errorf("Query = %q, want %q", req.Query, "authentication")
 		}
 
-		json.NewEncoder(w).Encode(SearchResponse{
+		if err := json.NewEncoder(w).Encode(SearchResponse{
 			Query: req.Query,
 			Store: "default",
 			Results: []SearchResult{
@@ -187,7 +197,9 @@ func TestClientSearch(t *testing.T) {
 				RetrievalTimeMs:  30,
 				RerankingApplied: true,
 			},
-		})
+		}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -221,20 +233,24 @@ func TestClientIndex(t *testing.T) {
 		}
 
 		var req IndexRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Errorf("failed to decode request: %v", err)
+		}
 
 		if len(req.Files) != 2 {
 			t.Errorf("len(Files) = %d, want %d", len(req.Files), 2)
 		}
 
-		json.NewEncoder(w).Encode(IndexResult{
+		if err := json.NewEncoder(w).Encode(IndexResult{
 			Store:       "default",
 			Indexed:     2,
 			Skipped:     0,
 			Failed:      0,
 			ChunksTotal: 5,
 			DurationMs:  100,
-		})
+		}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 
@@ -260,10 +276,12 @@ func TestClientIndex(t *testing.T) {
 func TestClientAPIError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(APIError{
+		if err := json.NewEncoder(w).Encode(APIError{
 			Code:    "NOT_FOUND",
 			Message: "store not found",
-		})
+		}); err != nil {
+			t.Errorf("failed to encode response: %v", err)
+		}
 	}))
 	defer server.Close()
 

@@ -140,7 +140,7 @@ func (s *Server) Start() error {
 	// Start Unix socket listener (if configured and not on Windows)
 	if s.cfg.UnixSocketPath != "" && runtime.GOOS != "windows" {
 		// Remove existing socket file
-		os.Remove(s.cfg.UnixSocketPath)
+		_ = os.Remove(s.cfg.UnixSocketPath)
 
 		unixLis, err := net.Listen("unix", s.cfg.UnixSocketPath)
 		if err != nil {
@@ -148,7 +148,7 @@ func (s *Server) Start() error {
 		} else {
 			s.unixListener = unixLis
 			// Set permissions to allow local access
-			os.Chmod(s.cfg.UnixSocketPath, 0666)
+			_ = os.Chmod(s.cfg.UnixSocketPath, 0666)
 			s.log.Info("gRPC server listening on Unix socket", "path", s.cfg.UnixSocketPath)
 
 			go func() {
@@ -171,7 +171,7 @@ func (s *Server) Stop() {
 
 	// Clean up Unix socket
 	if s.cfg.UnixSocketPath != "" {
-		os.Remove(s.cfg.UnixSocketPath)
+		_ = os.Remove(s.cfg.UnixSocketPath)
 	}
 }
 
@@ -260,6 +260,11 @@ func (s *Server) SearchStream(req *pb.SearchRequest, stream pb.RiceSearch_Search
 	resp, err := s.Search(stream.Context(), req)
 	if err != nil {
 		return err
+	}
+
+	// Check for nil response (defensive - Search should always return non-nil on success)
+	if resp == nil || resp.Results == nil {
+		return nil
 	}
 
 	for _, result := range resp.Results {
@@ -439,7 +444,7 @@ func (s *Server) GetIndexStats(ctx context.Context, req *pb.GetIndexStatsRequest
 // =============================================================================
 
 // ListStores returns all stores.
-func (s *Server) ListStores(ctx context.Context, req *pb.ListStoresRequest) (*pb.ListStoresResponse, error) {
+func (s *Server) ListStores(ctx context.Context, _ *pb.ListStoresRequest) (*pb.ListStoresResponse, error) {
 	stores, err := s.storeSvc.ListStores(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "list stores failed: %v", err)
@@ -537,7 +542,7 @@ func (s *Server) GetStoreStats(ctx context.Context, req *pb.GetStoreStatsRequest
 // =============================================================================
 
 // Health returns service health status.
-func (s *Server) Health(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
+func (s *Server) Health(ctx context.Context, _ *pb.HealthRequest) (*pb.HealthResponse, error) {
 	components := make(map[string]*pb.ComponentHealth)
 
 	// Check Qdrant
@@ -579,8 +584,9 @@ func (s *Server) Health(ctx context.Context, req *pb.HealthRequest) (*pb.HealthR
 			overallStatus = pb.HealthStatus_HEALTH_STATUS_UNHEALTHY
 			break
 		}
-		if c.Status == pb.HealthStatus_HEALTH_STATUS_DEGRADED && overallStatus != pb.HealthStatus_HEALTH_STATUS_UNHEALTHY {
+		if c.Status == pb.HealthStatus_HEALTH_STATUS_DEGRADED {
 			overallStatus = pb.HealthStatus_HEALTH_STATUS_DEGRADED
+			// Continue checking for UNHEALTHY
 		}
 	}
 
@@ -592,7 +598,7 @@ func (s *Server) Health(ctx context.Context, req *pb.HealthRequest) (*pb.HealthR
 }
 
 // Version returns version information.
-func (s *Server) Version(ctx context.Context, req *pb.VersionRequest) (*pb.VersionResponse, error) {
+func (s *Server) Version(_ context.Context, _ *pb.VersionRequest) (*pb.VersionResponse, error) {
 	return &pb.VersionResponse{
 		Version:   s.cfg.Version,
 		Commit:    s.cfg.Commit,

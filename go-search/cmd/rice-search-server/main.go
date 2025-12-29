@@ -79,7 +79,7 @@ Examples:
 	}
 }
 
-func runServer(cmd *cobra.Command, args []string) error {
+func runServer(cmd *cobra.Command, _ []string) error {
 	configPath, _ := cmd.Flags().GetString("config")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	grpcPort, _ := cmd.Flags().GetInt("grpc-port")
@@ -120,7 +120,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 
 	// Initialize event bus
 	eventBus := bus.NewMemoryBus()
-	defer eventBus.Close()
+	defer func() { _ = eventBus.Close() }()
 
 	// Initialize Qdrant client
 	qdrantCfg := qdrant.DefaultClientConfig()
@@ -140,7 +140,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to Qdrant: %w", err)
 	}
-	defer qc.Close()
+	defer func() { _ = qc.Close() }()
 	log.Info("Connected to Qdrant", "host", qdrantCfg.Host, "port", qdrantCfg.Port)
 
 	// Initialize ML service
@@ -148,7 +148,7 @@ func runServer(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create ML service: %w", err)
 	}
-	defer mlSvc.Close()
+	defer func() { _ = mlSvc.Close() }()
 
 	// Load ML models
 	log.Info("Loading ML models...")
@@ -274,30 +274,30 @@ func parseQdrantURL(rawURL string) (string, int, error) {
 }
 
 // registerAPIRoutes registers REST API endpoints.
-func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, version string) {
+func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, _ *qdrant.Client, _ *logger.Logger, version string) {
 	// Health endpoints
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 	})
 
-	mux.HandleFunc("GET /v1/version", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/version", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"version": version,
 			"commit":  commit,
 			"date":    date,
 		})
 	})
 
-	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		health := mlSvc.Health()
 		status := "healthy"
 		if !health.Healthy {
 			status = "degraded"
 		}
-		json.NewEncoder(w).Encode(map[string]interface{}{
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
 			"status":  status,
 			"version": version,
 			"ml":      health,
@@ -316,7 +316,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{"stores": stores})
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"stores": stores})
 	})
 
 	mux.HandleFunc("POST /v1/stores", func(w http.ResponseWriter, r *http.Request) {
@@ -338,7 +338,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		json.NewEncoder(w).Encode(newStore)
+		_ = json.NewEncoder(w).Encode(newStore)
 	})
 
 	mux.HandleFunc("GET /v1/stores/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -349,7 +349,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s)
+		_ = json.NewEncoder(w).Encode(s)
 	})
 
 	mux.HandleFunc("DELETE /v1/stores/{name}", func(w http.ResponseWriter, r *http.Request) {
@@ -369,7 +369,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(stats)
+		_ = json.NewEncoder(w).Encode(stats)
 	})
 
 	// Index handlers
@@ -407,7 +407,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(result)
+		_ = json.NewEncoder(w).Encode(result)
 	})
 
 	mux.HandleFunc("GET /v1/stores/{name}/index/stats", func(w http.ResponseWriter, r *http.Request) {
@@ -418,7 +418,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(stats)
+		_ = json.NewEncoder(w).Encode(stats)
 	})
 }
 

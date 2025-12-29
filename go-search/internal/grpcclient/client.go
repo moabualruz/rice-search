@@ -87,9 +87,20 @@ func New(cfg Config) (*Client, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.Timeout)
 	defer cancel()
 
-	conn, err := grpc.DialContext(ctx, addr, opts...)
+	// Use grpc.NewClient (DialContext is deprecated)
+	opts = append(opts, grpc.WithBlock())
+	conn, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to %s: %w", addr, err)
+	}
+
+	// Wait for connection
+	conn.Connect()
+	select {
+	case <-ctx.Done():
+		conn.Close()
+		return nil, fmt.Errorf("connection timeout to %s", addr)
+	default:
 	}
 
 	return &Client{

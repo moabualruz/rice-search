@@ -460,11 +460,59 @@ make proto                       # Regenerate protobuf (requires protoc)
 # Test
 make test                     # Run all tests
 go test ./internal/...        # Test specific packages
-
-# Quality
-make lint                     # Run golangci-lint
-go vet ./...                  # Go vet
 ```
+
+### Go Quality Checks (CRITICAL)
+
+**ALWAYS use these CLI tools for verification - NEVER trust IDE warnings (IntelliJ/VSCode/GoLand cache stale data).**
+
+```bash
+cd go-search
+
+# REQUIRED: Must pass before any PR/completion
+go build ./...                # Must compile - BLOCKING
+go vet ./...                  # Static analysis - BLOCKING
+
+# RECOMMENDED: Check for new issues in changed files
+golangci-lint run             # Comprehensive linting
+
+# OPTIONAL: Deeper analysis for specific packages
+staticcheck ./...             # Additional static analysis  
+gopls check ./internal/...    # LSP-based diagnostics
+```
+
+| Tool | Purpose | Blocking? |
+|------|---------|-----------|
+| `go build ./...` | Compilation | **YES** - must pass |
+| `go vet ./...` | Built-in static analysis | **YES** - must pass |
+| `golangci-lint run` | Comprehensive linting | **NO** - check for new issues only |
+| `staticcheck ./...` | Deep static analysis | **NO** - informational |
+| `gopls check` | LSP diagnostics | **NO** - for specific investigation |
+
+**Minimum verification before completing Go work:**
+```bash
+go build ./... && go vet ./...
+```
+
+**For golangci-lint:** The codebase has ~250 existing style warnings (comment periods, naming conventions). When making changes:
+1. Don't introduce NEW errors in files you modify
+2. Don't worry about pre-existing warnings in untouched code
+3. Run `golangci-lint run ./path/to/changed/...` to check only your changes
+
+### TODO Policy (CRITICAL)
+
+**No unfinished work. When you encounter a TODO comment:**
+
+1. **Small/Medium scope** → Implement it immediately
+2. **Large scope (big context switch)** → Ask user: "Found TODO: [description]. This requires [effort]. Should I implement now or defer?"
+3. **After implementing** → Remove the TODO comment
+
+**Periodically scan for TODOs:**
+```bash
+rg "TODO|FIXME|XXX|HACK" --type go
+```
+
+**Never leave TODOs you created. Never ignore TODOs you find.**
 
 ### Service Ports (go-search)
 

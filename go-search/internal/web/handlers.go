@@ -1665,6 +1665,8 @@ func (h *Handler) renderStoresGrid(w http.ResponseWriter, r *http.Request, store
 // =============================================================================
 
 // TimeoutMiddleware adds a timeout to requests.
+// Available for use when request timeout handling is needed beyond the server defaults.
+// Usage: mux.Handle("/path", TimeoutMiddleware(30*time.Second, handler))
 func TimeoutMiddleware(timeout time.Duration, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx, cancel := context.WithTimeout(r.Context(), timeout)

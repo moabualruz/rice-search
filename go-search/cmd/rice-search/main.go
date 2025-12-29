@@ -51,7 +51,10 @@ Then use this CLI:
 		},
 		PersistentPostRun: func(cmd *cobra.Command, args []string) {
 			if client != nil {
-				client.Close()
+				if err := client.Close(); err != nil {
+					// Log close error but don't fail - we're shutting down anyway
+					_, _ = fmt.Fprintf(os.Stderr, "Warning: failed to close client: %v\n", err)
+				}
 			}
 		},
 	}
@@ -305,7 +308,7 @@ func runIndex(cmd *cobra.Command, args []string) error {
 
 				content, err := os.ReadFile(p)
 				if err != nil {
-					fmt.Fprintf(os.Stderr, "Warning: cannot read %s: %v\n", p, err)
+					_, _ = fmt.Fprintf(os.Stderr, "Warning: cannot read %s: %v\n", p, err)
 					return nil
 				}
 
@@ -415,18 +418,18 @@ func storesListCmd() *cobra.Command {
 			}
 
 			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tDESCRIPTION\tCREATED")
-			fmt.Fprintln(w, "----\t-----------\t-------")
+			_, _ = fmt.Fprintln(w, "NAME\tDESCRIPTION\tCREATED")
+			_, _ = fmt.Fprintln(w, "----\t-----------\t-------")
 
 			for _, s := range stores {
 				desc := s.Description
 				if desc == "" {
 					desc = "-"
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\n", s.Name, desc, s.CreatedAt.Format(time.RFC3339))
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", s.Name, desc, s.CreatedAt.Format(time.RFC3339))
 			}
 
-			w.Flush()
+			_ = w.Flush()
 			return nil
 		},
 	}
@@ -478,7 +481,7 @@ func storesDeleteCmd() *cobra.Command {
 			if !force {
 				fmt.Printf("Delete store '%s'? This cannot be undone. [y/N]: ", name)
 				var confirm string
-				fmt.Scanln(&confirm)
+				_, _ = fmt.Scanln(&confirm)
 				if strings.ToLower(confirm) != "y" {
 					fmt.Println("Cancelled.")
 					return nil

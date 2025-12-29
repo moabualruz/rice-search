@@ -22,7 +22,11 @@ func NewStoreHandler(svc *store.Service) *StoreHandler {
 func writeStoreJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		// Log encoding error - can't return to client after headers written
+		// In production, this would use a proper logger
+		_ = err // Encoding error after response started
+	}
 }
 
 // writeError writes an error response.

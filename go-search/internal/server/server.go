@@ -1,4 +1,9 @@
-// Package server provides the HTTP server that wires all services together.
+// Package server provides an alternative HTTP server implementation.
+//
+// Deprecated: This package is not currently used. The main server binary
+// (cmd/rice-search-server) uses grpcserver + direct http.ServeMux instead.
+// This package is kept for potential future use or as reference implementation.
+// Consider removal if not needed after review.
 package server
 
 import (

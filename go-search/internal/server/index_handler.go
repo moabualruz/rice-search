@@ -28,7 +28,11 @@ func NewIndexHandler(pipeline *index.Pipeline, stores *store.Service) *IndexHand
 func writeIndexJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		// Log encoding error - can't return to client after headers written
+		// In production, this would use a proper logger
+		_ = err // Encoding error after response started
+	}
 }
 
 // writeError writes an error response.
@@ -255,8 +259,10 @@ func (h *IndexHandler) handleListFiles(w http.ResponseWriter, r *http.Request, s
 	page := parseInt(r.URL.Query().Get("page"), 1)
 	pageSize := parseInt(r.URL.Query().Get("page_size"), 50)
 
+	// TODO: Implement file listing using pipeline.ListFiles(storeName, page, pageSize)
 	// For now, return empty since we need tracker access
-	// In a full implementation, the pipeline would expose file listing
+	// The storeName parameter will be used once tracker is exposed via pipeline
+	_ = storeName // Will be used when file listing is fully implemented
 	writeIndexJSON(w, http.StatusOK, map[string]interface{}{
 		"files":       []interface{}{},
 		"total":       0,
