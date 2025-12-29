@@ -1,5 +1,5 @@
 # Rice Search - Go Edition
-# Development Docker Compose - Data resets on down, includes Qdrant UI
+# Development Docker Compose - Data resets on down
 
 services:
   # ===========================================================================
@@ -29,6 +29,7 @@ services:
 
   # ===========================================================================
   # Qdrant Vector Database (Ephemeral - no persistence)
+  # Dashboard available at http://localhost:6333/dashboard
   # ===========================================================================
   qdrant:
     image: qdrant/qdrant:v1.12.4
@@ -39,7 +40,6 @@ services:
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__LOG_LEVEL=DEBUG
-      # No storage path = in-memory only, resets on restart
     tmpfs:
       - /qdrant/storage:size=2G
     healthcheck:
@@ -48,20 +48,6 @@ services:
       timeout: 3s
       retries: 5
       start_period: 5s
-
-  # ===========================================================================
-  # Qdrant Web UI (Better UI for browsing collections)
-  # ===========================================================================
-  qdrant-ui:
-    image: qdrant/qdrant-web-ui:latest
-    container_name: rice-qdrant-ui
-    ports:
-      - "8001:80"
-    environment:
-      - QDRANT_URL=http://qdrant:6333
-    depends_on:
-      qdrant:
-        condition: service_healthy
 
 networks:
   default:

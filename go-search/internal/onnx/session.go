@@ -3,19 +3,18 @@ package onnx
 import (
 	"sync"
 
-	ort "github.com/yalue/onnxruntime_go"
-
 	"github.com/ricesearch/rice-search/internal/pkg/errors"
 )
 
 // Session wraps an ONNX Runtime session.
 type Session struct {
 	mu         sync.Mutex
+	name       string
 	path       string
-	session    *ort.DynamicAdvancedSession
 	inputInfo  []TensorInfo
 	outputInfo []TensorInfo
 	closed     bool
+	impl       sessionImpl
 }
 
 // TensorInfo describes an input or output tensor.
@@ -60,58 +59,6 @@ func WithGraphOptLevel(level int) SessionOption {
 	}
 }
 
-func newSession(modelPath string, device Device, opts SessionOptions) (*Session, error) {
-	// Create session options based on device
-	var session *ort.DynamicAdvancedSession
-	var err error
-
-	inputNames := []string{"input_ids", "attention_mask"}
-	outputNames := []string{"last_hidden_state"}
-
-	// Note: The actual input/output names depend on the model
-	// These will be detected from the model in a full implementation
-
-	switch device {
-	case DeviceCUDA:
-		session, err = ort.NewDynamicAdvancedSessionWithCUDA(
-			modelPath,
-			inputNames,
-			outputNames,
-			0, // CUDA device ID
-		)
-	case DeviceTensorRT:
-		session, err = ort.NewDynamicAdvancedSessionWithCUDA(
-			modelPath,
-			inputNames,
-			outputNames,
-			0,
-		)
-	default:
-		session, err = ort.NewDynamicAdvancedSession(
-			modelPath,
-			inputNames,
-			outputNames,
-			nil,
-		)
-	}
-
-	if err != nil {
-		return nil, errors.Wrap(errors.CodeMLError, "failed to create ONNX session", err)
-	}
-
-	return &Session{
-		path:    modelPath,
-		session: session,
-		inputInfo: []TensorInfo{
-			{Name: "input_ids", Type: TensorTypeInt64},
-			{Name: "attention_mask", Type: TensorTypeInt64},
-		},
-		outputInfo: []TensorInfo{
-			{Name: "last_hidden_state", Type: TensorTypeFloat32},
-		},
-	}, nil
-}
-
 // Run executes the session with the given inputs.
 func (s *Session) Run(inputs map[string]*Tensor) (map[string]*Tensor, error) {
 	s.mu.Lock()
@@ -121,37 +68,11 @@ func (s *Session) Run(inputs map[string]*Tensor) (map[string]*Tensor, error) {
 		return nil, errors.New(errors.CodeMLError, "session is closed")
 	}
 
-	// Convert inputs to ONNX tensors
-	ortInputs := make([]ort.ArbitraryTensor, 0, len(inputs))
-	for _, info := range s.inputInfo {
-		tensor, ok := inputs[info.Name]
-		if !ok {
-			return nil, errors.ValidationError("missing input: " + info.Name)
-		}
-
-		ortTensor, err := tensor.toORT()
-		if err != nil {
-			return nil, err
-		}
-		ortInputs = append(ortInputs, ortTensor)
+	if s.impl == nil {
+		return nil, errors.New(errors.CodeMLError, "session not initialized")
 	}
 
-	// Run inference
-	ortOutputs, err := s.session.Run(ortInputs)
-	if err != nil {
-		return nil, errors.Wrap(errors.CodeMLError, "inference failed", err)
-	}
-
-	// Convert outputs
-	outputs := make(map[string]*Tensor)
-	for i, info := range s.outputInfo {
-		if i >= len(ortOutputs) {
-			break
-		}
-		outputs[info.Name] = tensorFromORT(ortOutputs[i])
-	}
-
-	return outputs, nil
+	return s.impl.run(inputs)
 }
 
 // RunFloat32 is a convenience method for float32 inference.
@@ -166,12 +87,19 @@ func (s *Session) RunFloat32(inputIDs, attentionMask []int64, shape []int64) ([]
 		return nil, err
 	}
 
-	output, ok := outputs["last_hidden_state"]
-	if !ok {
-		return nil, errors.New(errors.CodeMLError, "missing output: last_hidden_state")
+	// Look for common output names
+	for _, name := range []string{"last_hidden_state", "logits", "embeddings", "output"} {
+		if output, ok := outputs[name]; ok {
+			return output.Float32Data(), nil
+		}
 	}
 
-	return output.Float32Data(), nil
+	// Return first output
+	for _, output := range outputs {
+		return output.Float32Data(), nil
+	}
+
+	return nil, errors.New(errors.CodeMLError, "no output tensor found")
 }
 
 // InputInfo returns input tensor information.
@@ -189,6 +117,11 @@ func (s *Session) Path() string {
 	return s.path
 }
 
+// Name returns the session name.
+func (s *Session) Name() string {
+	return s.name
+}
+
 // Close closes the session.
 func (s *Session) Close() error {
 	s.mu.Lock()
@@ -198,12 +131,18 @@ func (s *Session) Close() error {
 		return nil
 	}
 
-	if s.session != nil {
-		if err := s.session.Destroy(); err != nil {
-			return errors.Wrap(errors.CodeMLError, "failed to destroy session", err)
+	if s.impl != nil {
+		if err := s.impl.close(); err != nil {
+			return err
 		}
 	}
 
 	s.closed = true
 	return nil
+}
+
+// sessionImpl is the platform-specific session implementation.
+type sessionImpl interface {
+	run(inputs map[string]*Tensor) (map[string]*Tensor, error)
+	close() error
 }

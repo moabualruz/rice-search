@@ -1,10 +1,16 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"text/tabwriter"
 
 	"github.com/spf13/cobra"
+
+	"github.com/ricesearch/rice-search/internal/ml"
+	"github.com/ricesearch/rice-search/internal/pkg/logger"
 )
 
 var (
@@ -34,12 +40,12 @@ Run 'rice-search --help' for available commands.`,
 	rootCmd.AddCommand(
 		serveCmd(),
 		versionCmd(),
+		modelsCmd(),
 		// TODO: Add these as they're implemented
 		// apiCmd(),
 		// mlCmd(),
 		// searchCmd(),
 		// webCmd(),
-		// modelsCmd(),
 		// indexCmd(),
 		// queryCmd(),
 		// storesCmd(),
@@ -86,6 +92,167 @@ func versionCmd() *cobra.Command {
 			fmt.Printf("rice-search %s\n", version)
 			fmt.Printf("  commit: %s\n", commit)
 			fmt.Printf("  built:  %s\n", date)
+		},
+	}
+}
+
+func modelsCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "models",
+		Short: "Manage ML models",
+		Long:  "Download, list, and verify ML models required for Rice Search.",
+	}
+
+	// Shared flags
+	var modelsDir string
+	cmd.PersistentFlags().StringVar(&modelsDir, "models-dir", "./models", "models directory")
+
+	cmd.AddCommand(
+		modelsListCmd(&modelsDir),
+		modelsDownloadCmd(&modelsDir),
+		modelsCheckCmd(&modelsDir),
+	)
+
+	return cmd
+}
+
+func modelsListCmd(modelsDir *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "list",
+		Short: "List available models",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log := logger.Default()
+			mgr := ml.NewModelManager(*modelsDir, log)
+
+			format, _ := cmd.Flags().GetString("format")
+			if format == "json" {
+				models := mgr.ListModels()
+				data, _ := json.MarshalIndent(models, "", "  ")
+				fmt.Println(string(data))
+				return nil
+			}
+
+			// Table format
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "NAME\tTYPE\tSIZE\tDESCRIPTION")
+			fmt.Fprintln(w, "----\t----\t----\t-----------")
+
+			for _, model := range mgr.ListModels() {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+					model.Name, model.Type, model.Size, model.Description)
+			}
+
+			w.Flush()
+			return nil
+		},
+	}
+}
+
+func modelsDownloadCmd(modelsDir *string) *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "download [model...]",
+		Short: "Download models from HuggingFace",
+		Long: `Download ML models from HuggingFace.
+
+Without arguments, downloads all required models.
+With arguments, downloads only the specified models.
+
+Examples:
+  rice-search models download                    # Download all models
+  rice-search models download jina-embeddings-v3 # Download specific model`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log := logger.New("info", "text")
+			mgr := ml.NewModelManager(*modelsDir, log)
+
+			// Ensure models directory exists
+			absPath, _ := filepath.Abs(*modelsDir)
+			fmt.Printf("Models directory: %s\n\n", absPath)
+
+			if err := os.MkdirAll(*modelsDir, 0755); err != nil {
+				return fmt.Errorf("failed to create models directory: %w", err)
+			}
+
+			// Progress callback
+			progress := func(p ml.DownloadProgress) {
+				if p.Complete {
+					fmt.Printf("✓ %s: download complete\n", p.Model)
+				} else if p.Error != "" {
+					fmt.Printf("✗ %s: %s\n", p.Model, p.Error)
+				} else if p.Total > 0 {
+					fmt.Printf("  %s/%s: %.1f%% (%d/%d bytes)\r",
+						p.Model, p.File, p.Percent, p.Downloaded, p.Total)
+				}
+			}
+
+			if len(args) == 0 {
+				// Download all models
+				fmt.Println("Downloading all required models...")
+				if err := mgr.DownloadAllModels(progress); err != nil {
+					return err
+				}
+			} else {
+				// Download specific models
+				for _, name := range args {
+					fmt.Printf("Downloading %s...\n", name)
+					if err := mgr.DownloadModel(name, progress); err != nil {
+						return err
+					}
+				}
+			}
+
+			fmt.Println("\nDone!")
+			return nil
+		},
+	}
+
+	return cmd
+}
+
+func modelsCheckCmd(modelsDir *string) *cobra.Command {
+	return &cobra.Command{
+		Use:   "check",
+		Short: "Check installed models",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			log := logger.Default()
+			mgr := ml.NewModelManager(*modelsDir, log)
+
+			format, _ := cmd.Flags().GetString("format")
+			statuses := mgr.CheckAllModels()
+
+			if format == "json" {
+				data, _ := json.MarshalIndent(statuses, "", "  ")
+				fmt.Println(string(data))
+				return nil
+			}
+
+			// Table format
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "MODEL\tSTATUS\tMISSING")
+			fmt.Fprintln(w, "-----\t------\t-------")
+
+			allInstalled := true
+			for _, status := range statuses {
+				statusStr := "✓ installed"
+				missing := "-"
+
+				if !status.Installed {
+					statusStr = "✗ missing"
+					allInstalled = false
+					if len(status.Missing) > 0 {
+						missing = fmt.Sprintf("%v", status.Missing)
+					}
+				}
+
+				fmt.Fprintf(w, "%s\t%s\t%s\n", status.Name, statusStr, missing)
+			}
+
+			w.Flush()
+
+			if !allInstalled {
+				fmt.Println("\nRun 'rice-search models download' to download missing models.")
+			}
+
+			return nil
 		},
 	}
 }

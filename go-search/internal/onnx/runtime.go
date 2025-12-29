@@ -2,15 +2,8 @@
 package onnx
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
 	"runtime"
 	"sync"
-
-	ort "github.com/yalue/onnxruntime_go"
-
-	"github.com/ricesearch/rice-search/internal/pkg/errors"
 )
 
 // Runtime manages the ONNX Runtime environment.
@@ -19,6 +12,7 @@ type Runtime struct {
 	initialized bool
 	device      Device
 	sessions    map[string]*Session
+	impl        runtimeImpl
 }
 
 // Device represents the execution device.
@@ -63,33 +57,15 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 		sessions: make(map[string]*Session),
 	}
 
-	if err := r.initialize(cfg); err != nil {
+	// Initialize platform-specific implementation
+	impl, err := newRuntimeImpl(cfg)
+	if err != nil {
 		return nil, err
 	}
+	r.impl = impl
+	r.initialized = true
 
 	return r, nil
-}
-
-func (r *Runtime) initialize(cfg RuntimeConfig) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	if r.initialized {
-		return nil
-	}
-
-	// Set library path if provided
-	if cfg.LibraryPath != "" {
-		ort.SetSharedLibraryPath(cfg.LibraryPath)
-	}
-
-	// Initialize the runtime
-	if err := ort.InitializeEnvironment(); err != nil {
-		return errors.Wrap(errors.CodeMLError, "failed to initialize ONNX runtime", err)
-	}
-
-	r.initialized = true
-	return nil
 }
 
 // LoadSession loads an ONNX model and returns a session.
@@ -102,19 +78,14 @@ func (r *Runtime) LoadSession(name, modelPath string, opts ...SessionOption) (*S
 		return session, nil
 	}
 
-	// Verify model file exists
-	if _, err := os.Stat(modelPath); os.IsNotExist(err) {
-		return nil, errors.NotFoundError(fmt.Sprintf("model file: %s", modelPath))
-	}
-
 	// Create session options
 	sessionOpts := defaultSessionOptions()
 	for _, opt := range opts {
 		opt(&sessionOpts)
 	}
 
-	// Create the session
-	session, err := newSession(modelPath, r.device, sessionOpts)
+	// Create the session using implementation
+	session, err := r.impl.createSession(name, modelPath, r.device, sessionOpts)
 	if err != nil {
 		return nil, err
 	}
@@ -124,16 +95,12 @@ func (r *Runtime) LoadSession(name, modelPath string, opts ...SessionOption) (*S
 }
 
 // GetSession returns a loaded session by name.
-func (r *Runtime) GetSession(name string) (*Session, error) {
+func (r *Runtime) GetSession(name string) (*Session, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	session, ok := r.sessions[name]
-	if !ok {
-		return nil, errors.NotFoundError(fmt.Sprintf("session: %s", name))
-	}
-
-	return session, nil
+	return session, ok
 }
 
 // UnloadSession unloads a session.
@@ -167,13 +134,13 @@ func (r *Runtime) Close() error {
 		delete(r.sessions, name)
 	}
 
-	if r.initialized {
-		if err := ort.DestroyEnvironment(); err != nil {
+	if r.impl != nil {
+		if err := r.impl.close(); err != nil {
 			lastErr = err
 		}
-		r.initialized = false
 	}
 
+	r.initialized = false
 	return lastErr
 }
 
@@ -187,21 +154,13 @@ func (r *Runtime) IsGPU() bool {
 	return r.device == DeviceCUDA || r.device == DeviceTensorRT
 }
 
-// FindModels finds ONNX models in a directory.
-func FindModels(dir string) ([]string, error) {
-	var models []string
+// IsAvailable returns true if ONNX Runtime is available on this platform.
+func IsAvailable() bool {
+	return isRuntimeAvailable()
+}
 
-	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		if !info.IsDir() && filepath.Ext(path) == ".onnx" {
-			models = append(models, path)
-		}
-
-		return nil
-	})
-
-	return models, err
+// runtimeImpl is the platform-specific runtime implementation.
+type runtimeImpl interface {
+	createSession(name, modelPath string, device Device, opts SessionOptions) (*Session, error)
+	close() error
 }

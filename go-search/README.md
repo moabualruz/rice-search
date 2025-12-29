@@ -19,7 +19,7 @@ Pure Go code search platform. Single binary. Event-driven microservices.
 | [Implementation Plan](docs/IMPLEMENTATION.md) | ✅ | Complete task breakdown |
 | Phase 0: Setup | ✅ | Project scaffold, tooling, Docker |
 | Phase 1: Core | ✅ | Config, logger, errors, event bus |
-| Phase 2: ML | ⬜ | ONNX runtime, embeddings, reranking |
+| Phase 2: ML | ✅ | ONNX runtime, embeddings, reranking |
 | Phase 3: Search | ⬜ | Qdrant, hybrid search, indexing |
 | Phase 4: API/CLI | ⬜ | HTTP gateway, CLI commands |
 | Phase 5: Web UI | ⬜ | Templ + HTMX interface |
@@ -82,11 +82,10 @@ Pure Go code search platform. Single binary. Event-driven microservices.
 ## Quick Start
 
 ```bash
-# Option 1: Dev mode (ephemeral data, includes Qdrant Web UI)
+# Option 1: Dev mode (ephemeral data)
 make dev-up
-# Qdrant API: http://localhost:6333
+# Qdrant API:       http://localhost:6333
 # Qdrant Dashboard: http://localhost:6333/dashboard
-# Qdrant Web UI: http://localhost:8001
 
 # Option 2: Production mode (persistent data)
 make compose-up
@@ -99,7 +98,7 @@ make run
 ### Development Commands
 
 ```bash
-make dev-up       # Start Qdrant + Web UI (data resets on down)
+make dev-up       # Start Qdrant (data resets on down)
 make dev-down     # Stop and lose all data
 make dev-restart  # Fresh restart with clean data
 make dev-logs     # View logs
