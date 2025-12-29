@@ -188,6 +188,34 @@ chunk_hash = SHA256(store + path + start_line + end_line + content)
 
 ## Embedding
 
+### Event-Driven ML Operations
+
+The indexing pipeline uses the event bus for ML operations:
+
+```
+Index Pipeline                     Event Bus                      ML Service
+      │                               │                               │
+      │  ml.embed.request             │                               │
+      │  {texts: [chunk1, chunk2...]} │                               │
+      │──────────────────────────────>│──────────────────────────────>│
+      │                               │                               │
+      │                               │         (batch embed)         │
+      │                               │                               │
+      │  ml.embed.response            │                               │
+      │  {embeddings: [[...], [...]]} │                               │
+      │<──────────────────────────────│<──────────────────────────────│
+      │                               │                               │
+      │  ml.sparse.request            │                               │
+      │  {texts: [chunk1, chunk2...]} │                               │
+      │──────────────────────────────>│──────────────────────────────>│
+      │                               │                               │
+      │  ml.sparse.response           │                               │
+      │  {vectors: [{...}, {...}]}    │                               │
+      │<──────────────────────────────│<──────────────────────────────│
+```
+
+**Fallback**: If the event bus is unavailable, the pipeline falls back to direct ML service calls.
+
 ### Batching
 
 For efficiency, embeddings are batched:

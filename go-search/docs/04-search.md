@@ -2,7 +2,7 @@
 
 ## Overview
 
-Hybrid search combining sparse (SPLADE) and dense (semantic) retrieval with RRF fusion and optional reranking.
+Hybrid search combining sparse (SPLADE) and dense (semantic) retrieval with RRF fusion and optional reranking. Includes intelligent query understanding for better keyword extraction and intent classification.
 
 ---
 
@@ -15,7 +15,16 @@ Hybrid search combining sparse (SPLADE) and dense (semantic) retrieval with RRF 
 │                                                                             │
 │  1. QUERY INPUT                                                             │
 │     ┌─────────────────────────────────────────────────────────────────┐    │
-│     │  "authentication handler golang"                                 │    │
+│     │  "find authentication handler in golang"                         │    │
+│     └─────────────────────────────────────────────────────────────────┘    │
+│                                    │                                        │
+│                                    ▼                                        │
+│  1b. QUERY UNDERSTANDING (CodeBERT)                                         │
+│     ┌─────────────────────────────────────────────────────────────────┐    │
+│     │  Intent: navigational                                            │    │
+│     │  Keywords: [authentication, handler, golang, go]                 │    │
+│     │  Expanded: [auth, authenticate, login, http.Handler]             │    │
+│     │  Confidence: 0.92                                                │    │
 │     └─────────────────────────────────────────────────────────────────┘    │
 │                                    │                                        │
 │                                    ▼                                        │
@@ -74,6 +83,30 @@ Hybrid search combining sparse (SPLADE) and dense (semantic) retrieval with RRF 
 ---
 
 ## Step 1: Query Encoding
+
+Query encoding uses the event bus for ML operations:
+
+```
+Search Service                     Event Bus                      ML Service
+      │                               │                               │
+      │  ml.embed.request             │                               │
+      │  {texts: [query]}             │                               │
+      │──────────────────────────────>│──────────────────────────────>│
+      │                               │                               │
+      │  ml.embed.response            │   (generate dense embedding)  │
+      │  {embeddings: [[...]]}        │                               │
+      │<──────────────────────────────│<──────────────────────────────│
+      │                               │                               │
+      │  ml.sparse.request            │                               │
+      │  {texts: [query]}             │                               │
+      │──────────────────────────────>│──────────────────────────────>│
+      │                               │                               │
+      │  ml.sparse.response           │   (generate sparse vector)    │
+      │  {vectors: [{...}]}           │                               │
+      │<──────────────────────────────│<──────────────────────────────│
+```
+
+**Fallback**: If the event bus is unavailable, the service falls back to direct ML calls.
 
 ### Sparse Encoding (SPLADE)
 
@@ -202,6 +235,22 @@ RRF_score = (0.5 / (60 + 3)) + (0.5 / (60 + 7))
 ## Step 4: Reranking
 
 Optional cross-encoder reranking for improved precision.
+
+### Event-Driven Reranking
+
+Reranking uses the event bus for ML operations:
+
+```
+Search Service                     Event Bus                      ML Service
+      │                               │                               │
+      │  ml.rerank.request            │                               │
+      │  {query, documents, top_k}    │                               │
+      │──────────────────────────────>│──────────────────────────────>│
+      │                               │                               │
+      │  ml.rerank.response           │   (cross-encoder scoring)     │
+      │  {results: [{index, score}]}  │                               │
+      │<──────────────────────────────│<──────────────────────────────│
+```
 
 ### How It Works
 
@@ -357,3 +406,87 @@ Best for: General use, mixed queries.
 - Truncate to 512 tokens for SPLADE
 - Truncate to 8192 tokens for dense
 - Log warning if truncated
+
+---
+
+## Query Understanding
+
+Query understanding uses CodeBERT to convert natural language queries into optimized search terms.
+
+### How It Works
+
+```
+User Query: "find authentication handler in golang"
+                        │
+                        ▼
+              ┌─────────────────┐
+              │    CodeBERT     │
+              │   (125M params) │
+              └────────┬────────┘
+                       │
+                       ▼
+              ┌─────────────────────────────────────────┐
+              │ ParsedQuery:                            │
+              │   Original: "find authentication..."    │
+              │   Intent: navigational                  │
+              │   Keywords: [authentication, handler]   │
+              │   CodeTerms: [golang, go, handler]      │
+              │   Expanded: [auth, login, http.Handler] │
+              │   Confidence: 0.92                      │
+              │   UsedModel: true                       │
+              └─────────────────────────────────────────┘
+```
+
+### Intent Types
+
+| Intent | Description | Example Query |
+|--------|-------------|---------------|
+| `navigational` | Find specific code location | "where is the auth handler" |
+| `factual` | Answer about code | "what does ParseQuery do" |
+| `exploratory` | Discover related code | "how does authentication work" |
+| `analytical` | Understand patterns | "why does login call validate" |
+
+### Keyword Expansion
+
+CodeBERT expands queries with code-aware synonyms:
+
+| Original Term | Expanded Terms |
+|---------------|----------------|
+| `auth` | authentication, authenticate, login, session |
+| `handler` | handler, Handler, http.Handler, HandlerFunc |
+| `error` | error, err, Error, exception, panic |
+| `config` | config, configuration, settings, options |
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `QueryEnabled` | `true` | Use CodeBERT model |
+| `QueryModel` | `microsoft/codebert-base` | Model to use |
+| `QueryGPU` | `true` | Run on GPU |
+
+### Fallback
+
+When model is disabled or fails:
+- Uses heuristic keyword extraction (`keyword_extractor.go`)
+- Pattern-based intent detection
+- Static synonym expansion
+- Still provides quality results, just less semantic understanding
+
+### Response Metadata
+
+Query understanding results are included in search response:
+
+```json
+{
+  "parsed_query": {
+    "original": "find authentication handler",
+    "intent": "navigational",
+    "keywords": ["authentication", "handler"],
+    "code_terms": ["handler"],
+    "expanded": ["auth", "authenticate", "login"],
+    "confidence": 0.92,
+    "used_model": true
+  }
+}
+```

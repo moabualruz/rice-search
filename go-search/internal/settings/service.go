@@ -91,14 +91,14 @@ func DefaultConfig() RuntimeConfig {
 		LogLevel:   "info",
 		LogFormat:  "text",
 
-		// ML - GPU enabled by default
+		// ML - GPU enabled by default (GPU-first architecture)
 		EmbedModel:    "jinaai/jina-embeddings-v2-base-code",
 		RerankModel:   "jinaai/jina-reranker-v2-base-multilingual",
-		QueryModel:    "Salesforce/codet5p-110m-embedding",
+		QueryModel:    "microsoft/codebert-base", // Code-specialized query understanding
 		EmbedGPU:      true,
 		RerankGPU:     true,
-		QueryGPU:      false, // Query understanding is CPU by default
-		QueryEnabled:  true,
+		QueryGPU:      true, // GPU-first: all models use GPU by default
+		QueryEnabled:  true, // Model enabled - better query understanding than keyword extraction
 		BatchSize:     32,
 		MaxConcurrent: 4,
 

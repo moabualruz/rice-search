@@ -220,17 +220,17 @@ func setDefaults(cfg *Config) {
 		EmbedModel:        "jinaai/jina-code-embeddings-1.5b",
 		SparseModel:       "splade-v3",
 		RerankModel:       "jinaai/jina-reranker-v2-base-multilingual",
-		QueryModel:        "Salesforce/codet5p-220m",
+		QueryModel:        "microsoft/codebert-base", // Code-specialized query understanding (125M params)
 		EmbedDim:          1536,
 		EmbedBatchSize:    32,
 		SparseBatchSize:   32,
 		RerankBatchSize:   16,
 		MaxSeqLength:      8192,
 		ModelsDir:         "./models",
-		EmbedGPU:          true,  // GPU enabled by default
-		RerankGPU:         true,  // GPU enabled by default
-		QueryGPU:          false, // Query model GPU off by default (use Option C)
-		QueryModelEnabled: false, // Use keyword extraction by default
+		EmbedGPU:          true, // GPU-first: all models use GPU by default
+		RerankGPU:         true, // GPU-first: all models use GPU by default
+		QueryGPU:          true, // GPU-first: all models use GPU by default
+		QueryModelEnabled: true, // Model enabled - better query understanding than keyword extraction
 	}
 
 	cfg.Connection = ConnectionConfig{

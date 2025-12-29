@@ -28,14 +28,26 @@ var DefaultModels = []ModelInfo{
 		DownloadURL: "https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual",
 	},
 	{
-		ID:          "Salesforce/codet5p-220m",
+		ID:          "microsoft/codebert-base",
 		Type:        ModelTypeQueryUnderstand,
-		DisplayName: "CodeT5+ 220M",
-		Description: "Query understanding and intent classification for code search",
+		DisplayName: "CodeBERT Base",
+		Description: "Code-specialized query understanding - pre-trained on 6 languages (Python, Java, JavaScript, PHP, Ruby, Go). Converts queries to optimized search terms with intent classification.",
 		MaxTokens:   512,
 		Downloaded:  false,
 		IsDefault:   true,
-		GPUEnabled:  false,     // Disabled by default, falls back to Option C (heuristics)
+		GPUEnabled:  true,      // GPU-first architecture
+		Size:        438000000, // ~438MB (125M params FP32)
+		DownloadURL: "https://huggingface.co/microsoft/codebert-base",
+	},
+	{
+		ID:          "Salesforce/codet5p-220m",
+		Type:        ModelTypeQueryUnderstand,
+		DisplayName: "CodeT5+ 220M",
+		Description: "Alternative query understanding model - encoder-decoder for code understanding",
+		MaxTokens:   512,
+		Downloaded:  false,
+		IsDefault:   false, // Not default, CodeBERT is better for query understanding
+		GPUEnabled:  true,
 		Size:        230686720, // ~220MB
 		DownloadURL: "https://huggingface.co/Salesforce/codet5p-220m",
 	},
@@ -55,9 +67,9 @@ var DefaultTypeConfigs = []ModelTypeConfig{
 	},
 	{
 		Type:         ModelTypeQueryUnderstand,
-		DefaultModel: "Salesforce/codet5p-220m",
-		GPUEnabled:   false,
-		Fallback:     "heuristic", // Falls back to heuristic-based query understanding
+		DefaultModel: "microsoft/codebert-base",
+		GPUEnabled:   true,        // GPU-first architecture
+		Fallback:     "heuristic", // Falls back to keyword extraction if model fails
 	},
 }
 
@@ -88,6 +100,22 @@ var DefaultMappers = []ModelMapper{
 		},
 		OutputMapping: map[string]string{
 			"score": "score",
+		},
+	},
+	{
+		ID:             "codebert-mapper",
+		Name:           "CodeBERT Query Understanding Mapper",
+		ModelID:        "microsoft/codebert-base",
+		Type:           ModelTypeQueryUnderstand,
+		PromptTemplate: "",
+		InputMapping: map[string]string{
+			"query": "text",
+		},
+		OutputMapping: map[string]string{
+			"intent":     "intent",
+			"keywords":   "keywords",
+			"expanded":   "expanded",
+			"confidence": "confidence",
 		},
 	},
 	{

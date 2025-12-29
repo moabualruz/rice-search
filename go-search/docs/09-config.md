@@ -32,20 +32,56 @@ Configuration via environment variables, CLI flags, or config file. Priority: CL
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
 | `MODELS_DIR` | `--models-dir` | `./models` | Models directory |
-| `EMBED_MODEL` | - | `jina-embeddings-v3.onnx` | Embedding model file |
-| `SPARSE_MODEL` | - | `splade-pp-en-v1.onnx` | Sparse model file |
-| `RERANK_MODEL` | - | `jina-reranker-v2.onnx` | Reranker model file |
+| `EMBED_MODEL` | - | `jinaai/jina-code-embeddings-1.5b` | Embedding model |
+| `SPARSE_MODEL` | - | `splade-v3` | Sparse model |
+| `RERANK_MODEL` | - | `jinaai/jina-reranker-v2-base-multilingual` | Reranker model |
+| `QUERY_MODEL` | - | `microsoft/codebert-base` | Query understanding model |
 
-### Device / GPU
+### Query Understanding
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `DEVICE` | `--device` | `auto` | Device (auto, cpu, cuda) |
+| `RICE_QUERY_MODEL` | - | `microsoft/codebert-base` | Query understanding model |
+| `RICE_QUERY_MODEL_ENABLED` | - | `true` | Enable model-based query understanding |
+| `RICE_QUERY_GPU` | - | `true` | Run query model on GPU |
+
+**Model Options:**
+
+| Model | Size | Speed | Quality | Use Case |
+|-------|------|-------|---------|----------|
+| `microsoft/codebert-base` | 438MB | ~50ms GPU | ⭐⭐⭐⭐⭐ | **Default** - Code-specialized |
+| `Salesforce/codet5p-220m` | 220MB | ~40ms GPU | ⭐⭐⭐⭐ | Alternative encoder-decoder |
+| (heuristic fallback) | 0MB | ~1ms | ⭐⭐⭐ | Disabled or fallback mode |
+
+**When to disable:**
+- Memory-constrained environments (saves ~438MB VRAM)
+- Keyword-only queries (no semantic benefit needed)
+- Maximum throughput requirements
+
+### Device / GPU (GPU-First Architecture)
+
+All models default to GPU for maximum performance.
+
+| Env Var | CLI Flag | Default | Description |
+|---------|----------|---------|-------------|
+| `DEVICE` | `--device` | `cuda` | Device (cpu, cuda, tensorrt) |
 | `CUDA_VISIBLE_DEVICES` | - | `0` | GPU index |
 | `GPU_LOAD_MODE` | `--load-mode` | `all` | Model loading (all, ondemand, lru) |
 | `GPU_UNLOAD_TIMEOUT` | - | `60s` | Unload timeout (ondemand mode) |
 | `GPU_LRU_SIZE` | - | `2` | Models to keep (lru mode) |
-| `ONNX_PROVIDER` | - | `auto` | ONNX provider (cpu, cuda, tensorrt) |
+| `ONNX_PROVIDER` | - | `cuda` | ONNX provider (cpu, cuda, tensorrt) |
+| `RICE_EMBED_GPU` | - | `true` | Embedding model on GPU |
+| `RICE_RERANK_GPU` | - | `true` | Reranking model on GPU |
+| `RICE_QUERY_GPU` | - | `true` | Query understanding on GPU |
+
+**VRAM Requirements (GPU-First):**
+
+| Configuration | Total VRAM | Models Loaded |
+|---------------|------------|---------------|
+| All GPU (default) | ~3GB | Embed + Sparse + Rerank + Query |
+| No Query GPU | ~2.5GB | Embed + Sparse + Rerank |
+| Embed + Rerank only | ~2.3GB | Embed + Rerank |
+| CPU fallback | 0GB | All on CPU (slower) |
 
 ### Search
 
@@ -146,16 +182,23 @@ qdrant:
 
 models:
   dir: ./models
-  embed: jina-embeddings-v3.onnx
-  sparse: splade-pp-en-v1.onnx
-  rerank: jina-reranker-v2.onnx
+  embed: jinaai/jina-code-embeddings-1.5b
+  sparse: splade-v3
+  rerank: jinaai/jina-reranker-v2-base-multilingual
+  query: microsoft/codebert-base  # Query understanding model
 
 device:
-  type: auto  # auto, cpu, cuda
+  type: cuda  # cpu, cuda, tensorrt (GPU-first default)
   cuda_device: 0
   load_mode: all  # all, ondemand, lru
   unload_timeout: 60s
   lru_size: 2
+
+ml:
+  embed_gpu: true      # GPU for embeddings
+  rerank_gpu: true     # GPU for reranking
+  query_gpu: true      # GPU for query understanding
+  query_enabled: true  # Enable CodeBERT query understanding
 
 search:
   default_top_k: 20

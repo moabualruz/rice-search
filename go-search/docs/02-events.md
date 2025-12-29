@@ -79,6 +79,93 @@ Examples:
 
 ---
 
+## Event Flow Diagrams
+
+### Search → ML Event Flow
+
+When a search request comes in, the Search service uses the event bus to request ML operations:
+
+```
+┌────────────┐     ┌────────────┐     ┌────────────┐
+│   Client   │     │   Search   │     │     ML     │
+│   Request  │     │   Service  │     │   Service  │
+└─────┬──────┘     └─────┬──────┘     └─────┬──────┘
+      │                  │                   │
+      │  POST /search    │                   │
+      │─────────────────>│                   │
+      │                  │                   │
+      │                  │  ml.embed.request │
+      │                  │──────────────────>│
+      │                  │                   │ (generate embeddings)
+      │                  │ ml.embed.response │
+      │                  │<──────────────────│
+      │                  │                   │
+      │                  │ ml.sparse.request │
+      │                  │──────────────────>│
+      │                  │                   │ (sparse encoding)
+      │                  │ml.sparse.response │
+      │                  │<──────────────────│
+      │                  │                   │
+      │                  │  (Qdrant search)  │
+      │                  │                   │
+      │                  │ ml.rerank.request │
+      │                  │──────────────────>│
+      │                  │                   │ (rerank documents)
+      │                  │ml.rerank.response │
+      │                  │<──────────────────│
+      │                  │                   │
+      │  Search Results  │                   │
+      │<─────────────────│                   │
+      │                  │                   │
+```
+
+### Index → ML Event Flow
+
+When indexing documents, the Index pipeline uses the event bus for embeddings:
+
+```
+┌────────────┐     ┌────────────┐     ┌────────────┐     ┌────────────┐
+│   Client   │     │   Index    │     │     ML     │     │   Qdrant   │
+│   Request  │     │  Pipeline  │     │   Service  │     │            │
+└─────┬──────┘     └─────┬──────┘     └─────┬──────┘     └─────┬──────┘
+      │                  │                   │                  │
+      │  POST /index     │                   │                  │
+      │─────────────────>│                   │                  │
+      │                  │                   │                  │
+      │                  │ (chunk documents) │                  │
+      │                  │                   │                  │
+      │                  │  ml.embed.request │                  │
+      │                  │──────────────────>│                  │
+      │                  │                   │ (batch embed)    │
+      │                  │ ml.embed.response │                  │
+      │                  │<──────────────────│                  │
+      │                  │                   │                  │
+      │                  │ ml.sparse.request │                  │
+      │                  │──────────────────>│                  │
+      │                  │                   │ (sparse encode)  │
+      │                  │ml.sparse.response │                  │
+      │                  │<──────────────────│                  │
+      │                  │                   │                  │
+      │                  │                   │ upsert points    │
+      │                  │──────────────────────────────────────>│
+      │                  │                   │                  │
+      │  Index Result    │                   │                  │
+      │<─────────────────│                   │                  │
+      │                  │                   │                  │
+```
+
+### Fallback Behavior
+
+Both Search and Index services implement graceful fallback:
+
+1. **Event bus available**: Uses `bus.Request()` for ML operations
+2. **Event bus unavailable**: Falls back to direct ML service calls
+3. **Event bus timeout**: Falls back to direct ML service calls
+
+This ensures the system remains functional even if the event bus is temporarily unavailable.
+
+---
+
 ## ML Events
 
 ### ml.embed.request

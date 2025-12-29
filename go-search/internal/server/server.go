@@ -500,6 +500,17 @@ func (s *Server) subscribeToSettingsChanges() {
 			}
 		}
 
+		// Update query understanding service if QueryEnabled changed
+		if settingsEvent.OldConfig.QueryEnabled != settingsEvent.NewConfig.QueryEnabled {
+			if s.search != nil {
+				if querySvc := s.search.QueryService(); querySvc != nil {
+					querySvc.SetModelEnabled(settingsEvent.NewConfig.QueryEnabled)
+					s.log.Info("Query understanding model enabled state changed",
+						"enabled", settingsEvent.NewConfig.QueryEnabled)
+				}
+			}
+		}
+
 		// Index service config changes would also be handled here if needed
 
 		return nil

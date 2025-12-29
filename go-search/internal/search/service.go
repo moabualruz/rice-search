@@ -284,14 +284,14 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		return nil, fmt.Errorf("store not found: %s", req.Store)
 	}
 
-	// Generate embeddings for query
+	// Generate embeddings for query via event bus
 	embedStart := time.Now()
-	denseVectors, err := s.ml.Embed(ctx, []string{req.Query})
+	denseVectors, err := s.embedViaEventBus(ctx, []string{req.Query})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate dense embedding: %w", err)
 	}
 
-	sparseVectors, err := s.ml.SparseEncode(ctx, []string{req.Query})
+	sparseVectors, err := s.sparseEncodeViaEventBus(ctx, []string{req.Query})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate sparse embedding: %w", err)
 	}
@@ -362,8 +362,8 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 			documents[i] = qr.Payload.Content
 		}
 
-		// Rerank
-		ranked, err := s.ml.Rerank(ctx, req.Query, documents, topK)
+		// Rerank via event bus
+		ranked, err := s.rerankViaEventBus(ctx, req.Query, documents, topK)
 		if err != nil {
 			s.log.Warn("Reranking failed, using original order", "error", err)
 		} else {
@@ -465,9 +465,9 @@ func (s *Service) SearchDenseOnly(ctx context.Context, req Request) (*Response, 
 		return nil, fmt.Errorf("query and store are required")
 	}
 
-	// Generate dense embedding
+	// Generate dense embedding via event bus
 	embedStart := time.Now()
-	denseVectors, err := s.ml.Embed(ctx, []string{req.Query})
+	denseVectors, err := s.embedViaEventBus(ctx, []string{req.Query})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate embedding: %w", err)
 	}
@@ -556,9 +556,9 @@ func (s *Service) SearchSparseOnly(ctx context.Context, req Request) (*Response,
 		return nil, fmt.Errorf("query and store are required")
 	}
 
-	// Generate sparse embedding
+	// Generate sparse embedding via event bus
 	embedStart := time.Now()
-	sparseVectors, err := s.ml.SparseEncode(ctx, []string{req.Query})
+	sparseVectors, err := s.sparseEncodeViaEventBus(ctx, []string{req.Query})
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate sparse embedding: %w", err)
 	}
@@ -763,6 +763,12 @@ func (s *Service) GetConfig() Config {
 	return s.cfg
 }
 
+// QueryService returns the query understanding service.
+// Returns nil if query understanding is not configured.
+func (s *Service) QueryService() *query.Service {
+	return s.querySvc
+}
+
 // SetMonitoringService sets the monitoring service for search tracking.
 // This is called during server initialization after both services are created.
 func (s *Service) SetMonitoringService(monSvc MonitoringService) {
@@ -794,5 +800,337 @@ func (s *Service) recordSearchActivity(filter *Filter) {
 
 	if connectionID != "" {
 		monSvc.RecordSearch(connectionID)
+	}
+}
+
+// embedViaEventBus generates embeddings using the event bus.
+// Falls back to direct ML service call if event bus is unavailable.
+func (s *Service) embedViaEventBus(ctx context.Context, texts []string) ([][]float32, error) {
+	// If no event bus, fall back to direct call
+	if s.bus == nil {
+		return s.ml.Embed(ctx, texts)
+	}
+
+	// Create request event
+	correlationID := fmt.Sprintf("embed-%d", time.Now().UnixNano())
+	req := bus.Event{
+		ID:            correlationID,
+		Type:          bus.TopicEmbedRequest,
+		Source:        "search",
+		Timestamp:     time.Now().UnixNano(),
+		CorrelationID: correlationID,
+		Payload: map[string]interface{}{
+			"texts": texts,
+		},
+	}
+
+	// Send request and wait for response
+	resp, err := s.bus.Request(ctx, bus.TopicEmbedRequest, req)
+	if err != nil {
+		s.log.Debug("Event bus embed request failed, falling back to direct call", "error", err)
+		return s.ml.Embed(ctx, texts)
+	}
+
+	// Parse response
+	embeddings, err := parseEmbedResponse(resp)
+	if err != nil {
+		s.log.Debug("Failed to parse embed response, falling back to direct call", "error", err)
+		return s.ml.Embed(ctx, texts)
+	}
+
+	return embeddings, nil
+}
+
+// sparseEncodeViaEventBus generates sparse vectors using the event bus.
+// Falls back to direct ML service call if event bus is unavailable.
+func (s *Service) sparseEncodeViaEventBus(ctx context.Context, texts []string) ([]ml.SparseVector, error) {
+	// If no event bus, fall back to direct call
+	if s.bus == nil {
+		return s.ml.SparseEncode(ctx, texts)
+	}
+
+	// Create request event
+	correlationID := fmt.Sprintf("sparse-%d", time.Now().UnixNano())
+	req := bus.Event{
+		ID:            correlationID,
+		Type:          bus.TopicSparseRequest,
+		Source:        "search",
+		Timestamp:     time.Now().UnixNano(),
+		CorrelationID: correlationID,
+		Payload: map[string]interface{}{
+			"texts": texts,
+		},
+	}
+
+	// Send request and wait for response
+	resp, err := s.bus.Request(ctx, bus.TopicSparseRequest, req)
+	if err != nil {
+		s.log.Debug("Event bus sparse request failed, falling back to direct call", "error", err)
+		return s.ml.SparseEncode(ctx, texts)
+	}
+
+	// Parse response
+	vectors, err := parseSparseResponse(resp)
+	if err != nil {
+		s.log.Debug("Failed to parse sparse response, falling back to direct call", "error", err)
+		return s.ml.SparseEncode(ctx, texts)
+	}
+
+	return vectors, nil
+}
+
+// rerankViaEventBus reranks documents using the event bus.
+// Falls back to direct ML service call if event bus is unavailable.
+func (s *Service) rerankViaEventBus(ctx context.Context, query string, documents []string, topK int) ([]ml.RankedResult, error) {
+	// If no event bus, fall back to direct call
+	if s.bus == nil {
+		return s.ml.Rerank(ctx, query, documents, topK)
+	}
+
+	// Create request event
+	correlationID := fmt.Sprintf("rerank-%d", time.Now().UnixNano())
+	req := bus.Event{
+		ID:            correlationID,
+		Type:          bus.TopicRerankRequest,
+		Source:        "search",
+		Timestamp:     time.Now().UnixNano(),
+		CorrelationID: correlationID,
+		Payload: map[string]interface{}{
+			"query":     query,
+			"documents": documents,
+			"top_k":     topK,
+		},
+	}
+
+	// Send request and wait for response
+	resp, err := s.bus.Request(ctx, bus.TopicRerankRequest, req)
+	if err != nil {
+		s.log.Debug("Event bus rerank request failed, falling back to direct call", "error", err)
+		return s.ml.Rerank(ctx, query, documents, topK)
+	}
+
+	// Parse response
+	results, err := parseRerankResponse(resp)
+	if err != nil {
+		s.log.Debug("Failed to parse rerank response, falling back to direct call", "error", err)
+		return s.ml.Rerank(ctx, query, documents, topK)
+	}
+
+	return results, nil
+}
+
+// parseEmbedResponse extracts embeddings from an event bus response.
+func parseEmbedResponse(event bus.Event) ([][]float32, error) {
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid embed response payload type")
+	}
+
+	// Check for error
+	if errStr, ok := payload["error"].(string); ok && errStr != "" {
+		return nil, fmt.Errorf("embed error: %s", errStr)
+	}
+
+	// Extract embeddings
+	embeddingsRaw, ok := payload["embeddings"]
+	if !ok {
+		return nil, fmt.Errorf("missing embeddings in response")
+	}
+
+	// Convert to [][]float32
+	return convertToFloat32Slice2D(embeddingsRaw)
+}
+
+// parseSparseResponse extracts sparse vectors from an event bus response.
+func parseSparseResponse(event bus.Event) ([]ml.SparseVector, error) {
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid sparse response payload type")
+	}
+
+	// Check for error
+	if errStr, ok := payload["error"].(string); ok && errStr != "" {
+		return nil, fmt.Errorf("sparse error: %s", errStr)
+	}
+
+	// Extract vectors
+	vectorsRaw, ok := payload["vectors"]
+	if !ok {
+		return nil, fmt.Errorf("missing vectors in response")
+	}
+
+	// Convert to []ml.SparseVector
+	return convertToSparseVectors(vectorsRaw)
+}
+
+// parseRerankResponse extracts ranked results from an event bus response.
+func parseRerankResponse(event bus.Event) ([]ml.RankedResult, error) {
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid rerank response payload type")
+	}
+
+	// Check for error
+	if errStr, ok := payload["error"].(string); ok && errStr != "" {
+		return nil, fmt.Errorf("rerank error: %s", errStr)
+	}
+
+	// Extract results
+	resultsRaw, ok := payload["results"]
+	if !ok {
+		return nil, fmt.Errorf("missing results in response")
+	}
+
+	// Convert to []ml.RankedResult
+	return convertToRankedResults(resultsRaw)
+}
+
+// convertToFloat32Slice2D converts interface{} to [][]float32.
+func convertToFloat32Slice2D(v interface{}) ([][]float32, error) {
+	switch arr := v.(type) {
+	case [][]float32:
+		return arr, nil
+	case []interface{}:
+		result := make([][]float32, len(arr))
+		for i, row := range arr {
+			switch rowArr := row.(type) {
+			case []float32:
+				result[i] = rowArr
+			case []interface{}:
+				result[i] = make([]float32, len(rowArr))
+				for j, val := range rowArr {
+					switch num := val.(type) {
+					case float64:
+						result[i][j] = float32(num)
+					case float32:
+						result[i][j] = num
+					default:
+						return nil, fmt.Errorf("invalid embedding value type at [%d][%d]: %T", i, j, val)
+					}
+				}
+			default:
+				return nil, fmt.Errorf("invalid embedding row type at [%d]: %T", i, row)
+			}
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("invalid embeddings type: %T", v)
+	}
+}
+
+// convertToSparseVectors converts interface{} to []ml.SparseVector.
+func convertToSparseVectors(v interface{}) ([]ml.SparseVector, error) {
+	arr, ok := v.([]interface{})
+	if !ok {
+		// Try direct type
+		if vectors, ok := v.([]ml.SparseVector); ok {
+			return vectors, nil
+		}
+		return nil, fmt.Errorf("invalid sparse vectors type: %T", v)
+	}
+
+	result := make([]ml.SparseVector, len(arr))
+	for i, item := range arr {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid sparse vector item type at [%d]: %T", i, item)
+		}
+
+		// Extract indices
+		indicesRaw, ok := m["indices"]
+		if ok {
+			result[i].Indices = convertToUint32Slice(indicesRaw)
+		}
+
+		// Extract values
+		valuesRaw, ok := m["values"]
+		if ok {
+			result[i].Values = convertToFloat32Slice(valuesRaw)
+		}
+	}
+
+	return result, nil
+}
+
+// convertToRankedResults converts interface{} to []ml.RankedResult.
+func convertToRankedResults(v interface{}) ([]ml.RankedResult, error) {
+	arr, ok := v.([]interface{})
+	if !ok {
+		// Try direct type
+		if results, ok := v.([]ml.RankedResult); ok {
+			return results, nil
+		}
+		return nil, fmt.Errorf("invalid ranked results type: %T", v)
+	}
+
+	result := make([]ml.RankedResult, len(arr))
+	for i, item := range arr {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid ranked result item type at [%d]: %T", i, item)
+		}
+
+		if idx, ok := m["index"]; ok {
+			result[i].Index = int(toFloat64(idx))
+		}
+		if score, ok := m["score"]; ok {
+			result[i].Score = float32(toFloat64(score))
+		}
+	}
+
+	return result, nil
+}
+
+// convertToUint32Slice converts interface{} to []uint32.
+func convertToUint32Slice(v interface{}) []uint32 {
+	switch arr := v.(type) {
+	case []uint32:
+		return arr
+	case []interface{}:
+		result := make([]uint32, len(arr))
+		for i, val := range arr {
+			result[i] = uint32(toFloat64(val))
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+// convertToFloat32Slice converts interface{} to []float32.
+func convertToFloat32Slice(v interface{}) []float32 {
+	switch arr := v.(type) {
+	case []float32:
+		return arr
+	case []interface{}:
+		result := make([]float32, len(arr))
+		for i, val := range arr {
+			result[i] = float32(toFloat64(val))
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+// toFloat64 safely converts various number types to float64.
+func toFloat64(v interface{}) float64 {
+	switch num := v.(type) {
+	case float64:
+		return num
+	case float32:
+		return float64(num)
+	case int:
+		return float64(num)
+	case int32:
+		return float64(num)
+	case int64:
+		return float64(num)
+	case uint32:
+		return float64(num)
+	case uint64:
+		return float64(num)
+	default:
+		return 0
 	}
 }

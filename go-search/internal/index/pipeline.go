@@ -313,14 +313,14 @@ func (p *Pipeline) generateEmbeddings(ctx context.Context, chunks []*Chunk) ([]q
 		contents[i] = chunk.Content
 	}
 
-	// Generate dense embeddings
-	denseEmbeddings, err := p.ml.Embed(ctx, contents)
+	// Generate dense embeddings via event bus
+	denseEmbeddings, err := p.embedViaEventBus(ctx, contents)
 	if err != nil {
 		return nil, fmt.Errorf("dense embedding failed: %w", err)
 	}
 
-	// Generate sparse embeddings
-	sparseVectors, err := p.ml.SparseEncode(ctx, contents)
+	// Generate sparse embeddings via event bus
+	sparseVectors, err := p.sparseEncodeViaEventBus(ctx, contents)
 	if err != nil {
 		return nil, fmt.Errorf("sparse encoding failed: %w", err)
 	}
@@ -468,4 +468,239 @@ func containsError(errs []IndexError, path string) bool {
 // ListFiles returns paginated list of indexed files for a store.
 func (p *Pipeline) ListFiles(store string, page, pageSize int) ([]FileInfo, int) {
 	return p.tracker.ListFiles(store, page, pageSize)
+}
+
+// embedViaEventBus generates embeddings using the event bus.
+// Falls back to direct ML service call if event bus is unavailable.
+func (p *Pipeline) embedViaEventBus(ctx context.Context, texts []string) ([][]float32, error) {
+	// If no event bus, fall back to direct call
+	if p.bus == nil {
+		return p.ml.Embed(ctx, texts)
+	}
+
+	// Create request event
+	correlationID := fmt.Sprintf("index-embed-%d", time.Now().UnixNano())
+	req := bus.Event{
+		ID:            correlationID,
+		Type:          bus.TopicEmbedRequest,
+		Source:        "index",
+		Timestamp:     time.Now().UnixNano(),
+		CorrelationID: correlationID,
+		Payload: map[string]interface{}{
+			"texts": texts,
+		},
+	}
+
+	// Send request and wait for response
+	resp, err := p.bus.Request(ctx, bus.TopicEmbedRequest, req)
+	if err != nil {
+		p.log.Debug("Event bus embed request failed, falling back to direct call", "error", err)
+		return p.ml.Embed(ctx, texts)
+	}
+
+	// Parse response
+	embeddings, err := parseEmbedResponse(resp)
+	if err != nil {
+		p.log.Debug("Failed to parse embed response, falling back to direct call", "error", err)
+		return p.ml.Embed(ctx, texts)
+	}
+
+	return embeddings, nil
+}
+
+// sparseEncodeViaEventBus generates sparse vectors using the event bus.
+// Falls back to direct ML service call if event bus is unavailable.
+func (p *Pipeline) sparseEncodeViaEventBus(ctx context.Context, texts []string) ([]ml.SparseVector, error) {
+	// If no event bus, fall back to direct call
+	if p.bus == nil {
+		return p.ml.SparseEncode(ctx, texts)
+	}
+
+	// Create request event
+	correlationID := fmt.Sprintf("index-sparse-%d", time.Now().UnixNano())
+	req := bus.Event{
+		ID:            correlationID,
+		Type:          bus.TopicSparseRequest,
+		Source:        "index",
+		Timestamp:     time.Now().UnixNano(),
+		CorrelationID: correlationID,
+		Payload: map[string]interface{}{
+			"texts": texts,
+		},
+	}
+
+	// Send request and wait for response
+	resp, err := p.bus.Request(ctx, bus.TopicSparseRequest, req)
+	if err != nil {
+		p.log.Debug("Event bus sparse request failed, falling back to direct call", "error", err)
+		return p.ml.SparseEncode(ctx, texts)
+	}
+
+	// Parse response
+	vectors, err := parseSparseResponse(resp)
+	if err != nil {
+		p.log.Debug("Failed to parse sparse response, falling back to direct call", "error", err)
+		return p.ml.SparseEncode(ctx, texts)
+	}
+
+	return vectors, nil
+}
+
+// parseEmbedResponse extracts embeddings from an event bus response.
+func parseEmbedResponse(event bus.Event) ([][]float32, error) {
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid embed response payload type")
+	}
+
+	// Check for error
+	if errStr, ok := payload["error"].(string); ok && errStr != "" {
+		return nil, fmt.Errorf("embed error: %s", errStr)
+	}
+
+	// Extract embeddings
+	embeddingsRaw, ok := payload["embeddings"]
+	if !ok {
+		return nil, fmt.Errorf("missing embeddings in response")
+	}
+
+	// Convert to [][]float32
+	return convertToFloat32Slice2D(embeddingsRaw)
+}
+
+// parseSparseResponse extracts sparse vectors from an event bus response.
+func parseSparseResponse(event bus.Event) ([]ml.SparseVector, error) {
+	payload, ok := event.Payload.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("invalid sparse response payload type")
+	}
+
+	// Check for error
+	if errStr, ok := payload["error"].(string); ok && errStr != "" {
+		return nil, fmt.Errorf("sparse error: %s", errStr)
+	}
+
+	// Extract vectors
+	vectorsRaw, ok := payload["vectors"]
+	if !ok {
+		return nil, fmt.Errorf("missing vectors in response")
+	}
+
+	// Convert to []ml.SparseVector
+	return convertToSparseVectors(vectorsRaw)
+}
+
+// convertToFloat32Slice2D converts interface{} to [][]float32.
+func convertToFloat32Slice2D(v interface{}) ([][]float32, error) {
+	switch arr := v.(type) {
+	case [][]float32:
+		return arr, nil
+	case []interface{}:
+		result := make([][]float32, len(arr))
+		for i, row := range arr {
+			switch rowArr := row.(type) {
+			case []float32:
+				result[i] = rowArr
+			case []interface{}:
+				result[i] = make([]float32, len(rowArr))
+				for j, val := range rowArr {
+					switch num := val.(type) {
+					case float64:
+						result[i][j] = float32(num)
+					case float32:
+						result[i][j] = num
+					default:
+						return nil, fmt.Errorf("invalid embedding value type at [%d][%d]: %T", i, j, val)
+					}
+				}
+			default:
+				return nil, fmt.Errorf("invalid embedding row type at [%d]: %T", i, row)
+			}
+		}
+		return result, nil
+	default:
+		return nil, fmt.Errorf("invalid embeddings type: %T", v)
+	}
+}
+
+// convertToSparseVectors converts interface{} to []ml.SparseVector.
+func convertToSparseVectors(v interface{}) ([]ml.SparseVector, error) {
+	arr, ok := v.([]interface{})
+	if !ok {
+		if vectors, ok := v.([]ml.SparseVector); ok {
+			return vectors, nil
+		}
+		return nil, fmt.Errorf("invalid sparse vectors type: %T", v)
+	}
+
+	result := make([]ml.SparseVector, len(arr))
+	for i, item := range arr {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("invalid sparse vector item type at [%d]: %T", i, item)
+		}
+
+		if indicesRaw, ok := m["indices"]; ok {
+			result[i].Indices = convertToUint32Slice(indicesRaw)
+		}
+		if valuesRaw, ok := m["values"]; ok {
+			result[i].Values = convertToFloat32Slice(valuesRaw)
+		}
+	}
+
+	return result, nil
+}
+
+// convertToUint32Slice converts interface{} to []uint32.
+func convertToUint32Slice(v interface{}) []uint32 {
+	switch arr := v.(type) {
+	case []uint32:
+		return arr
+	case []interface{}:
+		result := make([]uint32, len(arr))
+		for i, val := range arr {
+			result[i] = uint32(toFloat64(val))
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+// convertToFloat32Slice converts interface{} to []float32.
+func convertToFloat32Slice(v interface{}) []float32 {
+	switch arr := v.(type) {
+	case []float32:
+		return arr
+	case []interface{}:
+		result := make([]float32, len(arr))
+		for i, val := range arr {
+			result[i] = float32(toFloat64(val))
+		}
+		return result
+	default:
+		return nil
+	}
+}
+
+// toFloat64 safely converts various number types to float64.
+func toFloat64(v interface{}) float64 {
+	switch num := v.(type) {
+	case float64:
+		return num
+	case float32:
+		return float64(num)
+	case int:
+		return float64(num)
+	case int32:
+		return float64(num)
+	case int64:
+		return float64(num)
+	case uint32:
+		return float64(num)
+	case uint64:
+		return float64(num)
+	default:
+		return 0
+	}
 }
