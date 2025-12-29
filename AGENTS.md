@@ -52,6 +52,48 @@ bun test --filter "Search"                         # Run specific test pattern
 **File Organization**: `lib/` for utilities, `commands/` for CLI, `src/` for main code  
 **SVG Files**: Never read SVG files directly (causes critical errors in opencode). Use PNG alternatives or file paths only
 
+## Search Tool Priority (CRITICAL)
+
+**ALWAYS use `ricegrep` tool for searching local files.** It is a semantic grep-like search tool that is substantially better than built-in search tools.
+
+### Why ricegrep?
+- **Semantic search** - Understands natural language queries, not just keywords
+- **Context-aware** - Returns file paths with line ranges for precise results
+- **Better relevance** - Uses semantic indexing for more accurate matches
+
+### Usage Examples
+
+```bash
+# ✅ CORRECT - Natural language queries
+ricegrep "What code parsers are available?"
+ricegrep "How are chunks defined?" src/models
+ricegrep -m 10 "What is the maximum number of concurrent workers?"
+
+# ❌ WRONG - Too imprecise or unnecessary filters
+ricegrep "parser"                                    # Too vague
+ricegrep "How are chunks defined?" --type python    # Unnecessary filters
+```
+
+### When to Use What
+
+| Scenario | Use This | NOT This |
+|----------|----------|----------|
+| Find code by intent/meaning | `ricegrep "how does auth work?"` | `grep "auth"` |
+| Find implementations | `ricegrep "error handling patterns"` | `find . -name "*.ts"` |
+| Understand code structure | `ricegrep "where are API endpoints defined?"` | manual exploration |
+| Known exact string | `grep` or `ast_grep` | ricegrep (overkill) |
+| Known file pattern | `glob "**/*.ts"` | ricegrep |
+
+### Parameters
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `q` | (required) | Natural language search query |
+| `m` | 10 | Maximum number of results |
+| `a` | false | Search all files (including ignored) |
+
+**Rule**: Default to `ricegrep` for any exploratory search. Only fall back to `grep`/`glob` for exact string matches or known file patterns.
+
 ## Architecture Principles
 
 **Quality Over Complexity**: Prioritize search quality even if it means more complex code. Better results justify additional complexity.

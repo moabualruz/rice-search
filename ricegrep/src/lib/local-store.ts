@@ -8,6 +8,7 @@
 
 import type {
   AskResponse,
+  BatchFile,
   ChunkType,
   CreateStoreOptions,
   IntelligenceInfo,
@@ -177,6 +178,33 @@ export class LocalStore implements Store {
       }),
     });
     log("Deleted file:", externalId);
+  }
+
+  async uploadBatch(
+    storeId: string,
+    files: BatchFile[],
+    force = false
+  ): Promise<{ indexed: number; errors?: string[] }> {
+    if (files.length === 0) {
+      return { indexed: 0 };
+    }
+
+    const response = await this.fetch<LocalIndexResponse>(
+      `/v1/stores/${storeId}/index`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          files: files.map((f) => ({ path: f.path, content: f.content })),
+          force,
+        }),
+      }
+    );
+
+    log(`Batch uploaded ${files.length} files, indexed ${response.chunks_indexed} chunks`);
+    return {
+      indexed: response.files_processed,
+      errors: response.errors,
+    };
   }
 
   async search(

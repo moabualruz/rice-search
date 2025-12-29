@@ -9,8 +9,15 @@ import xxhashWasm from "xxhash-wasm";
 
 import { exceedsMaxFileSize, type RicegrepConfig } from "./config.js";
 import type { FileSystem } from "./file.js";
-import type { Store } from "./store.js";
+import type { BatchFile, Store } from "./store.js";
 import type { InitialSyncProgress, InitialSyncResult } from "./sync-helpers.js";
+
+// Batch size for uploads - small batches sent concurrently
+const UPLOAD_BATCH_SIZE = 15;
+// Concurrency for file reading - low to avoid EMFILE errors on Windows
+const FILE_READ_CONCURRENCY = 20;
+// Max concurrent batch uploads to server
+const UPLOAD_CONCURRENCY = 10;
 
 
 
@@ -278,97 +285,128 @@ export async function initialSync(
   let quotaExceeded = false;
   let quotaErrorMessage = "";
 
-  const concurrency = 100;
-  const limit = pLimit(concurrency);
+  // Concurrency limits
+  const readLimit = pLimit(FILE_READ_CONCURRENCY);
+  const uploadLimit = pLimit(UPLOAD_CONCURRENCY);
 
-  await Promise.all([
-    ...repoFiles.map((filePath) =>
-      limit(async () => {
-        // Skip if quota exceeded
-        if (quotaExceeded) {
+  // Track in-flight batch uploads (non-blocking)
+  const batchPromises: Promise<void>[] = [];
+
+  // Current batch accumulator
+  let currentBatch: BatchFile[] = [];
+
+  // Send batch to server (non-blocking - runs concurrently)
+  const sendBatch = (batch: BatchFile[]) => {
+    if (batch.length === 0) return;
+
+    const batchPromise = uploadLimit(async () => {
+      if (quotaExceeded) return;
+
+      if (dryRun) {
+        for (const file of batch) {
+          console.log("Dry run: would have uploaded", file.path);
+        }
+        uploaded += batch.length;
+      } else {
+        try {
+          const result = await store.uploadBatch(storeId, batch, !incremental);
+          uploaded += result.indexed;
+          if (result.errors) {
+            errors += result.errors.length;
+          }
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          if (isQuotaError(errMsg)) {
+            quotaExceeded = true;
+            quotaErrorMessage = errMsg;
+          } else {
+            errors += batch.length;
+          }
+        }
+      }
+    });
+
+    batchPromises.push(batchPromise);
+  };
+
+  // Process files: read concurrently, batch and send concurrently
+  const filePromises = repoFiles.map((filePath) =>
+    readLimit(async () => {
+      if (quotaExceeded) {
+        processed += 1;
+        return;
+      }
+
+      try {
+        // Skip large files
+        if (config && exceedsMaxFileSize(filePath, config.maxFileSize)) {
           processed += 1;
+          onProgress?.({ processed, uploaded, deleted, errors, total, filePath });
           return;
         }
 
-        try {
-          if (config && exceedsMaxFileSize(filePath, config.maxFileSize)) {
-            processed += 1;
-            onProgress?.({
-              processed,
-              uploaded,
-              deleted,
-              errors,
-              total,
-              filePath,
-            });
-            return;
-          }
-
-          const buffer = await fs.promises.readFile(filePath);
-          const existingHash = storeHashes.get(filePath);
+        // Read file content
+        const buffer = await fs.promises.readFile(filePath);
+        if (buffer.length === 0) {
           processed += 1;
-          const hashMatches = existingHash
-            ? await hashesMatch(existingHash, buffer)
-            : false;
-          const shouldUpload = !hashMatches;
-          if (dryRun && shouldUpload) {
-            console.log("Dry run: would have uploaded", filePath);
-            uploaded += 1;
-          } else if (shouldUpload) {
-            const didUpload = await uploadFile(
-              store,
-              storeId,
-              filePath,
-              path.basename(filePath),
-              config,
-              incremental,
-            );
-            if (didUpload) {
-              uploaded += 1;
-            }
-          }
-          onProgress?.({
-            processed,
-            uploaded,
-            deleted,
-            errors,
-            total,
-            filePath,
-          });
-        } catch (err) {
-          // Check if quota exceeded
-          if (err instanceof QuotaExceededError) {
-            quotaExceeded = true;
-            quotaErrorMessage = err.message;
-            onProgress?.({
-              processed,
-              uploaded,
-              deleted,
-              errors,
-              total,
-              filePath,
-              lastError: quotaErrorMessage,
-            });
-            return;
-          }
-
-          errors += 1;
-          const errorMessage = err instanceof Error ? err.message : String(err);
-          onProgress?.({
-            processed,
-            uploaded,
-            deleted,
-            errors,
-            total,
-            filePath,
-            lastError: errorMessage,
-          });
+          onProgress?.({ processed, uploaded, deleted, errors, total, filePath });
+          return;
         }
-      }),
-    ),
-    ...filesToDelete.map((filePath) =>
-      limit(async () => {
-        // Skip if quota exceeded
+
+        // Check if file changed
+        const existingHash = storeHashes.get(filePath);
+        const hashMatches = existingHash
+          ? await hashesMatch(existingHash, buffer)
+          : false;
+
+        processed += 1;
+
+        if (!hashMatches) {
+          // Add to batch
+          currentBatch.push({
+            path: filePath,
+            content: buffer.toString("utf-8"),
+          });
+
+          // Send batch when full (non-blocking)
+          if (currentBatch.length >= UPLOAD_BATCH_SIZE) {
+            sendBatch(currentBatch);
+            currentBatch = [];
+          }
+        }
+
+        onProgress?.({ processed, uploaded, deleted, errors, total, filePath });
+      } catch (err) {
+        processed += 1;
+        errors += 1;
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        onProgress?.({
+          processed,
+          uploaded,
+          deleted,
+          errors,
+          total,
+          filePath,
+          lastError: errorMessage,
+        });
+      }
+    }),
+  );
+
+  // Wait for all file reads to complete
+  await Promise.all(filePromises);
+
+  // Send remaining batch
+  sendBatch(currentBatch);
+
+  // Wait for all batch uploads to complete
+  await Promise.all(batchPromises);
+
+  // Delete files that no longer exist (concurrent)
+  const deleteLimit = pLimit(UPLOAD_CONCURRENCY);
+  await Promise.all(
+    filesToDelete.map((filePath) =>
+      deleteLimit(async () => {
         if (quotaExceeded) {
           processed += 1;
           return;
@@ -382,14 +420,7 @@ export async function initialSync(
           }
           deleted += 1;
           processed += 1;
-          onProgress?.({
-            processed,
-            uploaded,
-            deleted,
-            errors,
-            total,
-            filePath,
-          });
+          onProgress?.({ processed, uploaded, deleted, errors, total, filePath });
         } catch (err) {
           processed += 1;
           errors += 1;
@@ -406,9 +437,8 @@ export async function initialSync(
         }
       }),
     ),
-  ]);
+  );
 
-  // If quota was exceeded, throw the error after cleanup
   if (quotaExceeded) {
     throw new QuotaExceededError(quotaErrorMessage);
   }

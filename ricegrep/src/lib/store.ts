@@ -39,6 +39,14 @@ export interface UploadFileOptions {
   metadata?: FileMetadata;
 }
 
+/**
+ * File ready for batch upload (content already read)
+ */
+export interface BatchFile {
+  path: string;
+  content: string;
+}
+
 // ============================================================================
 // Search Options - All decisions made by server
 // ============================================================================
@@ -211,6 +219,18 @@ export interface Store {
     file: File | ReadableStream,
     options: UploadFileOptions,
   ): Promise<void>;
+
+  /**
+   * Upload multiple files in a single batch request.
+   * More efficient than individual uploads for large repos.
+   * 
+   * @returns Number of files successfully indexed
+   */
+  uploadBatch(
+    storeId: string,
+    files: BatchFile[],
+    force?: boolean,
+  ): Promise<{ indexed: number; errors?: string[] }>;
 
   /**
    * Delete a file from a store by its external ID
@@ -406,6 +426,21 @@ export class TestStore implements Store {
       delete db.files[externalId];
       await this.save(db);
     });
+  }
+
+  async uploadBatch(
+    storeId: string,
+    files: BatchFile[],
+    _force = false,
+  ): Promise<{ indexed: number; errors?: string[] }> {
+    for (const file of files) {
+      await this.uploadFile(
+        storeId,
+        new File([file.content], file.path, { type: "text/plain" }),
+        { external_id: file.path, metadata: { path: file.path, hash: "" } },
+      );
+    }
+    return { indexed: files.length };
   }
 
   async search(
