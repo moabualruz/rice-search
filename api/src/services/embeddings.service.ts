@@ -1,29 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import http from 'node:http';
-import https from 'node:https';
 
 interface CacheEntry {
   embedding: number[];
   timestamp: number;
 }
-
-// Maximize concurrent connections to embeddings server
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  keepAliveMsecs: 30000,
-  maxSockets: Infinity, // No limit
-  maxFreeSockets: 256,
-  scheduling: 'fifo',
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  keepAliveMsecs: 30000,
-  maxSockets: Infinity, // No limit
-  maxFreeSockets: 256,
-  scheduling: 'fifo',
-});
 
 /**
  * Simple LRU Cache for embeddings
@@ -92,18 +73,13 @@ export class EmbeddingsService implements OnModuleInit {
   private readonly CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
   private readonly MAX_CACHE_SIZE = 1000;
 
-  // HTTP agent for connection pooling
-  private readonly agent: http.Agent | https.Agent;
-
   constructor(private configService: ConfigService) {
     this.baseUrl = this.configService.get<string>('embeddings.url')!;
     this.model = this.configService.get<string>('infinity.embedModel') || 'jinaai/jina-code-embeddings-1.5b';
     this.dim = this.configService.get<number>('embeddings.dim')!;
-    this.timeout = 60000;
+    // Use configurable timeout, default 5 minutes for large batches
+    this.timeout = this.configService.get<number>('infinity.timeout') || 300000;
     this.queryCache = new LRUCache<string, CacheEntry>(this.MAX_CACHE_SIZE);
-    
-    // Use appropriate agent based on URL protocol
-    this.agent = this.baseUrl.startsWith('https') ? httpsAgent : httpAgent;
   }
 
   async onModuleInit() {
@@ -216,8 +192,6 @@ export class EmbeddingsService implements OnModuleInit {
         input: uncachedTexts,
       }),
       signal: AbortSignal.timeout(this.timeout),
-      // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
-      dispatcher: this.agent,
     });
 
     if (!response.ok) {

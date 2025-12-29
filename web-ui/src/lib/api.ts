@@ -7,6 +7,10 @@ import type {
   ListFilesResponse,
   SortField,
   SortOrder,
+  ObservabilityStats,
+  QueryStats,
+  RecentQueriesResponse,
+  TelemetryResponse,
 } from '@/types';
 
 /**
@@ -110,6 +114,47 @@ export async function search(store: string, searchRequest: SearchRequest): Promi
     method: 'POST',
     body: JSON.stringify(searchRequest),
   });
+}
+
+// ============================================================================
+// Observability API
+// ============================================================================
+
+export async function getObservabilityStats(): Promise<ObservabilityStats> {
+  return request<ObservabilityStats>('/v1/observability/stats');
+}
+
+export async function getQueryStats(store: string, days = 7): Promise<QueryStats> {
+  return request<QueryStats>(`/v1/observability/query-stats?store=${store}&days=${days}`);
+}
+
+export async function getRecentQueries(store: string, limit = 50): Promise<RecentQueriesResponse> {
+  return request<RecentQueriesResponse>(`/v1/observability/recent-queries?store=${store}&limit=${limit}`);
+}
+
+export async function getTelemetryRecords(limit = 100, store?: string): Promise<TelemetryResponse> {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (store) params.set('store', store);
+  return request<TelemetryResponse>(`/v1/observability/telemetry?${params.toString()}`);
+}
+
+// ============================================================================
+// Health API
+// ============================================================================
+
+export interface HealthStatus {
+  status: string;
+  uptime?: number;
+  version?: string;
+}
+
+export async function getHealth(): Promise<HealthStatus> {
+  return request<HealthStatus>('/healthz');
+}
+
+export async function getDetailedHealth(): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/v1/health');
 }
 
 // Re-export types for convenience

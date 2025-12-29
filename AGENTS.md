@@ -1,24 +1,66 @@
 # Rice Search - Agent Guidelines
 
+## Environment Variables
+
+**`.env.example`** is the source of truth for all environment variables. It is tracked in git and contains all variables with sensible defaults for local development.
+
+**Rules for agents:**
+1. **NEVER** create or modify `.env` files (gitignored, invisible to agents)
+2. **ALWAYS** add new env vars to `.env.example` with documentation
+3. When a new env var is needed, update `.env.example` and ask user to sync their `.env`
+
+**User workflow:**
+```bash
+cp .env.example .env    # First time only
+# Edit .env to customize values (API keys, paths, etc.)
+```
+
 ## Build & Test Commands
 
-### Local Development (Recommended)
+### Docker Compose Profiles
+
+The docker-compose.yml uses profiles to control GPU/CPU mode and which services start.
+
+**First-time setup**: Copy `.env.example` to `.env` (ready for local dev, defaults to `COMPOSE_PROFILES=gpu,dev`)
+
+| Command | Services Started | Use Case |
+|---------|------------------|----------|
+| `docker-compose up -d` | GPU infrastructure + Attu | **Local dev** (default from .env.example) |
+| `docker-compose --profile gpu --profile full up -d` | GPU infrastructure + API + Web UI | Full platform in Docker |
+| `docker-compose --profile cpu --profile dev up -d` | CPU infrastructure + Attu | Local dev (no GPU) |
+| `docker-compose --profile cpu --profile full up -d` | CPU infrastructure + API + Web UI | Full platform (no GPU) |
+
+**GPU Requirements**: NVIDIA GPU + nvidia-container-toolkit + Docker nvidia runtime
+
+### Local Development (Default)
+
+The `.env.example` is pre-configured for local development. Just copy and go:
 
 ```bash
-# 1. Start Docker backend services only
-docker-compose up -d milvus embeddings etcd minio
+# 1. Copy environment config (first time only - user action, not agent)
+cp .env.example .env
 
-# 2. API (NestJS + Bun) - uses cargo run for Tantivy auto-recompilation
+# 2. Start infrastructure (uses gpu,dev from .env)
+docker-compose up -d
+
+# 3. Verify services are running
+docker-compose ps    # Should show: etcd, redis, minio, milvus, infinity, attu
+                     # Should NOT show: api, web-ui
+
+# 3. Wait for services to be healthy (~2-3 min on first run for model downloads)
+docker-compose ps                                  # Check status
+
+# 4. API (NestJS + Bun) - runs on :8080
 cd api
 bun install
-bun run start:local                               # Dev server on :8088
+bun run start:local                               # Hot reload enabled
 
-# 3. Web UI (Next.js + Bun)
+# 5. Web UI (Next.js + Bun) - runs on :3000
 cd web-ui
 bun install
-bun run dev:local                                 # Dev server on :3001
+bun run dev:local                                 # Hot reload enabled
 
-# Quality checks
+# Quality checks (run before commits)
 cd api && bun run lint && bun run typecheck
 cd ricegrep && bun run format && bun run typecheck
 ```
@@ -26,8 +68,32 @@ cd ricegrep && bun run format && bun run typecheck
 ### Docker (Full Platform)
 
 ```bash
-docker-compose up -d                               # Start all services
+docker-compose up -d                               # Full GPU platform (uses .env defaults)
+docker-compose --profile cpu --profile full up -d  # Full CPU platform
+docker-compose logs -f api                         # Watch API logs
 bash scripts/smoke_test.sh                         # End-to-end test
+```
+
+### Troubleshooting & Reset
+
+```bash
+# View logs
+docker-compose logs -f infinity                    # Embedding server logs
+docker-compose logs -f api                         # API logs (if running in Docker)
+docker logs rice-milvus --tail 100                 # Milvus logs
+
+# Restart specific service (clears internal queues)
+docker-compose restart infinity                    # Reset embedding queue backlog
+
+# Full reset (clears all data)
+docker-compose down -v
+rm -rf ./data
+docker-compose up -d                               # Or --profile cpu --profile full
+
+# Check service health
+docker-compose ps
+curl http://localhost:8081/health                  # Infinity health
+curl http://localhost:9091/healthz                 # Milvus health (correct)
 ```
 
 ### ricegrep CLI
@@ -106,16 +172,41 @@ Run `bun run typecheck` before any significant changes. Never commit without cle
 
 ## Service Ports (Default)
 
-| Service | Local Dev | Docker | Description |
-|---------|-----------|--------|-------------|
-| API | 8088 | 8080 | Rice Search REST API |
-| Web UI | 3001 | 3000 | Next.js frontend |
-| Attu | 8000 | 8000 | Milvus admin UI |
-| Embeddings | 8081 | 8081 | Text embeddings inference |
-| Milvus | 19530 | 19530 | Vector database |
-| Milvus Metrics | 9091 | 9091 | Milvus health/metrics |
-| MinIO | 9000 | 9000 | Object storage |
-| MinIO Console | 9001 | 9001 | MinIO admin UI |
+All services use the same ports in both Docker and local dev mode:
+
+| Service | Port | Description |
+|---------|------|-------------|
+| API | 8080 | Rice Search REST API |
+| Web UI | 3000 | Next.js frontend |
+| Attu | 8000 | Milvus admin UI (dev profile only) |
+| Infinity | 8081 | Embeddings + Reranking server |
+| Milvus | 19530 | Vector database |
+| Milvus Metrics | 9091 | Milvus health endpoint |
+| Redis | 6379 | Job queue |
+| MinIO | 9000 | Object storage |
+| MinIO Console | 9001 | MinIO admin UI |
+
+### Optional Tools (Profile-based)
+
+Attu (Milvus Admin UI) is available for debugging and comparison but not started by default:
+
+```bash
+# Start all services INCLUDING Attu
+docker compose --profile tools up -d
+
+# Or start only Attu (after core services are running)
+docker compose --profile tools up -d attu
+
+# Access Attu at http://localhost:8000
+# Connect to: milvus:19530 (pre-configured via MILVUS_URL env var)
+```
+
+**Attu Features for Comparison:**
+- Collection management and schema viewer
+- Vector search interface with filters
+- Data import/export (CSV/JSON)
+- System topology and node metrics
+- Index management
 
 ## API Endpoints
 

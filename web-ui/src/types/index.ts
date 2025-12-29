@@ -149,6 +149,89 @@ export interface ListFilesResponse {
 }
 
 // ============================================================================
+// Observability Types
+// ============================================================================
+
+export interface TelemetryStats {
+  totalQueries: number;
+  avgLatencyMs: number;
+  cacheHitRate: number;
+  rerankSkipRate: number;
+  p50LatencyMs: number;
+  p95LatencyMs: number;
+  p99LatencyMs: number;
+}
+
+export interface ObservabilityStats {
+  telemetry: TelemetryStats;
+  strategies: Record<string, number>;
+  intents: Record<string, number>;
+  judgments: {
+    totalQueries: number;
+    totalJudgments: number;
+    avgJudgmentsPerQuery: number;
+  };
+}
+
+export interface QueryLogEntry {
+  timestamp: string;
+  query: string;
+  intent: string;
+  strategy: string;
+  resultCount: number;
+  latencyMs: number;
+}
+
+export interface QueryStats {
+  store: string;
+  period: {
+    since: string;
+    until: string;
+  };
+  totalQueries: number;
+  uniqueQueries: number;
+  avgLatencyMs: number;
+  avgResultCount: number;
+  intentDistribution: Record<string, number>;
+  strategyDistribution: Record<string, number>;
+}
+
+export interface TelemetryRecord {
+  requestId: string;
+  timestamp: string;
+  store: string;
+  query: string;
+  intent: string;
+  strategy: string;
+  resultCount: number;
+  totalLatencyMs: number;
+  sparse: {
+    count: number;
+    latencyMs: number;
+  };
+  dense: {
+    count: number;
+    latencyMs: number;
+  };
+  rerank: {
+    enabled: boolean;
+    skipped: boolean;
+    latencyMs: number;
+  };
+}
+
+export interface RecentQueriesResponse {
+  store: string;
+  count: number;
+  queries: QueryLogEntry[];
+}
+
+export interface TelemetryResponse {
+  count: number;
+  records: TelemetryRecord[];
+}
+
+// ============================================================================
 // UI Types
 // ============================================================================
 

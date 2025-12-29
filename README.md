@@ -75,12 +75,27 @@ Rice Search is a fully local, self-hosted code search platform combining BM25 ke
 ### Prerequisites
 - Docker & Docker Compose
 - 8GB+ RAM (16GB recommended)
+- For GPU mode: NVIDIA GPU + nvidia-container-toolkit
 
-### 1. Start Services
+### 1. Setup & Start
 
 ```bash
 git clone <repo> && cd rice-search
-docker-compose up -d
+cp .env.example .env                    # Defaults to local dev mode
+```
+
+**Option A: Local Development** (default - run API/WebUI locally with hot reload):
+```bash
+docker-compose up -d                    # Starts infrastructure only
+cd api && bun install && bun run start:local     # API on :8080
+cd web-ui && bun install && bun run dev:local    # Web UI on :3000
+```
+
+**Option B: Full Docker Platform** (everything in containers):
+```bash
+docker-compose --profile gpu --profile full up -d  # GPU mode
+# OR
+docker-compose --profile cpu --profile full up -d  # CPU mode (no GPU)
 # Wait ~3 minutes for model downloads on first run
 ```
 
@@ -205,13 +220,22 @@ ricegrep install-claude-code   # Auto-configure for Claude
 ricegrep install-opencode      # Auto-configure for OpenCode
 ```
 
-## GPU Acceleration
+## GPU vs CPU Mode
+
+The `.env.example` defaults to GPU dev mode (infrastructure only, for local development).
 
 ```bash
-docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+# GPU dev mode (default) - run API/WebUI locally
+docker-compose up -d
+
+# GPU full mode - everything in Docker
+docker-compose --profile gpu --profile full up -d
+
+# CPU full mode - works everywhere, slower embeddings
+docker-compose --profile cpu --profile full up -d
 ```
 
-Requires NVIDIA GPU with nvidia-container-toolkit.
+**GPU Requirements:** NVIDIA GPU + nvidia-container-toolkit
 
 ## Configuration
 
@@ -252,20 +276,32 @@ Reset: `rm -rf ./data && docker-compose down -v`
 
 ## Development
 
+The default `.env.example` is configured for local development:
+
 ```bash
-# Start infrastructure only
-docker-compose up -d milvus infinity etcd minio redis
+# 1. Copy env and start infrastructure (dev mode is default)
+cp .env.example .env
+docker-compose up -d
 
-# Run API locally
-cd api && bun install && bun run start:local  # :8088
+# 2. Run API locally with hot reload (:8080)
+cd api && bun install && bun run start:local
 
-# Run Web UI locally  
-cd web-ui && bun install && bun run dev:local # :3001
+# 3. Run Web UI locally with hot reload (:3000)
+cd web-ui && bun install && bun run dev:local
 
 # Type checking
 cd api && bun run typecheck
 cd ricegrep && bun run typecheck
 ```
+
+### Docker Compose Profiles
+
+| Command | Description |
+|---------|-------------|
+| `docker-compose up -d` | GPU infra + Attu (default from .env - for local dev) |
+| `docker-compose --profile gpu --profile full up -d` | Full GPU platform in Docker |
+| `docker-compose --profile cpu --profile dev up -d` | CPU infra + Attu (for local dev, no GPU) |
+| `docker-compose --profile cpu --profile full up -d` | Full CPU platform in Docker |
 
 ## License
 

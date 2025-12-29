@@ -159,10 +159,13 @@ def index_files(
     store: str,
     files: list[dict],
     force: bool = False,
+    async_mode: bool = False,
 ) -> dict:
     """Send files to API for indexing."""
     url = f"{api_url}/v1/stores/{store}/index"
-    data = json.dumps({"files": files, "force": force}).encode("utf-8")
+    data = json.dumps({"files": files, "force": force, "async": async_mode}).encode(
+        "utf-8"
+    )
 
     req = urllib.request.Request(
         url, data=data, headers={"Content-Type": "application/json"}, method="POST"
@@ -231,6 +234,9 @@ def main():
     parser.add_argument(
         "--stats", action="store_true", help="Show indexing statistics and exit"
     )
+    parser.add_argument(
+        "--sync-mode", action="store_true", help="Wait for embeddings (default: async)"
+    )
 
     args = parser.parse_args()
 
@@ -259,6 +265,10 @@ def main():
         print(f"Indexing mode: FORCE (re-index all files)")
     else:
         print(f"Indexing mode: INCREMENTAL (only changed files)")
+    if args.sync_mode:
+        print(f"Embedding mode: SYNC (wait for completion)")
+    else:
+        print(f"Embedding mode: ASYNC (background processing)")
     print()
 
     # Collect files
@@ -319,19 +329,42 @@ def main():
         )
 
         try:
-            result = index_files(args.api_url, args.store, batch, force=args.force)
-            chunks = result.get("chunks_indexed", 0)
-            skipped = result.get("skipped_unchanged", 0)
-            errors = len(result.get("errors", []))
-            total_chunks += chunks
-            total_skipped += skipped
-            total_errors += errors
+            result = index_files(
+                args.api_url,
+                args.store,
+                batch,
+                force=args.force,
+                async_mode=not args.sync_mode,
+            )
 
-            # Show result with incremental stats
-            if skipped > 0:
-                print(f"OK ({chunks} chunks, {skipped} unchanged)")
+            # Handle async vs sync response
+            if "job_id" in result:
+                # Async mode response
+                chunks_queued = result.get("chunks_queued", 0)
+                skipped = result.get("skipped_unchanged", 0)
+                job_id = result.get("job_id", "")
+                total_chunks += chunks_queued
+                total_skipped += skipped
+
+                if skipped > 0:
+                    print(
+                        f"QUEUED ({chunks_queued} chunks, {skipped} unchanged) [job: {job_id[:12]}]"
+                    )
+                else:
+                    print(f"QUEUED ({chunks_queued} chunks) [job: {job_id[:12]}]")
             else:
-                print(f"OK ({chunks} chunks)")
+                # Sync mode response
+                chunks = result.get("chunks_indexed", 0)
+                skipped = result.get("skipped_unchanged", 0)
+                total_chunks += chunks
+                total_skipped += skipped
+
+                if skipped > 0:
+                    print(f"OK ({chunks} chunks, {skipped} unchanged)")
+                else:
+                    print(f"OK ({chunks} chunks)")
+
+            errors = len(result.get("errors", []))
 
             if errors > 0:
                 for err in result.get("errors", [])[:3]:
@@ -341,9 +374,15 @@ def main():
             total_errors += len(batch)
 
     print()
-    print(f"Indexing complete!")
-    print(f"  Files processed: {len(files_to_index)}")
-    print(f"  Chunks indexed: {total_chunks}")
+    if args.sync_mode:
+        print(f"Indexing complete!")
+        print(f"  Files processed: {len(files_to_index)}")
+        print(f"  Chunks indexed: {total_chunks}")
+    else:
+        print(f"Indexing queued!")
+        print(f"  Files processed: {len(files_to_index)}")
+        print(f"  Chunks queued: {total_chunks}")
+        print(f"  Note: Embeddings processing in background")
     if total_skipped > 0:
         print(f"  Unchanged (skipped): {total_skipped}")
     if total_errors > 0:

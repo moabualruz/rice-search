@@ -1,4 +1,12 @@
-# GPU Override for Rice Search Platform
+# ============================================
+# DEPRECATED - Use profiles instead:
+#   docker-compose --profile gpu up -d
+#
+# This file is kept for reference only.
+# All GPU configuration is now in docker-compose.yml
+# ============================================
+
+# GPU Override for Rice Search Platform (DEPRECATED)
 # Usage: docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
 #
 # Requirements:

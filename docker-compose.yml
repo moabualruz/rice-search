@@ -1,10 +1,69 @@
 # Rice Search Platform - Docker Compose
-# Cross-platform: Windows+WSL2, Linux, macOS (CPU)
 # All data persisted to ./data via bind mounts
+#
+# Default: GPU + Full platform (set in .env via COMPOSE_PROFILES=gpu,full)
+#
+# Usage:
+#   docker-compose up -d                              # Full GPU platform (default)
+#   docker-compose --profile gpu --profile dev up -d  # GPU infra + Attu (local dev)
+#   docker-compose --profile cpu --profile full up -d # Full CPU platform
+#   docker-compose --profile cpu --profile dev up -d  # CPU infra + Attu (local dev)
+#
+# GPU Requirements: NVIDIA GPU + nvidia-container-toolkit
+
+# ============================================
+# YAML Anchors for shared configurations
+# ============================================
+x-milvus-common: &milvus-common
+  command: ["milvus", "run", "standalone"]
+  security_opt:
+    - seccomp:unconfined
+  volumes:
+    - ./data/milvus:/var/lib/milvus
+  ports:
+    - "19530:19530"
+    - "9091:9091"
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+    interval: 30s
+    start_period: 90s
+    timeout: 20s
+    retries: 5
+  depends_on:
+    etcd:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  restart: unless-stopped
+
+x-milvus-env-common: &milvus-env-common
+  ETCD_ENDPOINTS: etcd:2379
+  MINIO_ADDRESS: minio:9000
+  MINIO_ACCESS_KEY_ID: minioadmin
+  MINIO_SECRET_ACCESS_KEY: minioadmin
+  MINIO_USE_SSL: "false"
+  MINIO_REGION: us-east-1
+  COMMON_STORAGETYPE: "local"
+  COMMON_GRACEFUL_TIME: "5000"
+  COMMON_GRACEFUL_STOP_TIMEOUT: "30"
+  LOG_LEVEL: "warn"
+
+x-infinity-common: &infinity-common
+  volumes:
+    - ./data/infinity-cache:/app/.cache
+  ports:
+    - "8081:80"
+  healthcheck:
+    test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+    interval: 30s
+    start_period: 180s
+    timeout: 10s
+    retries: 5
+  restart: unless-stopped
 
 services:
   # ============================================
-  # Infrastructure: etcd (Milvus metadata store)
+  # Base Infrastructure (always starts)
   # ============================================
   etcd:
     container_name: rice-etcd
@@ -33,13 +92,10 @@ services:
     networks:
       - rice-network
 
-  # ============================================
-  # Infrastructure: Redis (Job queue for BullMQ)
-  # ============================================
   redis:
     container_name: rice-redis
     image: redis:7-alpine
-    command: redis-server --appendonly yes --save "" --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --save "" --maxmemory 256mb --maxmemory-policy noeviction
     volumes:
       - ./data/redis:/data
     ports:
@@ -53,9 +109,6 @@ services:
     networks:
       - rice-network
 
-  # ============================================
-  # Infrastructure: MinIO (Milvus object storage)
-  # ============================================
   minio:
     container_name: rice-minio
     image: minio/minio:RELEASE.2024-12-18T13-15-44Z
@@ -78,91 +131,138 @@ services:
       - rice-network
 
   # ============================================
-  # Milvus: Vector database (standalone mode)
+  # GPU Services (profile: gpu)
   # ============================================
   milvus:
+    <<: *milvus-common
+    container_name: rice-milvus
+    image: milvusdb/milvus:v2.4.15-gpu
+    profiles: [gpu]
+    environment:
+      <<: *milvus-env-common
+      CUDA_VISIBLE_DEVICES: "0"
+      KNOWHERE_GPU_MEM_POOL_SIZE: "2048:4096"
+      GPU_SEARCH_THRESHOLD: "100"
+      PROXY_MAX_CONNECTIONS: "65535"
+      PROXY_MAX_TASK_NUM: "4096"
+      PROXY_MAXMSGSIZE: "536870912"
+      PROXY_GINLOGGING: "false"
+      QUERYNODE_SCHEDULER_MAXREADCONCURRENCY: "512"
+      QUERYNODE_SCHEDULER_SCHEDULETIMEOUT: "10000"
+      QUERYNODE_GROUPING_ENABLED: "true"
+      QUERYNODE_GROUPING_MAXNQ: "2000"
+      QUERYNODE_SEGCORE_CHUNKROWS: "2048"
+      QUERYNODE_CACHE_ENABLED: "true"
+      QUERYNODE_CACHE_SIZE: "4294967296"
+      QUERYNODE_LOADMEMORYLIMIT: "10737418240"
+      DATANODE_FLUSH_INSERT_BUFFER_SIZE: "536870912"
+      DATANODE_FLOWGRAPH_MAXQUEUELEN: "32"
+      DATANODE_FLOWGRAPH_MAXPARALLELISM: "16"
+      DATANODE_SEGMENT_INSERTBUFFERSIZE: "33554432"
+      INDEXNODE_SCHEDULER_BUILDPARALLEL: "8"
+      INDEXNODE_ENABLEDISK: "true"
+      QUERYCOORD_TASK_MERGEIDX: "32"
+      QUERYCOORD_SCHEDULERTASKQUEUECAP: "20000"
+      DATACOORD_SEGMENT_MAXSIZE: "2048"
+      DATACOORD_SEGMENT_SEALEDMAXSIZE: "4096"
+      DATACOORD_COMPACTION_ENABLED: "true"
+      GRPC_SERVERMAXTOKENPERSET: "2147483648"
+      COMMON_MAXMSGSIZE: "536870912"
+      GRPC_CLIENTMAXSENDSIZE: "536870912"
+      GRPC_CLIENTMAXRECVSIZE: "536870912"
+      GRPC_SERVERMAXSENDSIZE: "536870912"
+      GRPC_SERVERMAXRECVSIZE: "536870912"
+      QUOTAANDLIMITS_ENABLED: "true"
+      QUOTAANDLIMITS_DDLENABLED: "false"
+      QUOTAANDLIMITS_INDEXRATEENABLED: "false"
+      QUOTAANDLIMITS_FLUSHRATEENABLED: "false"
+    deploy:
+      resources:
+        limits:
+          memory: 12G
+        reservations:
+          memory: 4G
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      rice-network:
+        aliases:
+          - milvus
+
+  infinity:
+    <<: *infinity-common
+    container_name: rice-infinity
+    image: michaelf34/infinity:latest
+    profiles: [gpu]
+    command: >
+      v2
+      --model-id ${EMBED_MODEL:-jinaai/jina-code-embeddings-1.5b}
+      --model-id ${RERANK_MODEL:-jinaai/jina-reranker-v2-base-multilingual}
+      --engine ${INFINITY_ENGINE:-torch}
+      --port 80
+      --batch-size ${INFINITY_BATCH_SIZE:-64}
+      --device cuda
+    environment:
+      - HF_HOME=/app/.cache
+      - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
+      - CUDA_VISIBLE_DEVICES=0
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      rice-network:
+        aliases:
+          - infinity
+
+  # ============================================
+  # CPU Services (profile: cpu)
+  # ============================================
+  milvus-cpu:
+    <<: *milvus-common
     container_name: rice-milvus
     image: milvusdb/milvus:v2.4.15
-    command: ["milvus", "run", "standalone"]
-    security_opt:
-      - seccomp:unconfined
+    profiles: [cpu]
     environment:
-      ETCD_ENDPOINTS: etcd:2379
-      MINIO_ADDRESS: minio:9000
-      MINIO_ACCESS_KEY_ID: minioadmin
-      MINIO_SECRET_ACCESS_KEY: minioadmin
-      MINIO_USE_SSL: "false"
-      MINIO_REGION: us-east-1
-      
-      # ========== PROXY (Connection Layer) ==========
-      PROXY_MAX_CONNECTIONS: "65535"           # Max client connections
-      PROXY_MAX_TASK_NUM: "2048"               # Max queued tasks (doubled)
-      PROXY_MAXMSGSIZE: "268435456"            # 256MB max message size
-      PROXY_GINLOGGING: "false"                # Disable verbose logging
-      
-      # ========== QUERY NODE (Search Performance) ==========
-      QUERYNODE_SCHEDULER_MAXREADCONCURRENCY: "256"     # Parallel read ops
-      QUERYNODE_SCHEDULER_SCHEDULETIMEOUT: "10000"      # 10s schedule timeout
-      QUERYNODE_GROUPING_ENABLED: "true"                # Group similar queries
-      QUERYNODE_GROUPING_MAXNQ: "1000"                  # Max queries per group
-      QUERYNODE_SEGCORE_CHUNKROWS: "1024"               # Rows per chunk
+      <<: *milvus-env-common
+      PROXY_MAX_CONNECTIONS: "65535"
+      PROXY_MAX_TASK_NUM: "2048"
+      PROXY_MAXMSGSIZE: "268435456"
+      PROXY_GINLOGGING: "false"
+      QUERYNODE_SCHEDULER_MAXREADCONCURRENCY: "256"
+      QUERYNODE_SCHEDULER_SCHEDULETIMEOUT: "10000"
+      QUERYNODE_GROUPING_ENABLED: "true"
+      QUERYNODE_GROUPING_MAXNQ: "1000"
+      QUERYNODE_SEGCORE_CHUNKROWS: "1024"
       QUERYNODE_CACHE_ENABLED: "true"
-      QUERYNODE_CACHE_SIZE: "2147483648"                # 2GB query cache
-      QUERYNODE_LOADMEMORYLIMIT: "6442450944"           # 6GB memory limit
-      
-      # ========== DATA NODE (Indexing Performance) ==========
-      DATANODE_FLUSH_INSERT_BUFFER_SIZE: "268435456"    # 256MB insert buffer
-      DATANODE_FLOWGRAPH_MAXQUEUELEN: "16"              # Queue length
-      DATANODE_FLOWGRAPH_MAXPARALLELISM: "8"            # Parallel flush ops
-      DATANODE_SEGMENT_INSERTBUFFERSIZE: "16777216"     # 16MB per segment buffer
-      
-      # ========== INDEX NODE (Index Building) ==========
-      INDEXNODE_SCHEDULER_BUILDPARALLEL: "4"            # Parallel index builds
-      INDEXNODE_ENABLEDISK: "true"                      # Enable disk index
-      
-      # ========== COORD (Coordination) ==========
-      QUERYCOORD_TASK_MERGEIDX: "16"                    # Merge task parallelism
-      QUERYCOORD_SCHEDULERTASKQUEUECAP: "10000"         # Task queue capacity
-      DATACOORD_SEGMENT_MAXSIZE: "1024"                 # 1GB max segment
-      DATACOORD_SEGMENT_SEALEDMAXSIZE: "2048"           # 2GB sealed segment
-      DATACOORD_COMPACTION_ENABLED: "true"              # Auto compaction
-      
-      # ========== gRPC PERFORMANCE ==========
-      GRPC_SERVERMAXTOKENPERSET: "1073741824"           # 1GB max tokens
-      COMMON_MAXMSGSIZE: "268435456"                    # 256MB max message
-      GRPC_CLIENTMAXSENDSIZE: "268435456"               # 256MB client send
-      GRPC_CLIENTMAXRECVSIZE: "268435456"               # 256MB client recv
-      GRPC_SERVERMAXSENDSIZE: "268435456"               # 256MB server send
-      GRPC_SERVERMAXRECVSIZE: "268435456"               # 256MB server recv
-      
-      # ========== MEMORY & STORAGE ==========
-      COMMON_STORAGETYPE: "local"                       # Local storage mode
-      QUOTAANDLIMITS_ENABLED: "true"                    # Enable resource quotas
-      QUOTAANDLIMITS_DDLENABLED: "false"                # No DDL rate limit
-      QUOTAANDLIMITS_INDEXRATEENABLED: "false"          # No index rate limit
-      QUOTAANDLIMITS_FLUSHRATEENABLED: "false"          # No flush rate limit
-      
-      # ========== GENERAL ==========
-      COMMON_GRACEFUL_TIME: "5000"                      # Faster shutdown
-      COMMON_GRACEFUL_STOP_TIMEOUT: "30"
-      LOG_LEVEL: "warn"                                 # Reduce log noise
-    volumes:
-      - ./data/milvus:/var/lib/milvus
-    ports:
-      - "19530:19530"
-      - "9091:9091"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
-      interval: 30s
-      start_period: 90s
-      timeout: 20s
-      retries: 5
-    depends_on:
-      etcd:
-        condition: service_healthy
-      minio:
-        condition: service_healthy
-    restart: unless-stopped
+      QUERYNODE_CACHE_SIZE: "2147483648"
+      QUERYNODE_LOADMEMORYLIMIT: "6442450944"
+      DATANODE_FLUSH_INSERT_BUFFER_SIZE: "268435456"
+      DATANODE_FLOWGRAPH_MAXQUEUELEN: "16"
+      DATANODE_FLOWGRAPH_MAXPARALLELISM: "8"
+      DATANODE_SEGMENT_INSERTBUFFERSIZE: "16777216"
+      INDEXNODE_SCHEDULER_BUILDPARALLEL: "4"
+      INDEXNODE_ENABLEDISK: "true"
+      QUERYCOORD_TASK_MERGEIDX: "16"
+      QUERYCOORD_SCHEDULERTASKQUEUECAP: "10000"
+      DATACOORD_SEGMENT_MAXSIZE: "1024"
+      DATACOORD_SEGMENT_SEALEDMAXSIZE: "2048"
+      DATACOORD_COMPACTION_ENABLED: "true"
+      GRPC_SERVERMAXTOKENPERSET: "1073741824"
+      COMMON_MAXMSGSIZE: "268435456"
+      GRPC_CLIENTMAXSENDSIZE: "268435456"
+      GRPC_CLIENTMAXRECVSIZE: "268435456"
+      GRPC_SERVERMAXSENDSIZE: "268435456"
+      GRPC_SERVERMAXRECVSIZE: "268435456"
+      QUOTAANDLIMITS_ENABLED: "true"
+      QUOTAANDLIMITS_DDLENABLED: "false"
+      QUOTAANDLIMITS_INDEXRATEENABLED: "false"
+      QUOTAANDLIMITS_FLUSHRATEENABLED: "false"
     deploy:
       resources:
         limits:
@@ -170,29 +270,15 @@ services:
         reservations:
           memory: 2G
     networks:
-      - rice-network
+      rice-network:
+        aliases:
+          - milvus
 
-  # ============================================
-  # Infinity: Embedding + Reranking Server (CPU)
-  # 
-  # Default Models (Dec 2025 - optimized for code search):
-  # - jinaai/jina-code-embeddings-1.5b (1536d, Rust/Kotlin/15+ languages)
-  # - jinaai/jina-reranker-v2-base-multilingual (code-optimized, 60-80ms)
-  #
-  # Alternative models (set via .env or environment):
-  # Embeddings:
-  #   - jinaai/jina-code-embeddings-0.5b (smaller, 1536d)
-  #   - nomic-ai/nomic-embed-code (896d, no Rust/Kotlin)
-  #   - mixedbread-ai/mxbai-embed-large-v1 (1024d, general purpose)
-  # Rerankers:
-  #   - BAAI/bge-reranker-v2-m3 (multilingual)
-  #   - mixedbread-ai/mxbai-rerank-xsmall-v1 (general purpose)
-  #
-  # For GPU, use docker-compose.gpu.yml override
-  # ============================================
-  infinity:
+  infinity-cpu:
+    <<: *infinity-common
     container_name: rice-infinity
     image: michaelf34/infinity:latest-cpu
+    profiles: [cpu]
     command: >
       v2
       --model-id ${EMBED_MODEL:-jinaai/jina-code-embeddings-1.5b}
@@ -200,82 +286,51 @@ services:
       --engine ${INFINITY_ENGINE:-torch}
       --port 80
       --batch-size ${INFINITY_BATCH_SIZE:-32}
-    volumes:
-      - ./data/infinity-cache:/app/.cache
-    ports:
-      - "8081:80"
     environment:
       - HF_HOME=/app/.cache
       - HUGGING_FACE_HUB_TOKEN=${HF_TOKEN:-}
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
-      interval: 30s
-      start_period: 180s
-      timeout: 10s
-      retries: 5
-    restart: unless-stopped
     networks:
-      - rice-network
+      rice-network:
+        aliases:
+          - infinity
 
   # ============================================
-  # API: Main integration point
-  # All clients connect here (8080)
+  # Application Services (profile: full)
   # ============================================
   api:
     container_name: rice-api
+    profiles: [full]
     build:
       context: ./api
       dockerfile: Dockerfile
     environment:
-      # Service connections
       MILVUS_HOST: milvus
       MILVUS_PORT: "19530"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
-      
-      # Infinity (embedding + reranking)
-      # Models are configured in infinity service, these are for API reference
       INFINITY_URL: http://infinity:80
       INFINITY_EMBED_MODEL: ${EMBED_MODEL:-jinaai/jina-code-embeddings-1.5b}
       INFINITY_RERANK_MODEL: ${RERANK_MODEL:-jinaai/jina-reranker-v2-base-multilingual}
-      
-      # Data directories
       DATA_DIR: /data
       TANTIVY_INDEX_DIR: /tantivy
-      
-      # Model configuration
-      # Jina Code: 1536d | Nomic Code: 896d | mxbai: 1024d
+      TANTIVY_USE_CARGO: "false"
+      TANTIVY_CLI_PATH: /usr/local/bin/tantivy-cli
       EMBEDDING_DIM: ${EMBEDDING_DIM:-1536}
-      
-      # Search configuration
       SPARSE_TOPK: "100"
       DENSE_TOPK: "100"
       FINAL_TOPK: "20"
       RRF_K: "60"
-      
-      # Reranking configuration
-      # Jina Reranker v2: 60-80ms on CPU (code-optimized)
       RERANK_ENABLED: "true"
       RERANK_CANDIDATES: "30"
       RERANK_TIMEOUT_MS: "100"
-      
-      # Auth (disabled by default)
       AUTH_MODE: none
-      
-      # Logging
       LOG_LEVEL: INFO
-      
-      # Single process mode - Bun async I/O handles concurrency well
-      # Clustering disabled to simplify Tantivy queue serialization
       CLUSTER_MODE: "false"
       NODE_ENV: production
-      
-      # Bun runtime tuning
       BUN_CONFIG_MAX_HTTP_CONNECTIONS: "1024"
     volumes:
       - ./data/api:/data
       - ./data/tantivy:/tantivy
-      # Mount repos for server-side indexing (optional)
       - ${REPOS_PATH:-./repos}:/repos:ro
     ports:
       - "8080:8080"
@@ -284,13 +339,6 @@ services:
       interval: 15s
       timeout: 10s
       retries: 3
-    depends_on:
-      milvus:
-        condition: service_healthy
-      infinity:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     restart: unless-stopped
     deploy:
       resources:
@@ -301,23 +349,34 @@ services:
     networks:
       - rice-network
 
-  # ============================================
-  # Web UI: Simple search interface
-  # Commented out for initial testing - can access API directly
-  # ============================================
   web-ui:
     container_name: rice-web-ui
+    profiles: [full]
     build:
       context: ./web-ui
       dockerfile: Dockerfile
     environment:
-      # For server-side proxying within Docker network
       API_URL: http://api:8080
     ports:
       - "3000:3000"
     depends_on:
       api:
-          condition: service_healthy
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - rice-network
+
+  # ============================================
+  # Development Tools (profile: dev)
+  # ============================================
+  attu:
+    container_name: rice-attu
+    image: zilliz/attu:latest
+    profiles: [dev]
+    environment:
+      MILVUS_URL: milvus:19530
+    ports:
+      - "8000:3000"
     restart: unless-stopped
     networks:
       - rice-network

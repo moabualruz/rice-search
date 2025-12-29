@@ -34,11 +34,11 @@ export class IndexFilesRequestDto {
 
   @ApiPropertyOptional({
     description: 'Async mode: return immediately, process embeddings in background',
-    default: false,
+    default: true,
   })
   @IsOptional()
   @IsBoolean()
-  async?: boolean;
+  async?: boolean = true;
 }
 
 export class DeleteFilesRequestDto {

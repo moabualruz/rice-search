@@ -1,7 +1,5 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import http from 'node:http';
-import https from 'node:https';
 
 interface CacheEntry<T> {
   data: T;
@@ -18,23 +16,6 @@ interface RerankResult {
   score: number;
   index: number;
 }
-
-// Maximize concurrent connections to Infinity server
-const httpAgent = new http.Agent({
-  keepAlive: true,
-  keepAliveMsecs: 30000,
-  maxSockets: Infinity, // No limit
-  maxFreeSockets: 256,
-  scheduling: 'fifo',
-});
-
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  keepAliveMsecs: 30000,
-  maxSockets: Infinity, // No limit
-  maxFreeSockets: 256,
-  scheduling: 'fifo',
-});
 
 /**
  * Simple LRU Cache for embeddings and rerank results
@@ -116,21 +97,15 @@ export class InfinityService implements OnModuleInit {
   private readonly MAX_EMBEDDING_CACHE_SIZE = 1000;
   private readonly MAX_RERANK_CACHE_SIZE = 500;
 
-  // HTTP agent for connection pooling
-  private readonly agent: http.Agent | https.Agent;
-
   constructor(private configService: ConfigService) {
     // Configuration with defaults for code search
-    this.baseUrl = this.configService.get<string>('infinity.url') || 'http://infinity:80';
+    this.baseUrl = this.configService.get<string>('infinity.url') || 'http://localhost:8081';
     this.embedModel = this.configService.get<string>('infinity.embedModel') || 'jinaai/jina-code-embeddings-1.5b';
     this.rerankModel = this.configService.get<string>('infinity.rerankModel') || 'jinaai/jina-reranker-v2-base-multilingual';
-    this.timeout = this.configService.get<number>('infinity.timeout') || 30000;
+    this.timeout = this.configService.get<number>('infinity.timeout') || 300000;
 
     this.embeddingCache = new LRUCache<string, CacheEntry<number[]>>(this.MAX_EMBEDDING_CACHE_SIZE);
     this.rerankCache = new LRUCache<string, CacheEntry<RerankResult[]>>(this.MAX_RERANK_CACHE_SIZE);
-    
-    // Use appropriate agent based on URL protocol
-    this.agent = this.baseUrl.startsWith('https') ? httpsAgent : httpAgent;
   }
 
   async onModuleInit() {
@@ -283,8 +258,6 @@ export class InfinityService implements OnModuleInit {
         input: uncachedTexts,
       }),
       signal: AbortSignal.timeout(this.timeout),
-      // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
-      dispatcher: this.agent,
     });
 
     if (!response.ok) {
@@ -384,8 +357,6 @@ export class InfinityService implements OnModuleInit {
         return_documents: false,
       }),
       signal: AbortSignal.timeout(this.timeout),
-      // @ts-expect-error - Node.js fetch supports dispatcher for HTTP agent
-      dispatcher: this.agent,
     });
 
     if (!response.ok) {

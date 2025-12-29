@@ -11,24 +11,28 @@ export default () => ({
 
   // Embeddings configuration
   // Default: Jina Code Embeddings 1.5B (1536d, Rust/Kotlin/15+ languages)
+  // Defaults to localhost:8081 (Docker exposes infinity container on this port)
   embeddings: {
-    url: process.env.EMBEDDINGS_URL || process.env.INFINITY_URL || 'http://infinity:80',
+    url: process.env.EMBEDDINGS_URL || process.env.INFINITY_URL || 'http://localhost:8081',
     dim: parseInt(process.env.EMBEDDING_DIM || '1536', 10),
   },
 
   // Infinity service (embedding + reranking)
   // Default models optimized for code search (Dec 2025)
+  // Defaults to localhost:8081 (Docker exposes infinity container on this port)
   infinity: {
-    url: process.env.INFINITY_URL || 'http://infinity:80',
+    url: process.env.INFINITY_URL || 'http://localhost:8081',
     embedModel: process.env.INFINITY_EMBED_MODEL || 'jinaai/jina-code-embeddings-1.5b',
     rerankModel: process.env.INFINITY_RERANK_MODEL || 'jinaai/jina-reranker-v2-base-multilingual',
-    timeout: parseInt(process.env.INFINITY_TIMEOUT_MS || '30000', 10),
+    // 5 minutes default for large batch embeddings (300+ chunks)
+    timeout: parseInt(process.env.INFINITY_TIMEOUT_MS || '300000', 10),
   },
 
   // Data directories
+  // Defaults to local ./data paths (Docker sets absolute paths via env vars)
   data: {
-    dir: process.env.DATA_DIR || '/data',
-    tantivyDir: process.env.TANTIVY_INDEX_DIR || '/tantivy',
+    dir: process.env.DATA_DIR || './data/api',
+    tantivyDir: process.env.TANTIVY_INDEX_DIR || './data/tantivy',
   },
 
   // Search configuration (hybrid: Tantivy BM25 + Milvus vectors)
@@ -52,10 +56,11 @@ export default () => ({
   },
 
   // Tantivy CLI
+  // Defaults to cargo run for local dev (Docker sets cliPath and useCargo=false)
   tantivy: {
     cliPath: process.env.TANTIVY_CLI_PATH || '/usr/local/bin/tantivy-cli',
-    useCargo: process.env.TANTIVY_USE_CARGO === 'true',
-    projectDir: process.env.TANTIVY_PROJECT_DIR || '',
+    useCargo: process.env.TANTIVY_USE_CARGO !== 'false', // Default: true for local dev
+    projectDir: process.env.TANTIVY_PROJECT_DIR || './tantivy',
   },
 
   // Redis (for BullMQ job queue)

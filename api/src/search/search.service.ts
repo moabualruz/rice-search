@@ -108,8 +108,15 @@ export class SearchService {
 
     // 7. Execute hybrid search with strategy config
     const hybridStartTime = Date.now();
-    const { fusedResults, sparseResults, denseResults, sparseTime, denseTime } =
-      await this.executeHybridSearchWithConfig(
+    const { 
+      fusedResults, 
+      sparseResults, 
+      denseResults, 
+      sparseTime, 
+      denseTime,
+      embeddingFailed,
+      embeddingError,
+    } = await this.executeHybridSearchWithConfig(
         store,
         expandedQuery,
         denseQuery,
@@ -121,6 +128,9 @@ export class SearchService {
     sparseLatencyMs = sparseTime;
     denseLatencyMs = denseTime;
     fusionLatencyMs = Date.now() - hybridStartTime - Math.max(sparseTime, denseTime);
+    
+    // Track if we fell back to sparse-only due to embedding failure
+    const usedSparseOnlyFallback = embeddingFailed && denseResults.length === 0;
 
     // Compute fusion stats for telemetry
     const fusionStats = this.hybridRanker.computeFusionStats(fusedResults);
@@ -281,9 +291,16 @@ export class SearchService {
       intelligence: {
         intent: intent.intent,
         difficulty: intent.difficulty,
-        strategy: config.strategy,
+        strategy: usedSparseOnlyFallback ? "sparse-only" : config.strategy,
         confidence: intent.confidence,
       },
+      // Fallback info when embeddings unavailable
+      fallback: usedSparseOnlyFallback ? {
+        active: true,
+        reason: "embedding_service_unavailable",
+        error: embeddingError,
+        original_strategy: config.strategy,
+      } : undefined,
       reranking: {
         enabled: request.enable_reranking !== false,
         candidates: config.rerankCandidates,
@@ -342,12 +359,27 @@ export class SearchService {
     denseResults: MilvusSearchResult[];
     sparseTime: number;
     denseTime: number;
+    embeddingFailed: boolean;
+    embeddingError?: string;
   }> {
     // Get embedding from Infinity using dense query (skip if sparse-only strategy)
     let queryEmbedding: number[] | undefined;
+    let embeddingFailed = false;
+    let embeddingError: string | undefined;
+    
     if (config.denseTopK > 0) {
-      const queryEmbeddings = await this.embeddings.embed([denseQuery]);
-      queryEmbedding = queryEmbeddings[0];
+      try {
+        const queryEmbeddings = await this.embeddings.embed([denseQuery]);
+        queryEmbedding = queryEmbeddings[0];
+      } catch (error) {
+        // Graceful fallback to sparse-only when embeddings fail (e.g., CUDA OOM)
+        embeddingFailed = true;
+        embeddingError = error instanceof Error ? error.message : String(error);
+        this.logger.warn(
+          `Embedding failed, falling back to sparse-only search: ${embeddingError}`
+        );
+        // Continue with sparse-only search
+      }
     }
 
     // Run sparse (Tantivy) and dense (Milvus) search in parallel with timing
@@ -419,6 +451,8 @@ export class SearchService {
       denseResults: denseResultsRaw,
       sparseTime,
       denseTime,
+      embeddingFailed,
+      embeddingError,
     };
   }
 
@@ -511,12 +545,23 @@ export class SearchService {
     fusedResults: HybridSearchResult[];
     sparseResults: TantivySearchResult[];
     denseResults: MilvusSearchResult[];
+    embeddingFailed: boolean;
   }> {
     // Get embedding using dense query (skip if sparse-only)
     let queryEmbedding: number[] | undefined;
+    let embeddingFailed = false;
+    
     if (config.denseTopK > 0) {
-      const queryEmbeddings = await this.embeddings.embed([denseQuery]);
-      queryEmbedding = queryEmbeddings[0];
+      try {
+        const queryEmbeddings = await this.embeddings.embed([denseQuery]);
+        queryEmbedding = queryEmbeddings[0];
+      } catch (error) {
+        // Graceful fallback to sparse-only when embeddings fail
+        embeddingFailed = true;
+        this.logger.warn(
+          `Embedding failed in versioned search, falling back to sparse-only: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
     }
 
     // Execute parallel search
@@ -566,6 +611,7 @@ export class SearchService {
       fusedResults,
       sparseResults: sparseResultsRaw,
       denseResults: denseResultsRaw,
+      embeddingFailed,
     };
   }
 }

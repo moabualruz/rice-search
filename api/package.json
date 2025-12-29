@@ -9,7 +9,7 @@
     "format": "prettier --write \"src/**/*.ts\"",
     "start": "NODE_ENV=production bun run dist/main.js",
     "start:dev": "bun --watch src/main.ts",
-    "start:local": "bun --env-file=.env.dev --watch src/main.ts",
+    "start:local": "bun --env-file=../.env --watch src/main.ts",
     "start:debug": "bun --inspect src/main.ts",
     "start:prod": "NODE_ENV=production bun run dist/main.js",
     "start:cluster": "NODE_ENV=production CLUSTER_MODE=true bun run dist/main.js",

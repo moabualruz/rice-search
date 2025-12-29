@@ -3,7 +3,7 @@
 import { useState, useEffect, FormEvent } from 'react';
 import Image from 'next/image';
 import { listStores, search } from '@/lib/api';
-import { ErrorBanner, LoadingSpinner } from '@/components';
+import { ErrorBanner, LoadingSpinner, ConnectionWarning } from '@/components';
 import type {
   StoreInfo,
   SearchRequest,
@@ -146,6 +146,9 @@ export default function SearchPage() {
           <span className="badge badge-highlight">Intelligent Search</span>
         </div>
       </header>
+
+      {/* Connection Warning */}
+      <ConnectionWarning />
 
       {/* Search Section */}
       <section className="search-section">

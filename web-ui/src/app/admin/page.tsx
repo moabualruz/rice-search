@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { listStores, createStore, deleteStore } from '@/lib/api';
-import { ErrorBanner, LoadingSpinner } from '@/components';
+import { ErrorBanner, LoadingSpinner, ConnectionWarning } from '@/components';
 import type { StoreInfo } from '@/types';
 
 export default function AdminPage() {
@@ -72,6 +72,9 @@ export default function AdminPage() {
         <h1>🗄️ Store Management</h1>
         <p className="admin-subtitle">Manage your search indexes and view statistics</p>
       </div>
+
+      {/* Connection Warning */}
+      <ConnectionWarning />
 
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
 
