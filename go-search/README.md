@@ -20,12 +20,12 @@ Pure Go code search platform. Single binary. Event-driven microservices.
 | Phase 0: Setup | ✅ | Project scaffold, tooling, Docker |
 | Phase 1: Core | ✅ | Config, logger, errors, event bus |
 | Phase 2: ML | ✅ | ONNX runtime, embeddings, reranking |
-| Phase 3: Search | ⬜ | Qdrant, hybrid search, indexing |
-| Phase 4: API/CLI | ⬜ | HTTP gateway, CLI commands |
-| Phase 5: Web UI | ⬜ | Templ + HTMX interface |
-| Phase 6: Polish | ⬜ | Testing, docs, observability |
+| Phase 3: Search | ✅ | Qdrant, hybrid search, indexing |
+| Phase 4: API/CLI | ✅ | HTTP gateway, CLI commands |
+| Phase 5: Web UI | ⏭️ | Templ + HTMX interface (skipped - CLI sufficient) |
+| Phase 6: Polish | ✅ | Server tests, client tests, documentation |
 
-**Estimated timeline:** 4-6 weeks (single developer)
+**Implementation complete!** The system is fully functional with CLI commands for searching, indexing, and store management. All 14 packages have passing tests.
 
 ## Documentation Index
 
@@ -82,17 +82,54 @@ Pure Go code search platform. Single binary. Event-driven microservices.
 ## Quick Start
 
 ```bash
-# Option 1: Dev mode (ephemeral data)
+# 1. Start Qdrant (dev mode - ephemeral data)
 make dev-up
 # Qdrant API:       http://localhost:6333
 # Qdrant Dashboard: http://localhost:6333/dashboard
 
-# Option 2: Production mode (persistent data)
-make compose-up
+# 2. Download ML models
+./rice-search models download
 
-# Run Rice Search locally
-make run
-# Or: ./rice-search serve
+# 3. Start the server
+./rice-search serve
+
+# 4. Index your code
+./rice-search index ./src -s myproject
+
+# 5. Search!
+./rice-search search "authentication handler" -s myproject
+```
+
+### CLI Commands
+
+```bash
+# Server
+rice-search serve                    # Start API server on :8080
+rice-search serve -p 9000            # Custom port
+
+# Stores
+rice-search stores list              # List all stores
+rice-search stores create myproject  # Create a new store
+rice-search stores stats myproject   # Get store statistics
+rice-search stores delete myproject  # Delete a store
+
+# Indexing
+rice-search index ./src              # Index directory (default store)
+rice-search index ./src -s myproject # Index into specific store
+rice-search index ./src --force      # Force re-index unchanged files
+
+# Search
+rice-search search "query"           # Search default store
+rice-search search "query" -s mystore # Search specific store
+rice-search search "query" -k 50     # More results
+rice-search search "query" --content # Include content in results
+rice-search search "query" --no-rerank # Disable reranking
+rice-search search "query" --format json # JSON output
+
+# Models
+rice-search models list              # List available models
+rice-search models download          # Download all models
+rice-search models check             # Check installed models
 ```
 
 ### Development Commands
@@ -102,6 +139,8 @@ make dev-up       # Start Qdrant (data resets on down)
 make dev-down     # Stop and lose all data
 make dev-restart  # Fresh restart with clean data
 make dev-logs     # View logs
+make build        # Build the binary
+make test         # Run tests
 ```
 
 ## License

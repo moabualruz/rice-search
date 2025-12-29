@@ -1,0 +1,138 @@
+package web
+
+// Layout is the base HTML layout for all pages.
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="en" class="h-full bg-gray-50">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } - Rice Search</title>
+			<!-- Tailwind CSS via CDN -->
+			<script src="https://cdn.tailwindcss.com"></script>
+			<!-- HTMX -->
+			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
+			<!-- Custom styles -->
+			<style>
+				.htmx-indicator {
+					opacity: 0;
+					transition: opacity 200ms ease-in;
+				}
+				.htmx-request .htmx-indicator {
+					opacity: 1;
+				}
+				.htmx-request.htmx-indicator {
+					opacity: 1;
+				}
+				/* Code highlighting */
+				.code-line {
+					font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+					font-size: 0.875rem;
+					line-height: 1.5;
+				}
+				.code-line:hover {
+					background-color: rgba(59, 130, 246, 0.1);
+				}
+				/* Search result animation */
+				.search-result {
+					animation: fadeIn 0.2s ease-in-out;
+				}
+				@keyframes fadeIn {
+					from { opacity: 0; transform: translateY(-4px); }
+					to { opacity: 1; transform: translateY(0); }
+				}
+			</style>
+		</head>
+		<body class="h-full" hx-boost="true">
+			<div class="min-h-full">
+				<!-- Navigation -->
+				<nav class="bg-white border-b border-gray-200">
+					<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+						<div class="flex h-16 justify-between">
+							<div class="flex">
+								<div class="flex flex-shrink-0 items-center">
+									<a href="/" class="text-xl font-bold text-gray-900">
+										Rice Search
+									</a>
+								</div>
+								<div class="hidden sm:ml-8 sm:flex sm:space-x-8">
+									<a href="/" class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
+										Search
+									</a>
+									<a href="/admin" class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
+										Stores
+									</a>
+									<a href="/stats" class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
+										Stats
+									</a>
+								</div>
+							</div>
+							<div class="flex items-center">
+								<span class="text-sm text-gray-400">Go Edition</span>
+							</div>
+						</div>
+					</div>
+				</nav>
+
+				<!-- Main content -->
+				<main>
+					{ children... }
+				</main>
+			</div>
+		</body>
+	</html>
+}
+
+// Loading indicator component
+templ LoadingSpinner() {
+	<div class="htmx-indicator flex items-center justify-center py-4">
+		<svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+			<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+			<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+		</svg>
+		<span class="ml-2 text-sm text-gray-600">Searching...</span>
+	</div>
+}
+
+// Empty state component
+templ EmptyState(title, message string) {
+	<div class="text-center py-12">
+		<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+		</svg>
+		<h3 class="mt-2 text-sm font-medium text-gray-900">{ title }</h3>
+		<p class="mt-1 text-sm text-gray-500">{ message }</p>
+	</div>
+}
+
+// Error message component
+templ ErrorMessage(message string) {
+	<div class="rounded-md bg-red-50 p-4">
+		<div class="flex">
+			<div class="flex-shrink-0">
+				<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+					<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd"/>
+				</svg>
+			</div>
+			<div class="ml-3">
+				<p class="text-sm font-medium text-red-800">{ message }</p>
+			</div>
+		</div>
+	</div>
+}
+
+// Success message component
+templ SuccessMessage(message string) {
+	<div class="rounded-md bg-green-50 p-4">
+		<div class="flex">
+			<div class="flex-shrink-0">
+				<svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
+					<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
+				</svg>
+			</div>
+			<div class="ml-3">
+				<p class="text-sm font-medium text-green-800">{ message }</p>
+			</div>
+		</div>
+	</div>
+}

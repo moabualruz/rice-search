@@ -1,0 +1,155 @@
+package web
+
+import "fmt"
+
+// HealthStatus represents component health
+type HealthStatus struct {
+	Status  string // healthy, degraded, unhealthy
+	Message string
+	Latency int64 // milliseconds
+}
+
+// StatsPageData holds data for the stats page
+type StatsPageData struct {
+	Version     string
+	GoVersion   string
+	Commit      string
+	BuildDate   string
+	Components  map[string]HealthStatus
+	TotalStores int
+	TotalChunks int64
+	TotalDocs   int64
+	Error       string
+}
+
+// StatsPage renders the stats dashboard
+templ StatsPage(data StatsPageData) {
+	@Layout("Stats") {
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+			<div class="sm:flex sm:items-center mb-8">
+				<div class="sm:flex-auto">
+					<h1 class="text-2xl font-semibold text-gray-900">Dashboard</h1>
+					<p class="mt-2 text-sm text-gray-700">
+						System health and statistics
+					</p>
+				</div>
+				<div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+					<button
+						hx-get="/stats/refresh"
+						hx-target="#stats-content"
+						hx-indicator="#refresh-indicator"
+						class="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+					>
+						<svg id="refresh-indicator" class="htmx-indicator animate-spin -ml-0.5 mr-1.5 h-4 w-4" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						</svg>
+						Refresh
+					</button>
+				</div>
+			</div>
+
+			<div id="stats-content">
+				@StatsContent(data)
+			</div>
+		</div>
+	}
+}
+
+// StatsContent renders the stats content (for HTMX refresh)
+templ StatsContent(data StatsPageData) {
+	if data.Error != "" {
+		@ErrorMessage(data.Error)
+	}
+
+	<!-- Version info -->
+	<div class="bg-white overflow-hidden shadow rounded-lg mb-8">
+		<div class="px-4 py-5 sm:p-6">
+			<h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Version Info</h3>
+			<dl class="grid grid-cols-1 gap-5 sm:grid-cols-4">
+				<div>
+					<dt class="text-sm font-medium text-gray-500">Version</dt>
+					<dd class="mt-1 text-lg font-semibold text-gray-900">{ data.Version }</dd>
+				</div>
+				<div>
+					<dt class="text-sm font-medium text-gray-500">Go Version</dt>
+					<dd class="mt-1 text-lg font-semibold text-gray-900">{ data.GoVersion }</dd>
+				</div>
+				<div>
+					<dt class="text-sm font-medium text-gray-500">Commit</dt>
+					<dd class="mt-1 text-lg font-semibold text-gray-900 font-mono">{ truncate(data.Commit, 8) }</dd>
+				</div>
+				<div>
+					<dt class="text-sm font-medium text-gray-500">Build Date</dt>
+					<dd class="mt-1 text-lg font-semibold text-gray-900">{ data.BuildDate }</dd>
+				</div>
+			</dl>
+		</div>
+	</div>
+
+	<!-- Stats cards -->
+	<div class="grid grid-cols-1 gap-5 sm:grid-cols-3 mb-8">
+		@StatCard("Stores", fmt.Sprint(data.TotalStores), "Total search indexes")
+		@StatCard("Documents", fmt.Sprint(data.TotalDocs), "Total indexed files")
+		@StatCard("Chunks", fmt.Sprint(data.TotalChunks), "Total code chunks")
+	</div>
+
+	<!-- Health status -->
+	<div class="bg-white overflow-hidden shadow rounded-lg">
+		<div class="px-4 py-5 sm:p-6">
+			<h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Component Health</h3>
+			<div class="space-y-4">
+				for name, health := range data.Components {
+					@HealthRow(name, health)
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// StatCard renders a single stat card
+templ StatCard(title, value, description string) {
+	<div class="bg-white overflow-hidden shadow rounded-lg">
+		<div class="px-4 py-5 sm:p-6">
+			<dt class="text-sm font-medium text-gray-500 truncate">{ title }</dt>
+			<dd class="mt-1 text-3xl font-semibold text-gray-900">{ value }</dd>
+			<dd class="mt-1 text-sm text-gray-500">{ description }</dd>
+		</div>
+	</div>
+}
+
+// HealthRow renders a health status row
+templ HealthRow(name string, health HealthStatus) {
+	<div class="flex items-center justify-between py-3 border-b border-gray-200 last:border-0">
+		<div class="flex items-center">
+			@HealthBadge(health.Status)
+			<span class="ml-3 text-sm font-medium text-gray-900 capitalize">{ name }</span>
+		</div>
+		<div class="flex items-center gap-4">
+			<span class="text-sm text-gray-500">{ health.Message }</span>
+			if health.Latency > 0 {
+				<span class="text-sm text-gray-400">{ fmt.Sprint(health.Latency) }ms</span>
+			}
+		</div>
+	</div>
+}
+
+// HealthBadge renders a health status badge
+templ HealthBadge(status string) {
+	switch status {
+		case "healthy":
+			<span class="inline-flex h-3 w-3 rounded-full bg-green-500"></span>
+		case "degraded":
+			<span class="inline-flex h-3 w-3 rounded-full bg-yellow-500"></span>
+		default:
+			<span class="inline-flex h-3 w-3 rounded-full bg-red-500"></span>
+	}
+}
+
+// truncate truncates a string to max length
+func truncate(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	return s[:max]
+}

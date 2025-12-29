@@ -2,7 +2,8 @@
 # Makefile for build, test, and development tasks
 
 # Variables
-BINARY_NAME := rice-search
+CLIENT_NAME := rice-search
+SERVER_NAME := rice-search-server
 VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
 COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -14,9 +15,12 @@ GOFLAGS := -v
 GOTESTFLAGS := -race -cover
 
 # Directories
-CMD_DIR := ./cmd/rice-search
+CLIENT_CMD_DIR := ./cmd/rice-search
+SERVER_CMD_DIR := ./cmd/rice-search-server
 BUILD_DIR := ./build
 MODELS_DIR := ./models
+PROTO_DIR := ./api/proto
+PROTO_OUT := ./api/proto/ricesearchpb
 
 # Default target
 .DEFAULT_GOAL := help
@@ -24,23 +28,41 @@ MODELS_DIR := ./models
 ##@ Development
 
 .PHONY: build
-build: ## Build the binary
-	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(CMD_DIR)
+build: proto ## Build both client and server binaries
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(CLIENT_NAME) $(CLIENT_CMD_DIR)
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(SERVER_NAME) $(SERVER_CMD_DIR)
+
+.PHONY: build-client
+build-client: ## Build client binary only
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(CLIENT_NAME) $(CLIENT_CMD_DIR)
+
+.PHONY: build-server
+build-server: proto ## Build server binary only
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o $(BUILD_DIR)/$(SERVER_NAME) $(SERVER_CMD_DIR)
 
 .PHONY: build-all
-build-all: ## Build for all platforms
-	GOOS=linux GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(CMD_DIR)
-	GOOS=linux GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-linux-arm64 $(CMD_DIR)
-	GOOS=darwin GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(CMD_DIR)
-	GOOS=darwin GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 $(CMD_DIR)
-	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(CMD_DIR)
+build-all: proto ## Build for all platforms
+	GOOS=linux GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(CLIENT_NAME)-linux-amd64 $(CLIENT_CMD_DIR)
+	GOOS=linux GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(SERVER_NAME)-linux-amd64 $(SERVER_CMD_DIR)
+	GOOS=linux GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(CLIENT_NAME)-linux-arm64 $(CLIENT_CMD_DIR)
+	GOOS=linux GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(SERVER_NAME)-linux-arm64 $(SERVER_CMD_DIR)
+	GOOS=darwin GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(CLIENT_NAME)-darwin-amd64 $(CLIENT_CMD_DIR)
+	GOOS=darwin GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(SERVER_NAME)-darwin-amd64 $(SERVER_CMD_DIR)
+	GOOS=darwin GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(CLIENT_NAME)-darwin-arm64 $(CLIENT_CMD_DIR)
+	GOOS=darwin GOARCH=arm64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(SERVER_NAME)-darwin-arm64 $(SERVER_CMD_DIR)
+	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(CLIENT_NAME)-windows-amd64.exe $(CLIENT_CMD_DIR)
+	GOOS=windows GOARCH=amd64 $(GO) build $(LDFLAGS) -o $(BUILD_DIR)/$(SERVER_NAME)-windows-amd64.exe $(SERVER_CMD_DIR)
 
 .PHONY: run
 run: ## Run the server
-	$(GO) run $(CMD_DIR) serve
+	$(GO) run $(SERVER_CMD_DIR)
+
+.PHONY: run-server
+run-server: ## Run the server with verbose logging
+	$(GO) run $(SERVER_CMD_DIR) --verbose
 
 .PHONY: dev
-dev: ## Run with hot reload (requires air)
+dev: ## Run server with hot reload (requires air)
 	air -c .air.toml
 
 ##@ Testing
@@ -155,8 +177,20 @@ dev-restart: dev-down dev-up ## Restart dev (fresh data)
 ##@ Code Generation
 
 .PHONY: generate
-generate: ## Run go generate
+generate: proto templ ## Run all code generation
 	$(GO) generate ./...
+
+.PHONY: proto
+proto: ## Generate Go code from proto files
+	@mkdir -p $(PROTO_OUT)
+	protoc --go_out=$(PROTO_OUT) --go_opt=paths=source_relative \
+		--go-grpc_out=$(PROTO_OUT) --go-grpc_opt=paths=source_relative \
+		-I$(PROTO_DIR) \
+		$(PROTO_DIR)/ricesearch.proto
+
+.PHONY: proto-clean
+proto-clean: ## Clean generated proto files
+	rm -rf $(PROTO_OUT)
 
 .PHONY: templ
 templ: ## Generate templ templates
@@ -175,6 +209,8 @@ install-tools: ## Install development tools
 	go install mvdan.cc/gofumpt@latest
 	go install github.com/air-verse/air@latest
 	go install github.com/a-h/templ/cmd/templ@latest
+	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
 .PHONY: help
 help: ## Display this help

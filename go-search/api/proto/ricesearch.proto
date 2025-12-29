@@ -1,0 +1,457 @@
+// Rice Search gRPC Service Definition
+// Protocol buffer definitions for the Rice Search platform.
+
+syntax = "proto3";
+
+package ricesearch.v1;
+
+option go_package = "github.com/ricesearch/rice-search/api/proto/ricesearchpb";
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+// =============================================================================
+// Rice Search Service - Main gRPC service
+// =============================================================================
+
+service RiceSearch {
+  // Search performs hybrid search with optional reranking.
+  // Returns a stream of results for large result sets.
+  rpc Search(SearchRequest) returns (SearchResponse);
+  
+  // SearchStream performs search and streams results as they're found.
+  // Use this for progressive result display in UIs.
+  rpc SearchStream(SearchRequest) returns (stream SearchResult);
+
+  // Index indexes documents into a store.
+  // Supports streaming for large batches.
+  rpc Index(stream IndexRequest) returns (IndexResponse);
+  
+  // IndexBatch indexes a batch of documents (non-streaming alternative).
+  rpc IndexBatch(IndexBatchRequest) returns (IndexResponse);
+  
+  // Delete removes documents from the index.
+  rpc Delete(DeleteRequest) returns (DeleteResponse);
+  
+  // Sync removes documents that no longer exist.
+  rpc Sync(SyncRequest) returns (SyncResponse);
+  
+  // Reindex clears and rebuilds the entire index.
+  rpc Reindex(ReindexRequest) returns (IndexResponse);
+  
+  // GetIndexStats returns indexing statistics.
+  rpc GetIndexStats(GetIndexStatsRequest) returns (IndexStats);
+
+  // ListStores returns all stores.
+  rpc ListStores(ListStoresRequest) returns (ListStoresResponse);
+  
+  // CreateStore creates a new store.
+  rpc CreateStore(CreateStoreRequest) returns (Store);
+  
+  // GetStore retrieves a store by name.
+  rpc GetStore(GetStoreRequest) returns (Store);
+  
+  // DeleteStore deletes a store.
+  rpc DeleteStore(DeleteStoreRequest) returns (DeleteStoreResponse);
+  
+  // GetStoreStats returns statistics for a store.
+  rpc GetStoreStats(GetStoreStatsRequest) returns (StoreStats);
+
+  // Health returns service health status.
+  rpc Health(HealthRequest) returns (HealthResponse);
+  
+  // Version returns version information.
+  rpc Version(VersionRequest) returns (VersionResponse);
+}
+
+// =============================================================================
+// Search Messages
+// =============================================================================
+
+message SearchRequest {
+  // Query is the search query text (required).
+  string query = 1;
+  
+  // Store is the store to search in (required).
+  string store = 2;
+  
+  // TopK is the number of results to return (default: 20).
+  int32 top_k = 3;
+  
+  // Filter constrains the search.
+  SearchFilter filter = 4;
+  
+  // EnableReranking enables neural reranking.
+  optional bool enable_reranking = 5;
+  
+  // RerankTopK is the number of candidates to rerank.
+  int32 rerank_top_k = 6;
+  
+  // IncludeContent includes full content in results.
+  bool include_content = 7;
+  
+  // SparseWeight overrides the sparse weight (0-1).
+  optional float sparse_weight = 8;
+  
+  // DenseWeight overrides the dense weight (0-1).
+  optional float dense_weight = 9;
+}
+
+message SearchFilter {
+  // PathPrefix filters by path prefix.
+  string path_prefix = 1;
+  
+  // Languages filters by programming language.
+  repeated string languages = 2;
+}
+
+message SearchResult {
+  // ID is the chunk identifier.
+  string id = 1;
+  
+  // Path is the file path.
+  string path = 2;
+  
+  // Language is the programming language.
+  string language = 3;
+  
+  // StartLine is the starting line number.
+  int32 start_line = 4;
+  
+  // EndLine is the ending line number.
+  int32 end_line = 5;
+  
+  // Content is the chunk content (if requested).
+  string content = 6;
+  
+  // Symbols are the extracted symbols.
+  repeated string symbols = 7;
+  
+  // Score is the relevance score.
+  float score = 8;
+  
+  // RerankScore is the reranker score (if reranking was applied).
+  optional float rerank_score = 9;
+}
+
+message SearchResponse {
+  // Query is the original query.
+  string query = 1;
+  
+  // Store is the store that was searched.
+  string store = 2;
+  
+  // Results are the search results.
+  repeated SearchResult results = 3;
+  
+  // Total is the total number of matches (before limit).
+  int32 total = 4;
+  
+  // Metadata contains search metadata.
+  SearchMetadata metadata = 5;
+}
+
+message SearchMetadata {
+  // SearchTimeMs is the total search time in milliseconds.
+  int64 search_time_ms = 1;
+  
+  // EmbedTimeMs is the embedding generation time.
+  int64 embed_time_ms = 2;
+  
+  // RetrievalTimeMs is the vector search time.
+  int64 retrieval_time_ms = 3;
+  
+  // RerankTimeMs is the reranking time (if applied).
+  int64 rerank_time_ms = 4;
+  
+  // CandidatesReranked is the number of candidates that were reranked.
+  int32 candidates_reranked = 5;
+  
+  // RerankingApplied indicates if reranking was applied.
+  bool reranking_applied = 6;
+}
+
+// =============================================================================
+// Index Messages
+// =============================================================================
+
+message IndexRequest {
+  // Store is the target store (required on first message).
+  string store = 1;
+  
+  // Document is the document to index.
+  Document document = 2;
+  
+  // Force re-indexes even if unchanged.
+  bool force = 3;
+}
+
+message IndexBatchRequest {
+  // Store is the target store.
+  string store = 1;
+  
+  // Documents are the documents to index.
+  repeated Document documents = 2;
+  
+  // Force re-indexes even if unchanged.
+  bool force = 3;
+}
+
+message Document {
+  // Path is the file path (required).
+  string path = 1;
+  
+  // Content is the file content (required).
+  string content = 2;
+  
+  // Language is the programming language (optional, auto-detected if empty).
+  string language = 3;
+}
+
+message IndexResponse {
+  // Store is the target store.
+  string store = 1;
+  
+  // Indexed is the number of documents indexed.
+  int32 indexed = 2;
+  
+  // Skipped is the number of documents skipped (unchanged).
+  int32 skipped = 3;
+  
+  // Failed is the number of documents that failed.
+  int32 failed = 4;
+  
+  // ChunksTotal is the total number of chunks created.
+  int32 chunks_total = 5;
+  
+  // Duration is the indexing duration.
+  google.protobuf.Duration duration = 6;
+  
+  // Errors are indexing errors.
+  repeated IndexError errors = 7;
+  
+  // DocumentInfo contains info about each document.
+  repeated DocumentInfo document_info = 8;
+}
+
+message IndexError {
+  // Path is the file path.
+  string path = 1;
+  
+  // Message is the error message.
+  string message = 2;
+}
+
+message DocumentInfo {
+  // Path is the file path.
+  string path = 1;
+  
+  // Hash is the content hash.
+  string hash = 2;
+  
+  // ChunkCount is the number of chunks created.
+  int32 chunk_count = 3;
+  
+  // Status is the indexing status (indexed, skipped, failed).
+  string status = 4;
+}
+
+message DeleteRequest {
+  // Store is the target store.
+  string store = 1;
+  
+  // Paths are specific file paths to delete.
+  repeated string paths = 2;
+  
+  // PathPrefix deletes all files with this prefix.
+  string path_prefix = 3;
+}
+
+message DeleteResponse {
+  // Deleted is the number of documents deleted.
+  int32 deleted = 1;
+}
+
+message SyncRequest {
+  // Store is the target store.
+  string store = 1;
+  
+  // CurrentPaths are paths that currently exist.
+  repeated string current_paths = 2;
+}
+
+message SyncResponse {
+  // Removed is the number of documents removed.
+  int32 removed = 1;
+}
+
+message ReindexRequest {
+  // Store is the target store.
+  string store = 1;
+  
+  // Documents are the documents to reindex.
+  repeated Document documents = 2;
+}
+
+message GetIndexStatsRequest {
+  // Store is the target store.
+  string store = 1;
+}
+
+message IndexStats {
+  // Store is the store name.
+  string store = 1;
+  
+  // TotalChunks is the total number of indexed chunks.
+  int32 total_chunks = 2;
+  
+  // TotalFiles is the total number of indexed files.
+  int32 total_files = 3;
+}
+
+// =============================================================================
+// Store Messages
+// =============================================================================
+
+message Store {
+  // Name is the store identifier (required).
+  string name = 1;
+  
+  // DisplayName is a human-friendly name.
+  string display_name = 2;
+  
+  // Description is an optional description.
+  string description = 3;
+  
+  // Config is the store configuration.
+  StoreConfig config = 4;
+  
+  // Stats are the store statistics.
+  StoreStats stats = 5;
+  
+  // CreatedAt is when the store was created.
+  google.protobuf.Timestamp created_at = 6;
+  
+  // UpdatedAt is when the store was last updated.
+  google.protobuf.Timestamp updated_at = 7;
+}
+
+message StoreConfig {
+  // EmbedModel is the dense embedding model name.
+  string embed_model = 1;
+  
+  // SparseModel is the sparse encoding model name.
+  string sparse_model = 2;
+  
+  // ChunkSize is the target chunk size in tokens.
+  int32 chunk_size = 3;
+  
+  // ChunkOverlap is the overlap between chunks in tokens.
+  int32 chunk_overlap = 4;
+}
+
+message StoreStats {
+  // DocumentCount is the number of source files.
+  int64 document_count = 1;
+  
+  // ChunkCount is the number of indexed chunks.
+  int64 chunk_count = 2;
+  
+  // TotalSize is the total content size in bytes.
+  int64 total_size = 3;
+  
+  // LastIndexed is when the store was last indexed.
+  google.protobuf.Timestamp last_indexed = 4;
+}
+
+message ListStoresRequest {}
+
+message ListStoresResponse {
+  // Stores are all stores.
+  repeated Store stores = 1;
+}
+
+message CreateStoreRequest {
+  // Name is the store identifier (required).
+  string name = 1;
+  
+  // DisplayName is a human-friendly name.
+  string display_name = 2;
+  
+  // Description is an optional description.
+  string description = 3;
+  
+  // Config is the store configuration.
+  StoreConfig config = 4;
+}
+
+message GetStoreRequest {
+  // Name is the store identifier.
+  string name = 1;
+}
+
+message DeleteStoreRequest {
+  // Name is the store identifier.
+  string name = 1;
+}
+
+message DeleteStoreResponse {
+  // Success indicates if deletion was successful.
+  bool success = 1;
+}
+
+message GetStoreStatsRequest {
+  // Name is the store identifier.
+  string name = 1;
+}
+
+// =============================================================================
+// Health & Version Messages
+// =============================================================================
+
+message HealthRequest {}
+
+message HealthResponse {
+  // Status is the overall health status.
+  HealthStatus status = 1;
+  
+  // Components are individual component health.
+  map<string, ComponentHealth> components = 2;
+  
+  // Version is the server version.
+  string version = 3;
+}
+
+enum HealthStatus {
+  HEALTH_STATUS_UNSPECIFIED = 0;
+  HEALTH_STATUS_HEALTHY = 1;
+  HEALTH_STATUS_DEGRADED = 2;
+  HEALTH_STATUS_UNHEALTHY = 3;
+}
+
+message ComponentHealth {
+  // Status is the component health status.
+  HealthStatus status = 1;
+  
+  // Message is an optional status message.
+  string message = 2;
+  
+  // Latency is the component check latency.
+  google.protobuf.Duration latency = 3;
+}
+
+message VersionRequest {}
+
+message VersionResponse {
+  // Version is the semantic version.
+  string version = 1;
+  
+  // Commit is the git commit hash.
+  string commit = 2;
+  
+  // BuildDate is when the binary was built.
+  string build_date = 3;
+  
+  // GoVersion is the Go version used.
+  string go_version = 4;
+}

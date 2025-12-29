@@ -1,16 +1,21 @@
+// Package main provides the Rice Search CLI client.
+// This client connects to rice-search-server via gRPC for all operations.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/spf13/cobra"
 
-	"github.com/ricesearch/rice-search/internal/ml"
-	"github.com/ricesearch/rice-search/internal/pkg/logger"
+	"github.com/ricesearch/rice-search/internal/grpcclient"
 )
 
 var (
@@ -19,36 +24,50 @@ var (
 	date    = "unknown"
 )
 
+// Global client
+var client *grpcclient.Client
+
 func main() {
 	rootCmd := &cobra.Command{
 		Use:   "rice-search",
-		Short: "Rice Search - Intelligent code search platform",
-		Long: `Rice Search is a pure Go code search platform with hybrid search,
-neural reranking, and event-driven microservices architecture.
+		Short: "Rice Search - Intelligent code search CLI",
+		Long: `Rice Search CLI connects to a rice-search-server via gRPC for
+intelligent code search, indexing, and store management.
 
-Run 'rice-search serve' to start the monolith server.
-Run 'rice-search --help' for available commands.`,
+Start the server first:
+  rice-search-server
+
+Then use this CLI:
+  rice-search search "authentication handler"
+  rice-search index ./src
+  rice-search stores list`,
 		SilenceUsage: true,
+		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			// Skip connection for version and help
+			if cmd.Name() == "version" || cmd.Name() == "help" {
+				return nil
+			}
+			return connectToServer(cmd)
+		},
+		PersistentPostRun: func(cmd *cobra.Command, args []string) {
+			if client != nil {
+				client.Close()
+			}
+		},
 	}
 
 	// Global flags
-	rootCmd.PersistentFlags().StringP("config", "c", "", "config file path")
+	rootCmd.PersistentFlags().StringP("server", "S", "auto", "server address (auto, localhost:50051, or unix:///path)")
 	rootCmd.PersistentFlags().BoolP("verbose", "v", false, "verbose output")
 	rootCmd.PersistentFlags().String("format", "text", "output format (text, json)")
 
 	// Add subcommands
 	rootCmd.AddCommand(
-		serveCmd(),
 		versionCmd(),
-		modelsCmd(),
-		// TODO: Add these as they're implemented
-		// apiCmd(),
-		// mlCmd(),
-		// searchCmd(),
-		// webCmd(),
-		// indexCmd(),
-		// queryCmd(),
-		// storesCmd(),
+		searchCmd(),
+		indexCmd(),
+		storesCmd(),
+		healthCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {
@@ -56,90 +75,355 @@ Run 'rice-search --help' for available commands.`,
 	}
 }
 
-func serveCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "serve",
-		Short: "Start the Rice Search server (monolith mode)",
-		Long: `Start all services in a single process:
-- API server (HTTP gateway)
-- ML service (embeddings, reranking)
-- Search service (Qdrant queries)
-- Web UI (optional)
+// connectToServer establishes connection to the server.
+func connectToServer(cmd *cobra.Command) error {
+	serverAddr, _ := cmd.Flags().GetString("server")
 
-Services communicate via in-memory Go channels for minimal latency.`,
+	cfg := grpcclient.DefaultConfig()
+	cfg.ServerAddress = serverAddr
+
+	var err error
+	client, err = grpcclient.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to connect to server: %w\n\nMake sure rice-search-server is running", err)
+	}
+
+	return nil
+}
+
+// =============================================================================
+// Version Command
+// =============================================================================
+
+func versionCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "version",
+		Short: "Print version information",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			port, _ := cmd.Flags().GetInt("port")
-			fmt.Printf("Starting Rice Search server on port %d...\n", port)
-			fmt.Println("TODO: Implement server startup")
+			fmt.Printf("rice-search %s (client)\n", version)
+			fmt.Printf("  commit: %s\n", commit)
+			fmt.Printf("  built:  %s\n", date)
+
+			// Try to get server version
+			if err := connectToServer(cmd); err == nil && client != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+
+				if info, err := client.Version(ctx); err == nil {
+					fmt.Printf("\nServer:\n")
+					fmt.Printf("  version: %s\n", info.Version)
+					fmt.Printf("  commit:  %s\n", info.Commit)
+					fmt.Printf("  go:      %s\n", info.GoVersion)
+				}
+			}
+
 			return nil
 		},
 	}
+	return cmd
+}
 
-	cmd.Flags().IntP("port", "p", 8080, "HTTP server port")
-	cmd.Flags().String("host", "0.0.0.0", "HTTP server host")
-	cmd.Flags().Bool("no-web", false, "disable web UI")
-	cmd.Flags().String("ml-url", "", "external ML service URL (skip embedded)")
-	cmd.Flags().String("bus", "memory", "event bus type (memory, kafka, nats, redis)")
+// =============================================================================
+// Search Command
+// =============================================================================
+
+func searchCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "search <query>",
+		Short: "Search indexed code",
+		Long: `Search for code across indexed files.
+
+Examples:
+  rice-search search "authentication handler"
+  rice-search search "error handling" -k 50
+  rice-search search "database connection" -s myproject
+  rice-search search "func main" --path-prefix cmd/`,
+		Args: cobra.ExactArgs(1),
+		RunE: runSearch,
+	}
+
+	cmd.Flags().StringP("store", "s", "default", "store to search")
+	cmd.Flags().IntP("top-k", "k", 20, "number of results")
+	cmd.Flags().Bool("no-rerank", false, "disable neural reranking")
+	cmd.Flags().Bool("content", false, "include content in results")
+	cmd.Flags().String("path-prefix", "", "filter by path prefix")
+	cmd.Flags().StringSlice("lang", nil, "filter by language (e.g., go,typescript)")
 
 	return cmd
 }
 
-func versionCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "version",
-		Short: "Print version information",
-		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Printf("rice-search %s\n", version)
-			fmt.Printf("  commit: %s\n", commit)
-			fmt.Printf("  built:  %s\n", date)
-		},
+func runSearch(cmd *cobra.Command, args []string) error {
+	query := args[0]
+	storeName, _ := cmd.Flags().GetString("store")
+	topK, _ := cmd.Flags().GetInt("top-k")
+	noRerank, _ := cmd.Flags().GetBool("no-rerank")
+	includeContent, _ := cmd.Flags().GetBool("content")
+	pathPrefix, _ := cmd.Flags().GetString("path-prefix")
+	languages, _ := cmd.Flags().GetStringSlice("lang")
+	verbose, _ := cmd.Flags().GetBool("verbose")
+	format, _ := cmd.Flags().GetString("format")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	opts := grpcclient.SearchOptions{
+		TopK:           topK,
+		IncludeContent: includeContent,
+		PathPrefix:     pathPrefix,
+		Languages:      languages,
 	}
+
+	if noRerank {
+		f := false
+		opts.EnableReranking = &f
+	}
+
+	resp, err := client.Search(ctx, storeName, query, opts)
+	if err != nil {
+		return fmt.Errorf("search failed: %w", err)
+	}
+
+	if format == "json" {
+		data, _ := json.MarshalIndent(resp, "", "  ")
+		fmt.Println(string(data))
+		return nil
+	}
+
+	if len(resp.Results) == 0 {
+		fmt.Println("No results found.")
+		return nil
+	}
+
+	fmt.Printf("Found %d results in %dms\n\n", resp.Total, resp.SearchTimeMs)
+
+	for i, r := range resp.Results {
+		scoreStr := fmt.Sprintf("%.3f", r.Score)
+		if r.RerankScore != nil {
+			scoreStr = fmt.Sprintf("%.3f (rerank: %.3f)", r.Score, *r.RerankScore)
+		}
+		fmt.Printf("[%d] %s:%d-%d  score: %s\n",
+			i+1, r.Path, r.StartLine, r.EndLine, scoreStr)
+
+		if len(r.Symbols) > 0 && verbose {
+			fmt.Printf("    symbols: %s\n", strings.Join(r.Symbols, ", "))
+		}
+
+		if includeContent && r.Content != "" {
+			lines := strings.Split(r.Content, "\n")
+			preview := lines
+			if len(preview) > 5 {
+				preview = preview[:5]
+			}
+			for _, line := range preview {
+				if len(line) > 100 {
+					line = line[:100] + "..."
+				}
+				fmt.Printf("    │ %s\n", line)
+			}
+			if len(lines) > 5 {
+				fmt.Printf("    │ ... (%d more lines)\n", len(lines)-5)
+			}
+		}
+
+		fmt.Println()
+	}
+
+	if verbose {
+		fmt.Printf("---\n")
+		fmt.Printf("Timing: embed=%dms, retrieve=%dms",
+			resp.EmbedTimeMs, resp.RetrievalTimeMs)
+		if resp.RerankingApplied {
+			fmt.Printf(", rerank=%dms (%d candidates)",
+				resp.RerankTimeMs, resp.CandidatesReranked)
+		}
+		fmt.Println()
+	}
+
+	return nil
 }
 
-func modelsCmd() *cobra.Command {
+// =============================================================================
+// Index Command
+// =============================================================================
+
+func indexCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "models",
-		Short: "Manage ML models",
-		Long:  "Download, list, and verify ML models required for Rice Search.",
+		Use:   "index <path>...",
+		Short: "Index files into a store",
+		Long: `Index source code files into a search store.
+
+Examples:
+  rice-search index ./src               # Index src directory into default store
+  rice-search index ./src -s myproject  # Index into specific store
+  rice-search index ./main.go ./lib     # Index specific files/directories`,
+		Args: cobra.MinimumNArgs(1),
+		RunE: runIndex,
 	}
 
-	// Shared flags
-	var modelsDir string
-	cmd.PersistentFlags().StringVar(&modelsDir, "models-dir", "./models", "models directory")
+	cmd.Flags().StringP("store", "s", "default", "target store name")
+	cmd.Flags().BoolP("force", "f", false, "force re-index unchanged files")
+	cmd.Flags().StringSliceP("include", "i", nil, "include patterns (e.g., *.go,*.ts)")
+	cmd.Flags().StringSliceP("exclude", "e", nil, "exclude patterns (e.g., vendor/*)")
+
+	return cmd
+}
+
+func runIndex(cmd *cobra.Command, args []string) error {
+	storeName, _ := cmd.Flags().GetString("store")
+	force, _ := cmd.Flags().GetBool("force")
+	include, _ := cmd.Flags().GetStringSlice("include")
+	exclude, _ := cmd.Flags().GetStringSlice("exclude")
+	format, _ := cmd.Flags().GetString("format")
+
+	// Collect documents
+	var docs []grpcclient.IndexDocument
+	var totalSize int64
+
+	for _, path := range args {
+		info, err := os.Stat(path)
+		if err != nil {
+			return fmt.Errorf("cannot access %s: %w", path, err)
+		}
+
+		if info.IsDir() {
+			err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() {
+					name := d.Name()
+					if name == ".git" || name == "node_modules" || name == "vendor" ||
+						name == "__pycache__" || name == ".venv" || name == "target" {
+						return filepath.SkipDir
+					}
+					return nil
+				}
+
+				if !shouldIncludeFile(p, include, exclude) {
+					return nil
+				}
+
+				content, err := os.ReadFile(p)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: cannot read %s: %v\n", p, err)
+					return nil
+				}
+
+				if isBinaryContent(content) {
+					return nil
+				}
+
+				relPath, _ := filepath.Rel(".", p)
+				docs = append(docs, grpcclient.IndexDocument{
+					Path:    filepath.ToSlash(relPath),
+					Content: string(content),
+				})
+				totalSize += int64(len(content))
+				return nil
+			})
+			if err != nil {
+				return fmt.Errorf("failed to walk %s: %w", path, err)
+			}
+		} else {
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("cannot read %s: %w", path, err)
+			}
+
+			relPath, _ := filepath.Rel(".", path)
+			docs = append(docs, grpcclient.IndexDocument{
+				Path:    filepath.ToSlash(relPath),
+				Content: string(content),
+			})
+			totalSize += int64(len(content))
+		}
+	}
+
+	if len(docs) == 0 {
+		fmt.Println("No files to index.")
+		return nil
+	}
+
+	fmt.Printf("Indexing %d files (%.2f KB) into store '%s'...\n",
+		len(docs), float64(totalSize)/1024, storeName)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	result, err := client.Index(ctx, storeName, docs, force)
+	if err != nil {
+		return fmt.Errorf("indexing failed: %w", err)
+	}
+
+	if format == "json" {
+		data, _ := json.MarshalIndent(result, "", "  ")
+		fmt.Println(string(data))
+		return nil
+	}
+
+	fmt.Printf("✓ Indexed: %d, Skipped: %d, Failed: %d\n",
+		result.Indexed, result.Skipped, result.Failed)
+	fmt.Printf("  Chunks created: %d\n", result.ChunksTotal)
+	fmt.Printf("  Duration: %s\n", result.Duration.Round(time.Millisecond))
+	return nil
+}
+
+// =============================================================================
+// Stores Commands
+// =============================================================================
+
+func storesCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "stores",
+		Short: "Manage search stores",
+		Long:  "Create, list, delete, and get statistics for search stores.",
+	}
 
 	cmd.AddCommand(
-		modelsListCmd(&modelsDir),
-		modelsDownloadCmd(&modelsDir),
-		modelsCheckCmd(&modelsDir),
+		storesListCmd(),
+		storesCreateCmd(),
+		storesDeleteCmd(),
+		storesStatsCmd(),
 	)
 
 	return cmd
 }
 
-func modelsListCmd(modelsDir *string) *cobra.Command {
+func storesListCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "list",
-		Short: "List available models",
+		Short: "List all stores",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			log := logger.Default()
-			mgr := ml.NewModelManager(*modelsDir, log)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			stores, err := client.ListStores(ctx)
+			if err != nil {
+				return fmt.Errorf("failed to list stores: %w", err)
+			}
 
 			format, _ := cmd.Flags().GetString("format")
 			if format == "json" {
-				models := mgr.ListModels()
-				data, _ := json.MarshalIndent(models, "", "  ")
+				data, _ := json.MarshalIndent(stores, "", "  ")
 				fmt.Println(string(data))
 				return nil
 			}
 
-			// Table format
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "NAME\tTYPE\tSIZE\tDESCRIPTION")
-			fmt.Fprintln(w, "----\t----\t----\t-----------")
+			if len(stores) == 0 {
+				fmt.Println("No stores found.")
+				return nil
+			}
 
-			for _, model := range mgr.ListModels() {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-					model.Name, model.Type, model.Size, model.Description)
+			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+			fmt.Fprintln(w, "NAME\tDESCRIPTION\tCREATED")
+			fmt.Fprintln(w, "----\t-----------\t-------")
+
+			for _, s := range stores {
+				desc := s.Description
+				if desc == "" {
+					desc = "-"
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\n", s.Name, desc, s.CreatedAt.Format(time.RFC3339))
 			}
 
 			w.Flush()
@@ -148,111 +432,212 @@ func modelsListCmd(modelsDir *string) *cobra.Command {
 	}
 }
 
-func modelsDownloadCmd(modelsDir *string) *cobra.Command {
+func storesCreateCmd() *cobra.Command {
+	var description string
+
 	cmd := &cobra.Command{
-		Use:   "download [model...]",
-		Short: "Download models from HuggingFace",
-		Long: `Download ML models from HuggingFace.
-
-Without arguments, downloads all required models.
-With arguments, downloads only the specified models.
-
-Examples:
-  rice-search models download                    # Download all models
-  rice-search models download jina-embeddings-v3 # Download specific model`,
+		Use:   "create <name>",
+		Short: "Create a new store",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			log := logger.New("info", "text")
-			mgr := ml.NewModelManager(*modelsDir, log)
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
 
-			// Ensure models directory exists
-			absPath, _ := filepath.Abs(*modelsDir)
-			fmt.Printf("Models directory: %s\n\n", absPath)
-
-			if err := os.MkdirAll(*modelsDir, 0755); err != nil {
-				return fmt.Errorf("failed to create models directory: %w", err)
+			name := args[0]
+			store, err := client.CreateStore(ctx, name, description)
+			if err != nil {
+				return fmt.Errorf("failed to create store: %w", err)
 			}
 
-			// Progress callback
-			progress := func(p ml.DownloadProgress) {
-				if p.Complete {
-					fmt.Printf("✓ %s: download complete\n", p.Model)
-				} else if p.Error != "" {
-					fmt.Printf("✗ %s: %s\n", p.Model, p.Error)
-				} else if p.Total > 0 {
-					fmt.Printf("  %s/%s: %.1f%% (%d/%d bytes)\r",
-						p.Model, p.File, p.Percent, p.Downloaded, p.Total)
-				}
+			format, _ := cmd.Flags().GetString("format")
+			if format == "json" {
+				data, _ := json.MarshalIndent(store, "", "  ")
+				fmt.Println(string(data))
+				return nil
 			}
 
-			if len(args) == 0 {
-				// Download all models
-				fmt.Println("Downloading all required models...")
-				if err := mgr.DownloadAllModels(progress); err != nil {
-					return err
-				}
-			} else {
-				// Download specific models
-				for _, name := range args {
-					fmt.Printf("Downloading %s...\n", name)
-					if err := mgr.DownloadModel(name, progress); err != nil {
-						return err
-					}
-				}
-			}
-
-			fmt.Println("\nDone!")
+			fmt.Printf("✓ Created store: %s\n", name)
 			return nil
 		},
 	}
 
+	cmd.Flags().StringVarP(&description, "description", "d", "", "store description")
 	return cmd
 }
 
-func modelsCheckCmd(modelsDir *string) *cobra.Command {
-	return &cobra.Command{
-		Use:   "check",
-		Short: "Check installed models",
+func storesDeleteCmd() *cobra.Command {
+	var force bool
+
+	cmd := &cobra.Command{
+		Use:   "delete <name>",
+		Short: "Delete a store",
+		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			log := logger.Default()
-			mgr := ml.NewModelManager(*modelsDir, log)
+			name := args[0]
+
+			if !force {
+				fmt.Printf("Delete store '%s'? This cannot be undone. [y/N]: ", name)
+				var confirm string
+				fmt.Scanln(&confirm)
+				if strings.ToLower(confirm) != "y" {
+					fmt.Println("Cancelled.")
+					return nil
+				}
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			if err := client.DeleteStore(ctx, name); err != nil {
+				return fmt.Errorf("failed to delete store: %w", err)
+			}
+
+			fmt.Printf("✓ Deleted store: %s\n", name)
+			return nil
+		},
+	}
+
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "skip confirmation")
+	return cmd
+}
+
+func storesStatsCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "stats <name>",
+		Short: "Get store statistics",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+
+			name := args[0]
+			stats, err := client.GetStoreStats(ctx, name)
+			if err != nil {
+				return fmt.Errorf("failed to get store stats: %w", err)
+			}
 
 			format, _ := cmd.Flags().GetString("format")
-			statuses := mgr.CheckAllModels()
-
 			if format == "json" {
-				data, _ := json.MarshalIndent(statuses, "", "  ")
+				data, _ := json.MarshalIndent(stats, "", "  ")
 				fmt.Println(string(data))
 				return nil
 			}
 
-			// Table format
-			w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-			fmt.Fprintln(w, "MODEL\tSTATUS\tMISSING")
-			fmt.Fprintln(w, "-----\t------\t-------")
+			fmt.Printf("Store: %s\n", name)
+			fmt.Printf("  Documents: %d\n", stats.DocumentCount)
+			fmt.Printf("  Chunks:    %d\n", stats.ChunkCount)
+			fmt.Printf("  Size:      %d bytes\n", stats.TotalSize)
+			return nil
+		},
+	}
+}
 
-			allInstalled := true
-			for _, status := range statuses {
-				statusStr := "✓ installed"
-				missing := "-"
+// =============================================================================
+// Health Command
+// =============================================================================
 
-				if !status.Installed {
-					statusStr = "✗ missing"
-					allInstalled = false
-					if len(status.Missing) > 0 {
-						missing = fmt.Sprintf("%v", status.Missing)
-					}
-				}
+func healthCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "health",
+		Short: "Check server health",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
 
-				fmt.Fprintf(w, "%s\t%s\t%s\n", status.Name, statusStr, missing)
+			health, err := client.Health(ctx)
+			if err != nil {
+				return fmt.Errorf("health check failed: %w", err)
 			}
 
-			w.Flush()
+			format, _ := cmd.Flags().GetString("format")
+			if format == "json" {
+				data, _ := json.MarshalIndent(health, "", "  ")
+				fmt.Println(string(data))
+				return nil
+			}
 
-			if !allInstalled {
-				fmt.Println("\nRun 'rice-search models download' to download missing models.")
+			statusIcon := "✓"
+			if health.Status == grpcclient.HealthStatusDegraded {
+				statusIcon = "⚠"
+			} else if health.Status == grpcclient.HealthStatusUnhealthy {
+				statusIcon = "✗"
+			}
+
+			fmt.Printf("%s Server: %s (v%s)\n\n", statusIcon, health.Status, health.Version)
+			fmt.Println("Components:")
+
+			for name, comp := range health.Components {
+				icon := "✓"
+				if comp.Status == grpcclient.HealthStatusDegraded {
+					icon = "⚠"
+				} else if comp.Status == grpcclient.HealthStatusUnhealthy {
+					icon = "✗"
+				}
+				fmt.Printf("  %s %s: %s", icon, name, comp.Message)
+				if comp.Latency > 0 {
+					fmt.Printf(" (%s)", comp.Latency.Round(time.Microsecond))
+				}
+				fmt.Println()
 			}
 
 			return nil
 		},
 	}
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
+func shouldIncludeFile(path string, include, exclude []string) bool {
+	defaultExts := []string{
+		".go", ".ts", ".tsx", ".js", ".jsx", ".py", ".rs", ".java", ".kt",
+		".c", ".cpp", ".h", ".hpp", ".cs", ".rb", ".php", ".swift", ".scala",
+		".vue", ".svelte", ".md", ".yaml", ".yml", ".json", ".toml", ".sql",
+	}
+
+	ext := strings.ToLower(filepath.Ext(path))
+
+	for _, pattern := range exclude {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return false
+		}
+		if matched, _ := filepath.Match(pattern, filepath.Base(path)); matched {
+			return false
+		}
+	}
+
+	if len(include) > 0 {
+		for _, pattern := range include {
+			if matched, _ := filepath.Match(pattern, path); matched {
+				return true
+			}
+			if matched, _ := filepath.Match(pattern, filepath.Base(path)); matched {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, e := range defaultExts {
+		if ext == e {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isBinaryContent(content []byte) bool {
+	checkLen := len(content)
+	if checkLen > 8192 {
+		checkLen = 8192
+	}
+
+	for i := 0; i < checkLen; i++ {
+		if content[i] == 0 {
+			return true
+		}
+	}
+	return false
 }
