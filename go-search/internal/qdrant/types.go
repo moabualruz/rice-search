@@ -91,6 +91,9 @@ type SearchRequest struct {
 	// WithPayload includes payload in results.
 	WithPayload bool
 
+	// WithVectors includes dense vectors in results (needed for postrank dedup/diversity).
+	WithVectors bool
+
 	// ScoreThreshold filters results below this score.
 	ScoreThreshold *float32
 }
@@ -120,6 +123,9 @@ type SearchResult struct {
 
 	// Payload contains the point metadata.
 	Payload PointPayload
+
+	// DenseVector is the dense embedding (only populated if WithVectors=true).
+	DenseVector []float32
 }
 
 // DeleteFilter defines conditions for deleting points.

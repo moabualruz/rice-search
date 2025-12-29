@@ -189,14 +189,16 @@ go test ./internal/search/... -v
 
 ## E2E Tests
 
-### What to E2E Test
+> ⚠️ **NOT IMPLEMENTED**: E2E tests are documented for future implementation. Currently only unit and integration tests are available.
 
-| Scenario | Test |
-|----------|------|
-| Full search flow | HTTP → Event → Search → Response |
-| Full index flow | HTTP → Chunk → Embed → Store |
-| CLI operations | Command line → API → Result |
-| Failure recovery | Kill service, restart, verify |
+### What to E2E Test (Planned)
+
+| Scenario | Test | Status |
+|----------|------|--------|
+| Full search flow | HTTP → Event → Search → Response | ❌ Not implemented |
+| Full index flow | HTTP → Chunk → Embed → Store | ❌ Not implemented |
+| CLI operations | Command line → API → Result | ❌ Not implemented |
+| Failure recovery | Kill service, restart, verify | ❌ Not implemented |
 
 ### Example: E2E Search Test
 

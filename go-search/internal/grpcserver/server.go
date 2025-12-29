@@ -482,6 +482,39 @@ func (s *Server) ListFiles(_ context.Context, req *pb.ListFilesRequest) (*pb.Lis
 	}, nil
 }
 
+// GetChunks retrieves all chunks for a specific file.
+func (s *Server) GetChunks(ctx context.Context, req *pb.GetChunksRequest) (*pb.GetChunksResponse, error) {
+	if req.Store == "" {
+		return nil, status.Error(codes.InvalidArgument, "store is required")
+	}
+	if req.Path == "" {
+		return nil, status.Error(codes.InvalidArgument, "path is required")
+	}
+
+	// Get chunks from Qdrant
+	chunks, err := s.qdrant.GetChunksByPath(ctx, req.Store, req.Path)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to get chunks: %v", err)
+	}
+
+	// Convert to protobuf
+	pbChunks := make([]*pb.Chunk, len(chunks))
+	for i, c := range chunks {
+		pbChunks[i] = &pb.Chunk{
+			Id:        c.ID,
+			StartLine: int32(c.Payload.StartLine),
+			EndLine:   int32(c.Payload.EndLine),
+			Content:   c.Payload.Content,
+		}
+	}
+
+	return &pb.GetChunksResponse{
+		Path:   req.Path,
+		Chunks: pbChunks,
+		Total:  int32(len(pbChunks)),
+	}, nil
+}
+
 // =============================================================================
 // Store Methods
 // =============================================================================

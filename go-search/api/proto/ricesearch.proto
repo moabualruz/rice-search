@@ -84,6 +84,9 @@ service RiceSearch {
   
   // File Browser
   rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
+  
+  // GetChunks retrieves all chunks for a specific file.
+  rpc GetChunks(GetChunksRequest) returns (GetChunksResponse);
 }
 
 // =============================================================================
@@ -815,6 +818,49 @@ message ListFilesResponse {
   
   // TotalPages is the total number of pages.
   int32 total_pages = 5;
+}
+
+// =============================================================================
+// Chunk Messages
+// =============================================================================
+
+message GetChunksRequest {
+  // Store is the target store.
+  string store = 1;
+  
+  // Path is the file path to get chunks for.
+  string path = 2;
+}
+
+message Chunk {
+  // ID is the chunk identifier.
+  string id = 1;
+  
+  // StartLine is the starting line number.
+  int32 start_line = 2;
+  
+  // EndLine is the ending line number.
+  int32 end_line = 3;
+  
+  // Content is the chunk content.
+  string content = 4;
+  
+  // Symbols are extracted symbols.
+  repeated string symbols = 5;
+  
+  // Hash is the chunk hash.
+  string hash = 6;
+}
+
+message GetChunksResponse {
+  // Path is the file path.
+  string path = 1;
+  
+  // Chunks are the file chunks.
+  repeated Chunk chunks = 2;
+  
+  // Total is the total number of chunks.
+  int32 total = 3;
 }
 
 // =============================================================================

@@ -18,19 +18,37 @@ import (
 	"github.com/ricesearch/rice-search/internal/search/postrank"
 )
 
+// MultiPassReranker defines the interface for multi-pass reranking.
+// This interface breaks the circular dependency with search/reranker package.
+type MultiPassReranker interface {
+	Rerank(ctx context.Context, query string, results []Result) (*MultiPassRerankResult, error)
+}
+
+// MultiPassRerankResult contains multi-pass reranking results and metadata.
+type MultiPassRerankResult struct {
+	Results         []Result
+	Pass1Applied    bool
+	Pass1LatencyMs  int64
+	Pass2Applied    bool
+	Pass2LatencyMs  int64
+	EarlyExit       bool
+	EarlyExitReason string
+}
+
 // Service provides search capabilities.
 type Service struct {
-	ml          ml.Service
-	qdrant      *qdrant.Client
-	querySvc    *query.Service
-	bus         bus.Bus
-	log         *logger.Logger
-	cfg         Config
-	postrank    *postrank.Pipeline
-	metrics     *metrics.Metrics
-	mu          sync.RWMutex
-	monitorSvc  MonitoringService
-	monitorOnce sync.Once
+	ml              ml.Service
+	qdrant          *qdrant.Client
+	querySvc        *query.Service
+	bus             bus.Bus
+	log             *logger.Logger
+	cfg             Config
+	postrank        *postrank.Pipeline
+	metrics         *metrics.Metrics
+	mu              sync.RWMutex
+	monitorSvc      MonitoringService
+	monitorOnce     sync.Once
+	multiPassRerank MultiPassReranker
 }
 
 // MonitoringService defines the interface for connection monitoring.
@@ -210,6 +228,10 @@ type Result struct {
 
 	// FusedScore is the combined RRF score (only when manual fusion is used).
 	FusedScore float32 `json:"fused_score,omitempty"`
+
+	// Embedding is the dense vector for this result (only populated for postrank operations).
+	// Not serialized to JSON to avoid large response sizes.
+	Embedding []float32 `json:"-"`
 }
 
 // ConnectionGroup represents results grouped by connection.
@@ -270,6 +292,52 @@ type SearchMetadata struct {
 
 	// RerankingApplied indicates if reranking was applied.
 	RerankingApplied bool `json:"reranking_applied"`
+
+	// Reranking contains multi-pass reranking metadata (if multi-pass was used).
+	Reranking *RerankingMetadata `json:"reranking,omitempty"`
+
+	// Postrank contains post-ranking pipeline metadata (dedup, diversity, aggregation).
+	Postrank *PostrankMetadata `json:"postrank,omitempty"`
+}
+
+// RerankingMetadata contains multi-pass reranking metadata.
+type RerankingMetadata struct {
+	Pass1Applied    bool   `json:"pass1_applied"`
+	Pass1LatencyMs  int64  `json:"pass1_latency_ms"`
+	Pass2Applied    bool   `json:"pass2_applied"`
+	Pass2LatencyMs  int64  `json:"pass2_latency_ms"`
+	EarlyExit       bool   `json:"early_exit"`
+	EarlyExitReason string `json:"early_exit_reason,omitempty"`
+}
+
+// PostrankMetadata contains post-ranking pipeline metadata.
+type PostrankMetadata struct {
+	Dedup        *DedupMetadata       `json:"dedup,omitempty"`
+	Diversity    *DiversityMetadata   `json:"diversity,omitempty"`
+	Aggregation  *AggregationMetadata `json:"aggregation,omitempty"`
+	TotalLatency int64                `json:"total_latency_ms"`
+}
+
+// DedupMetadata contains deduplication statistics.
+type DedupMetadata struct {
+	InputCount  int   `json:"input_count"`
+	OutputCount int   `json:"output_count"`
+	Removed     int   `json:"removed"`
+	LatencyMs   int64 `json:"latency_ms"`
+}
+
+// DiversityMetadata contains MMR diversity statistics.
+type DiversityMetadata struct {
+	Enabled      bool    `json:"enabled"`
+	AvgDiversity float32 `json:"avg_diversity"`
+	LatencyMs    int64   `json:"latency_ms"`
+}
+
+// AggregationMetadata contains file aggregation statistics.
+type AggregationMetadata struct {
+	UniqueFiles   int   `json:"unique_files"`
+	ChunksDropped int   `json:"chunks_dropped"`
+	LatencyMs     int64 `json:"latency_ms"`
 }
 
 // Search performs a hybrid search with optional reranking.
@@ -361,6 +429,9 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		prefetchLimit = uint64(rerankTopK)
 	}
 
+	// Determine if we need vectors for postrank (dedup/diversity require embeddings)
+	needVectors := cfg.EnableDedup || cfg.EnableDiversity
+
 	searchReq := qdrant.SearchRequest{
 		DenseVector:   denseVectors[0],
 		SparseIndices: sparseVectors[0].Indices,
@@ -368,6 +439,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		Limit:         prefetchLimit,
 		PrefetchLimit: prefetchLimit,
 		WithPayload:   true,
+		WithVectors:   needVectors,
 	}
 
 	// Apply filter
@@ -418,6 +490,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 				Symbols:      qr.Payload.Symbols,
 				Score:        qr.Score,
 				ConnectionID: qr.Payload.ConnectionID,
+				Embedding:    qr.DenseVector, // Include embedding for postrank
 			}
 			if req.IncludeContent {
 				results[i].Content = qr.Payload.Content
@@ -426,6 +499,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		s.log.Debug("Used Qdrant native RRF fusion",
 			"sparse_weight", sparseWeight,
 			"dense_weight", denseWeight,
+			"with_vectors", needVectors,
 		)
 	} else {
 		// Use manual RRF fusion with custom weights
@@ -478,6 +552,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 				SparseScore:  fr.SparseScore,
 				DenseScore:   fr.DenseScore,
 				FusedScore:   fr.FusedScore,
+				Embedding:    fr.Result.DenseVector, // Include embedding for postrank
 			}
 			if req.IncludeContent {
 				results[i].Content = fr.Result.Payload.Content
@@ -489,6 +564,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 			"sparse_results", len(sparseResults),
 			"dense_results", len(denseResults),
 			"fused_results", len(fusedResults),
+			"with_vectors", needVectors,
 		)
 	}
 
@@ -501,33 +577,149 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	if enableReranking && len(results) > 0 {
 		rerankStart := time.Now()
 
-		// Get contents for reranking
-		documents := make([]string, len(results))
-		for i := range results {
-			documents[i] = results[i].Content
+		// Check if multi-pass reranker is available
+		s.mu.RLock()
+		multiPass := s.multiPassRerank
+		s.mu.RUnlock()
+
+		if multiPass != nil {
+			// Use multi-pass reranker (preferred)
+			mpResult, err := multiPass.Rerank(ctx, req.Query, results)
+			if err != nil {
+				s.log.Warn("Multi-pass reranking failed, using original order", "error", err)
+			} else {
+				results = mpResult.Results
+				rerankTime := time.Since(rerankStart)
+				metadata.RerankTimeMs = rerankTime.Milliseconds()
+				metadata.CandidatesReranked = len(results)
+				metadata.RerankingApplied = mpResult.Pass1Applied || mpResult.Pass2Applied
+				metadata.Reranking = &RerankingMetadata{
+					Pass1Applied:    mpResult.Pass1Applied,
+					Pass1LatencyMs:  mpResult.Pass1LatencyMs,
+					Pass2Applied:    mpResult.Pass2Applied,
+					Pass2LatencyMs:  mpResult.Pass2LatencyMs,
+					EarlyExit:       mpResult.EarlyExit,
+					EarlyExitReason: mpResult.EarlyExitReason,
+				}
+
+				s.log.Debug("Multi-pass reranking complete",
+					"pass1", mpResult.Pass1Applied,
+					"pass2", mpResult.Pass2Applied,
+					"early_exit", mpResult.EarlyExit,
+					"latency_ms", rerankTime.Milliseconds(),
+				)
+
+				// Record reranking stage metric
+				if s.metrics != nil {
+					s.metrics.RecordSearchStage(req.Store, "rerank", rerankTime.Milliseconds())
+				}
+			}
+		} else {
+			// Fall back to single-pass reranking via event bus
+			documents := make([]string, len(results))
+			for i := range results {
+				documents[i] = results[i].Content
+			}
+
+			ranked, err := s.rerankViaEventBus(ctx, req.Query, documents, topK)
+			if err != nil {
+				s.log.Warn("Reranking failed, using original order", "error", err)
+			} else {
+				// Reorder results based on rerank scores
+				rerankedResults := make([]Result, len(ranked))
+				for i, r := range ranked {
+					rerankedResults[i] = results[r.Index]
+					rerankedResults[i].RerankScore = &r.Score
+				}
+				results = rerankedResults
+
+				rerankTime := time.Since(rerankStart)
+				metadata.RerankTimeMs = rerankTime.Milliseconds()
+				metadata.CandidatesReranked = len(documents)
+				metadata.RerankingApplied = true
+
+				// Record reranking stage metric
+				if s.metrics != nil {
+					s.metrics.RecordSearchStage(req.Store, "rerank", rerankTime.Milliseconds())
+				}
+			}
+		}
+	}
+
+	// Apply postrank pipeline (dedup, diversity, aggregation)
+	if s.postrank != nil && len(results) > 0 && (cfg.EnableDedup || cfg.EnableDiversity || cfg.GroupByFile) {
+		postrankStart := time.Now()
+
+		// Convert results to postrank format
+		postrankInput := make([]postrank.ResultWithEmbedding, len(results))
+		for i, r := range results {
+			postrankInput[i] = postrank.ResultWithEmbedding{
+				ID:           r.ID,
+				Path:         r.Path,
+				Language:     r.Language,
+				StartLine:    r.StartLine,
+				EndLine:      r.EndLine,
+				Content:      r.Content,
+				Symbols:      r.Symbols,
+				Score:        r.Score,
+				RerankScore:  r.RerankScore,
+				ConnectionID: r.ConnectionID,
+				Embedding:    r.Embedding,
+			}
 		}
 
-		// Rerank via event bus
-		ranked, err := s.rerankViaEventBus(ctx, req.Query, documents, topK)
+		prResult, err := s.postrank.Process(ctx, postrankInput, topK)
 		if err != nil {
-			s.log.Warn("Reranking failed, using original order", "error", err)
+			s.log.Warn("Postrank pipeline failed, using reranked results", "error", err)
 		} else {
-			// Reorder results based on rerank scores
-			rerankedResults := make([]Result, len(ranked))
-			for i, r := range ranked {
-				rerankedResults[i] = results[r.Index]
-				rerankedResults[i].RerankScore = &r.Score
+			// Convert back to Result type
+			results = make([]Result, len(prResult.Results))
+			for i, pr := range prResult.Results {
+				results[i] = Result{
+					ID:           pr.ID,
+					Path:         pr.Path,
+					Language:     pr.Language,
+					StartLine:    pr.StartLine,
+					EndLine:      pr.EndLine,
+					Content:      pr.Content,
+					Symbols:      pr.Symbols,
+					Score:        pr.Score,
+					RerankScore:  pr.RerankScore,
+					ConnectionID: pr.ConnectionID,
+					Embedding:    pr.Embedding,
+				}
 			}
-			results = rerankedResults
 
-			rerankTime := time.Since(rerankStart)
-			metadata.RerankTimeMs = rerankTime.Milliseconds()
-			metadata.CandidatesReranked = len(documents)
-			metadata.RerankingApplied = true
+			postrankTime := time.Since(postrankStart)
+			metadata.Postrank = &PostrankMetadata{
+				Dedup: &DedupMetadata{
+					InputCount:  prResult.Dedup.InputCount,
+					OutputCount: prResult.Dedup.OutputCount,
+					Removed:     prResult.Dedup.Removed,
+					LatencyMs:   prResult.Dedup.LatencyMs,
+				},
+				Diversity: &DiversityMetadata{
+					Enabled:      cfg.EnableDiversity,
+					AvgDiversity: prResult.Diversity.AvgDiversity,
+					LatencyMs:    prResult.Diversity.LatencyMs,
+				},
+				Aggregation: &AggregationMetadata{
+					UniqueFiles:   prResult.Aggregation.UniqueFiles,
+					ChunksDropped: prResult.Aggregation.ChunksDropped,
+					LatencyMs:     prResult.Aggregation.LatencyMs,
+				},
+				TotalLatency: prResult.TotalLatency,
+			}
 
-			// Record reranking stage metric
+			s.log.Debug("Postrank pipeline complete",
+				"dedup_removed", prResult.Dedup.Removed,
+				"diversity_avg", prResult.Diversity.AvgDiversity,
+				"latency_ms", postrankTime.Milliseconds(),
+			)
+
+			// Record postrank stage metric
 			if s.metrics != nil {
-				s.metrics.RecordSearchStage(req.Store, "rerank", rerankTime.Milliseconds())
+				s.metrics.RecordSearchStage(req.Store, "postrank", postrankTime.Milliseconds())
 			}
 		}
 	}
@@ -934,6 +1126,17 @@ func (s *Service) SetMonitoringService(monSvc MonitoringService) {
 			s.log.Info("Monitoring service attached to search service")
 		}
 	})
+}
+
+// SetMultiPassReranker sets the multi-pass reranker for enhanced reranking.
+// This is called during server initialization to break circular dependencies.
+func (s *Service) SetMultiPassReranker(reranker MultiPassReranker) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.multiPassRerank = reranker
+	if reranker != nil {
+		s.log.Info("Multi-pass reranker attached to search service")
+	}
 }
 
 // recordSearchActivity records search activity for connection monitoring.

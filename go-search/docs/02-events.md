@@ -1,10 +1,12 @@
 # Event System
 
+> **⚠️ IMPLEMENTATION STATUS**: Only `MemoryBus` is fully implemented and production-ready. `KafkaBus` exists but is **NOT FULLY TESTED**. `NATSBus` and `RedisBus` are **NOT IMPLEMENTED** (see factory.go lines 34-38).
+
 ## Overview
 
 All internal communication happens via events. The event bus is pluggable:
-- **Single process**: Go channels (default, zero latency)
-- **Distributed**: Kafka / NATS / Redis Streams (configurable)
+- **Single process**: Go channels (default, zero latency) - **✅ IMPLEMENTED**
+- **Distributed**: Kafka / NATS / Redis Streams (configurable) - **⚠️ PARTIAL/NOT IMPLEMENTED**
 
 ---
 
@@ -50,16 +52,21 @@ type EventBase struct {
 ### Naming Convention
 
 ```
-{domain}.{entity}.{action}
+{domain}.{action}[.{suffix}]
 
 Examples:
 - ml.embed.request
 - ml.embed.response
-- search.query.request
-- index.document.created
+- search.request
+- index.chunk.created
+- connection.registered
 ```
 
+**Note:** The actual implementation uses a simpler pattern than `{domain}.{entity}.{action}`. Most topics are just `{domain}.{action}` (e.g., `search.request` not `search.query.request`).
+
 ### Topic Registry
+
+**Actual topics from code (bus.go):**
 
 | Topic | Publisher | Subscriber | Pattern |
 |-------|-----------|------------|---------|
@@ -69,13 +76,20 @@ Examples:
 | `ml.sparse.response` | ML | API, Search | Request/Reply |
 | `ml.rerank.request` | Search | ML | Request/Reply |
 | `ml.rerank.response` | ML | Search | Request/Reply |
-| `search.query.request` | API | Search | Request/Reply |
-| `search.query.response` | Search | API | Request/Reply |
-| `index.request` | API | Search | Request/Reply |
-| `index.progress` | Search | API | Fire-and-forget |
-| `index.complete` | Search | API, External | Fire-and-forget |
-| `store.created` | Search | API, External | Fire-and-forget |
-| `store.deleted` | Search | API, External | Fire-and-forget |
+| `search.request` | API | Search | Request/Reply |
+| `search.response` | Search | API | Request/Reply |
+| `index.request` | API | Index | Request/Reply |
+| `index.response` | Index | API | Request/Reply |
+| `index.chunk.created` | Index | Metrics | Fire-and-forget |
+| `store.created` | Store | API, External | Fire-and-forget |
+| `store.deleted` | Store | API, External | Fire-and-forget |
+| `settings.changed` | Settings | Services | Fire-and-forget |
+| `model.downloaded` | ML | Admin | Fire-and-forget |
+| `model.validated` | ML | Admin | Fire-and-forget |
+| `connection.registered` | Connection | Admin | Fire-and-forget |
+| `connection.unregistered` | Connection | Admin | Fire-and-forget |
+| `connection.activity` | Connection | Metrics | Fire-and-forget |
+| `alert.triggered` | Any | Monitoring | Fire-and-forget |
 
 ---
 
@@ -311,9 +325,9 @@ Request document reranking.
 
 ## Search Events
 
-### search.query.request
+### search.request
 
-Execute hybrid search.
+Execute hybrid search. **Note:** The actual topic is `search.request` (not `search.query.request`).
 
 ```json
 {
@@ -350,7 +364,7 @@ Execute hybrid search.
 | options.enable_reranking | bool | No | Enable reranking (default: true) |
 | options.rerank_top_k | int | No | Candidates for reranking (default: 30) |
 
-### search.query.response
+### search.response
 
 ```json
 {
@@ -493,20 +507,21 @@ Indexing finished.
 
 ## Event Bus Implementations
 
-### GoChanBus (Default)
+### MemoryBus (Default) - ✅ IMPLEMENTED
 
-For single-process deployment.
+For single-process deployment. **This is the only production-ready implementation.**
 
 | Aspect | Value |
 |--------|-------|
 | Latency | ~0μs |
 | Persistence | No |
 | Ordering | FIFO per topic |
-| Use case | Monolith, development |
+| Use case | Monolith, development, production |
+| Status | **✅ Fully implemented and tested** |
 
-### KafkaBus
+### KafkaBus - ⚠️ PARTIAL IMPLEMENTATION
 
-For distributed deployment with persistence.
+For distributed deployment with persistence. **Code exists but NOT fully tested or production-ready.**
 
 | Aspect | Value |
 |--------|-------|
@@ -514,47 +529,47 @@ For distributed deployment with persistence.
 | Persistence | Yes |
 | Ordering | Per partition |
 | Use case | Production, event replay |
+| Status | **⚠️ Code exists (kafka.go) but NOT TESTED** |
+| Note | Uses IBM/sarama library |
 
-### NATSBus
+### NATSBus - ❌ NOT IMPLEMENTED
 
-For lightweight distributed deployment.
-
-| Aspect | Value |
-|--------|-------|
-| Latency | 0.5-1ms |
-| Persistence | Optional (JetStream) |
-| Ordering | Per subject |
-| Use case | Cloud-native, microservices |
-
-### RedisBus
-
-For deployments already using Redis.
+For lightweight distributed deployment. **Returns error: "NATS bus not implemented yet"** (factory.go:35)
 
 | Aspect | Value |
 |--------|-------|
-| Latency | 1-2ms |
-| Persistence | Yes (Streams) |
-| Ordering | Per stream |
-| Use case | Existing Redis infrastructure |
+| Status | **❌ NOT IMPLEMENTED** |
+| Error | `"NATS bus not implemented yet"` |
+
+### RedisBus - ❌ NOT IMPLEMENTED
+
+For deployments already using Redis. **Returns error: "Redis Streams bus not implemented yet"** (factory.go:38)
+
+| Aspect | Value |
+|--------|-------|
+| Status | **❌ NOT IMPLEMENTED** |
+| Error | `"Redis Streams bus not implemented yet"` |
 
 ---
 
 ## Configuration
 
 ```bash
-# Single process (default)
+# Single process (default) - ✅ WORKS
 EVENT_BUS=memory
 
-# Kafka
+# Kafka - ⚠️ CODE EXISTS BUT UNTESTED
 EVENT_BUS=kafka
 KAFKA_BROKERS=localhost:9092
 KAFKA_CONSUMER_GROUP=rice-search
 
-# NATS
+# NATS - ❌ NOT IMPLEMENTED (will return error)
 EVENT_BUS=nats
 NATS_URL=nats://localhost:4222
 
-# Redis
+# Redis - ❌ NOT IMPLEMENTED (will return error)
 EVENT_BUS=redis
 REDIS_URL=redis://localhost:6379
 ```
+
+**Recommendation:** Use `EVENT_BUS=memory` (default) for all deployments until distributed bus implementations are fully tested.

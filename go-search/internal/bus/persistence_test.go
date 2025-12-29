@@ -207,7 +207,7 @@ func TestLoggedBus(t *testing.T) {
 		}
 		defer logger.Close()
 
-		loggedBus := NewLoggedBus(innerBus, logger)
+		loggedBus := NewLoggedBus(innerBus, logger, nil)
 		defer loggedBus.Close()
 
 		event := Event{
@@ -249,7 +249,7 @@ func TestLoggedBus(t *testing.T) {
 		}
 		defer logger.Close()
 
-		loggedBus := NewLoggedBus(innerBus, logger)
+		loggedBus := NewLoggedBus(innerBus, logger, nil)
 		defer loggedBus.Close()
 
 		ctx := context.Background()

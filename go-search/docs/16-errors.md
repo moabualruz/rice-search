@@ -31,14 +31,11 @@ func (e *Error) Unwrap() error {
 | Code | HTTP | Description |
 |------|------|-------------|
 | `INVALID_REQUEST` | 400 | Malformed JSON, missing body |
-| `VALIDATION_FAILED` | 400 | Field validation failed |
-| `INVALID_QUERY` | 400 | Query string invalid |
-| `INVALID_PATH` | 400 | Path format invalid |
+| `VALIDATION_ERROR` | 400 | Field validation failed |
 | `UNAUTHORIZED` | 401 | Missing or invalid auth |
 | `FORBIDDEN` | 403 | Insufficient permissions |
-| `STORE_NOT_FOUND` | 404 | Store doesn't exist |
-| `DOCUMENT_NOT_FOUND` | 404 | Document not found |
-| `STORE_EXISTS` | 409 | Store already exists |
+| `NOT_FOUND` | 404 | Resource not found (store, document, etc.) |
+| `ALREADY_EXISTS` | 409 | Resource already exists (store, etc.) |
 | `RATE_LIMITED` | 429 | Too many requests |
 
 ### Server Errors (5xx)
@@ -48,8 +45,7 @@ func (e *Error) Unwrap() error {
 | `INTERNAL_ERROR` | 500 | Unexpected server error |
 | `ML_ERROR` | 500 | ML inference failed |
 | `QDRANT_ERROR` | 500 | Qdrant operation failed |
-| `INDEX_ERROR` | 500 | Indexing failed |
-| `BUS_ERROR` | 500 | Event bus error |
+| `INDEXING_ERROR` | 500 | Indexing failed |
 | `SERVICE_UNAVAILABLE` | 503 | Dependency unavailable |
 | `TIMEOUT` | 504 | Operation timed out |
 
@@ -60,7 +56,7 @@ func (e *Error) Unwrap() error {
 ```json
 {
     "error": {
-        "code": "VALIDATION_FAILED",
+        "code": "VALIDATION_ERROR",
         "message": "Request validation failed",
         "details": {
             "field": "query",
@@ -78,7 +74,7 @@ func (e *Error) Unwrap() error {
 ```json
 {
     "error": {
-        "code": "VALIDATION_FAILED",
+        "code": "VALIDATION_ERROR",
         "message": "Multiple validation errors",
         "details": {
             "errors": [
@@ -131,7 +127,7 @@ func ErrServiceUnavailable(service string) *Error
 ```json
 {
     "error": {
-        "code": "VALIDATION_FAILED",
+        "code": "VALIDATION_ERROR",
         "message": "Field 'top_k' must be between 1 and 1000",
         "details": {
             "field": "top_k",
@@ -155,8 +151,8 @@ func ErrServiceUnavailable(service string) *Error
 | `SERVICE_UNAVAILABLE` | Yes | Exponential backoff |
 | `QDRANT_ERROR` | Sometimes | Retry connection errors |
 | `ML_ERROR` | Sometimes | Retry OOM errors |
-| `VALIDATION_FAILED` | No | Fix request |
-| `STORE_NOT_FOUND` | No | Create store first |
+| `VALIDATION_ERROR` | No | Fix request |
+| `NOT_FOUND` | No | Create resource first |
 
 ### Retry Headers
 
@@ -280,6 +276,8 @@ func SafeHandler(handler Handler) Handler {
 ---
 
 ## Circuit Breaker
+
+> ⚠️ **NOT IMPLEMENTED** - Circuit breaker is documented but not yet implemented in the codebase.
 
 For external dependencies (Qdrant, ML models).
 

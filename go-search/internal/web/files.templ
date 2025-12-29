@@ -298,7 +298,7 @@ templ FilesTable(data FilesPageData) {
 				</thead>
 				<tbody class="bg-white divide-y divide-gray-200">
 					for _, file := range data.Files {
-						@FileRow(file)
+						@FileRow(file, data.Store)
 					}
 				</tbody>
 			</table>
@@ -307,7 +307,7 @@ templ FilesTable(data FilesPageData) {
 }
 
 // FileRow renders a single file row
-templ FileRow(file IndexedFileInfo) {
+templ FileRow(file IndexedFileInfo, store string) {
 	<tr class="hover:bg-gray-50">
 		<td class="px-6 py-4 whitespace-nowrap">
 			<input type="checkbox" class="file-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500" value={ file.Path }/>
@@ -356,14 +356,14 @@ templ FileRow(file IndexedFileInfo) {
 			>
 				View
 			</button>
-			<button
-				hx-delete={ fmt.Sprintf("/files/%s", file.Path) }
-				hx-confirm={ fmt.Sprintf("Delete %s? This cannot be undone.", file.Path) }
-				class="text-red-600 hover:text-red-900"
-				title="Delete file"
-			>
-				Delete
-			</button>
+		<button
+			hx-delete={ fmt.Sprintf("/files/%s?store=%s", file.Path, store) }
+			hx-confirm={ fmt.Sprintf("Delete %s? This cannot be undone.", file.Path) }
+			class="text-red-600 hover:text-red-900"
+			title="Delete file"
+		>
+			Delete
+		</button>
 		</td>
 	</tr>
 }

@@ -1,5 +1,7 @@
 # Migration Guide
 
+> ⚠️ **NOT IMPLEMENTED**: This migration guide documents the planned migration path from NestJS to Go. The migration tooling and compatibility modes described are not yet implemented.
+
 ## Overview
 
 Migrating from the current NestJS + Milvus + Infinity architecture to Go + Qdrant.
@@ -10,7 +12,7 @@ Migrating from the current NestJS + Milvus + Infinity architecture to Go + Qdran
 
 | Component | Current | Go Edition |
 |-----------|---------|------------|
-| API Server | NestJS (TypeScript) | Echo (Go) |
+| API Server | NestJS (TypeScript) | net/http (Go) |
 | Vector DB | Milvus (4 containers) | Qdrant (1 container) |
 | BM25 Search | Tantivy CLI | SPLADE vectors |
 | Embeddings | Infinity (Python) | ONNX Runtime (Go) |
@@ -75,7 +77,7 @@ docker run -d \
 ./rice-search models download
 
 # Start Go Edition (different port)
-./rice-search serve --port 8090
+./rice-search-server --http-port 8090
 ```
 
 ### Step 2: Export Current Data
@@ -308,7 +310,7 @@ rm -rf ./data/tantivy
 
 ```bash
 # Enable compatibility mode (omits wrapper)
-COMPAT_MODE=v1 ./rice-search serve
+COMPAT_MODE=v1 ./rice-search-server
 ```
 
 ---

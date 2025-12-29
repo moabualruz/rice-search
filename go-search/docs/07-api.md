@@ -43,7 +43,7 @@ Authorization: Bearer eyJhbG...
 
 ## Common Response Format
 
-> **Note**: Current implementation returns responses directly without wrappers. The `data`/`meta` wrapper pattern shown below is a design goal but NOT YET IMPLEMENTED.
+> **Note**: Current implementation returns responses directly without wrappers. The `data`/`meta` wrapper pattern shown in some examples below is a design goal but NOT YET IMPLEMENTED. Responses are returned flat.
 
 ### Success (Current - Direct Response)
 
@@ -51,11 +51,18 @@ Authorization: Bearer eyJhbG...
 {
     "query": "authentication handler",
     "store": "default",
-    "results": [...]
+    "results": [...],
+    "total": 20,
+    "metadata": {
+        "search_time_ms": 65,
+        "reranking_applied": true
+    }
 }
 ```
 
 ### Success (Future - With Wrapper)
+
+> **NOT IMPLEMENTED**: The wrapper pattern below is a design goal for future versions.
 
 ```json
 {

@@ -11,6 +11,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pb "github.com/ricesearch/rice-search/api/proto/ricesearchpb"
+	"github.com/ricesearch/rice-search/internal/index"
 	"github.com/ricesearch/rice-search/internal/search"
 	"github.com/ricesearch/rice-search/internal/store"
 )
@@ -292,9 +293,176 @@ func (a *LocalGRPCAdapter) Version(ctx context.Context, req *pb.VersionRequest) 
 	}, nil
 }
 
+// Delete removes documents from the index.
+func (a *LocalGRPCAdapter) Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error) {
+	if req.Store == "" {
+		return &pb.DeleteResponse{}, fmt.Errorf("store is required")
+	}
+
+	var deleted int32
+
+	if len(req.Paths) > 0 {
+		if err := a.server.index.Delete(ctx, req.Store, req.Paths); err != nil {
+			return nil, err
+		}
+		deleted = int32(len(req.Paths))
+	}
+
+	if req.PathPrefix != "" {
+		if err := a.server.index.DeleteByPrefix(ctx, req.Store, req.PathPrefix); err != nil {
+			return nil, err
+		}
+	}
+
+	return &pb.DeleteResponse{Deleted: deleted}, nil
+}
+
+// GetChunks retrieves all chunks for a specific file.
+func (a *LocalGRPCAdapter) GetChunks(ctx context.Context, req *pb.GetChunksRequest) (*pb.GetChunksResponse, error) {
+	if req.Store == "" {
+		req.Store = "default"
+	}
+	if req.Path == "" {
+		return &pb.GetChunksResponse{}, fmt.Errorf("path is required")
+	}
+
+	// Get chunks from Qdrant
+	chunks, err := a.server.qdrant.GetChunksByPath(ctx, req.Store, req.Path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chunks: %w", err)
+	}
+
+	// Convert to protobuf
+	pbChunks := make([]*pb.Chunk, len(chunks))
+	for i, c := range chunks {
+		pbChunks[i] = &pb.Chunk{
+			Id:        c.ID,
+			StartLine: int32(c.Payload.StartLine),
+			EndLine:   int32(c.Payload.EndLine),
+			Content:   c.Payload.Content,
+		}
+	}
+
+	return &pb.GetChunksResponse{
+		Path:   req.Path,
+		Chunks: pbChunks,
+		Total:  int32(len(pbChunks)),
+	}, nil
+}
+
+// IndexBatch indexes a batch of documents.
+func (a *LocalGRPCAdapter) IndexBatch(ctx context.Context, req *pb.IndexBatchRequest) (*pb.IndexResponse, error) {
+	if req.Store == "" {
+		req.Store = "default"
+	}
+
+	// Convert protobuf documents to index documents
+	docs := make([]*index.Document, len(req.Documents))
+	for i, d := range req.Documents {
+		doc := index.NewDocument(d.Path, d.Content)
+		if d.Language != "" {
+			doc.Language = d.Language
+		}
+		docs[i] = doc
+	}
+
+	// Index the documents
+	result, err := a.server.index.Index(ctx, index.IndexRequest{
+		Store:     req.Store,
+		Documents: docs,
+		Force:     req.Force,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert result to protobuf
+	return indexResultToProto(result), nil
+}
+
+// Sync removes documents that no longer exist.
+func (a *LocalGRPCAdapter) Sync(ctx context.Context, req *pb.SyncRequest) (*pb.SyncResponse, error) {
+	if req.Store == "" {
+		return &pb.SyncResponse{}, fmt.Errorf("store is required")
+	}
+
+	removed, err := a.server.index.Sync(ctx, req.Store, req.CurrentPaths)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.SyncResponse{Removed: int32(removed)}, nil
+}
+
+// Reindex clears and rebuilds the entire index.
+func (a *LocalGRPCAdapter) Reindex(ctx context.Context, req *pb.ReindexRequest) (*pb.IndexResponse, error) {
+	if req.Store == "" {
+		req.Store = "default"
+	}
+
+	// Convert protobuf documents to index documents
+	docs := make([]*index.Document, len(req.Documents))
+	for i, d := range req.Documents {
+		doc := index.NewDocument(d.Path, d.Content)
+		if d.Language != "" {
+			doc.Language = d.Language
+		}
+		docs[i] = doc
+	}
+
+	// Reindex
+	result, err := a.server.index.Reindex(ctx, index.IndexRequest{
+		Store:     req.Store,
+		Documents: docs,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return indexResultToProto(result), nil
+}
+
+// GetIndexStats returns indexing statistics.
+func (a *LocalGRPCAdapter) GetIndexStats(ctx context.Context, req *pb.GetIndexStatsRequest) (*pb.IndexStats, error) {
+	if req.Store == "" {
+		return &pb.IndexStats{}, fmt.Errorf("store is required")
+	}
+
+	stats, err := a.server.index.GetStats(ctx, req.Store)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.IndexStats{
+		Store:       req.Store,
+		TotalChunks: int32(stats.TotalChunks),
+		TotalFiles:  int32(stats.TotalFiles),
+	}, nil
+}
+
 // =============================================================================
 // Helpers
 // =============================================================================
+
+func indexResultToProto(result *index.IndexResult) *pb.IndexResponse {
+	errors := make([]*pb.IndexError, len(result.Errors))
+	for i, e := range result.Errors {
+		errors[i] = &pb.IndexError{
+			Path:    e.Path,
+			Message: e.Message,
+		}
+	}
+
+	return &pb.IndexResponse{
+		Store:       result.Store,
+		Indexed:     int32(result.Indexed),
+		Skipped:     int32(result.Skipped),
+		Failed:      int32(result.Failed),
+		ChunksTotal: int32(result.ChunksTotal),
+		Duration:    durationpb.New(result.Duration),
+		Errors:      errors,
+	}
+}
 
 func storeToProto(st *store.Store) *pb.Store {
 	pbStore := &pb.Store{

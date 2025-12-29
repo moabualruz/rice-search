@@ -1,11 +1,13 @@
 # Implementation Status
 
 > **Last Updated**: 2025-12-29  
-> **Status**: ✅ **100% COMPLETE** (All Features Implemented)
+> **Status**: ✅ **~95% COMPLETE** (Core Features Implemented)
 
 ## Executive Summary
 
-The go-search implementation is **fully complete** with all planned features implemented. The system provides a pure Go code search platform with hybrid retrieval (BM25-like sparse + semantic dense vectors), configurable RRF fusion, multi-pass neural reranking, post-rank pipeline (dedup, diversity, aggregation), and connection-scoped search capabilities.
+The go-search implementation is **production-ready** with core features implemented. The system provides a pure Go code search platform with hybrid retrieval (BM25-like sparse + semantic dense vectors), configurable RRF fusion, multi-pass neural reranking, post-rank pipeline (dedup, diversity, aggregation), and connection-scoped search capabilities.
+
+**Note**: Some advanced features (microservices mode, Kafka/NATS bus, FP16/INT8 models, E2E tests) are documented but not yet implemented.
 
 ---
 
@@ -22,10 +24,10 @@ The go-search implementation is **fully complete** with all planned features imp
 | **Settings System** | ✅ Complete | 100% | 80+ settings, export/import, rollback, audit |
 | **Connection Tracking** | ✅ Complete | 100% | Full lifecycle, monitoring, audit |
 | **Stats & Monitoring** | ✅ Complete | 100% | 40+ metrics, Prometheus compatible |
-| **Event Architecture** | ✅ Complete | 100% | MemoryBus + KafkaBus + persistence |
+| **Event Architecture** | ✅ Complete | 85% | MemoryBus complete; Kafka/NATS/Redis NOT IMPLEMENTED |
 | **Search Service** | ✅ Complete | 100% | Hybrid search, multi-pass reranking, post-rank |
 
-**Overall: 100% Complete** - All planned features implemented.
+**Overall: ~95% Complete** - Core features implemented, some advanced features pending.
 
 ---
 
@@ -208,7 +210,7 @@ The go-search implementation is **fully complete** with all planned features imp
 
 ### 11. Search Service (`internal/search/`)
 
-**Status**: ✅ Core Complete (90%)
+**Status**: ✅ Complete (100%)
 
 | Feature | Status |
 |---------|--------|
@@ -220,9 +222,9 @@ The go-search implementation is **fully complete** with all planned features imp
 | Connection Scoping | ✅ Automatic + override |
 | File Grouping | ✅ Complete |
 | Query Understanding | ✅ Integrated |
-| **Multi-Pass Reranking** | ❌ Not implemented |
-| **Post-Rank Pipeline** | ❌ Missing (dedup, diversity, MMR) |
-| **Configurable Fusion** | ⚠️ Tracked but not applied |
+| **Multi-Pass Reranking** | ✅ Complete (with early exit) |
+| **Post-Rank Pipeline** | ✅ Complete (dedup, diversity, aggregation) |
+| **Configurable Fusion** | ✅ RRF weights applied |
 
 ---
 
@@ -246,8 +248,8 @@ The go-search implementation is **fully complete** with all planned features imp
 | BM25 | Tantivy sidecar (Rust) | SPLADE sparse vectors |
 | Deployment | 6+ containers, 12GB+ | 2 containers, ~4GB |
 | Connection Tracking | ❌ None | ✅ Full |
-| Multi-Pass Reranking | ✅ Yes | ❌ No |
-| Post-Rank Pipeline | ✅ Dedup/Diversity/MMR | ❌ No |
+| Multi-Pass Reranking | ✅ Yes | ✅ Yes (with early exit) |
+| Post-Rank Pipeline | ✅ Dedup/Diversity/MMR | ✅ Dedup/Diversity/Aggregation |
 
 ---
 
@@ -284,7 +286,7 @@ docker-compose -f deployments/docker-compose.dev.yml up -d
 ./rice-search models download
 
 # 3. Start server
-./rice-search serve
+./rice-search-server
 
 # 4. Index code
 ./rice-search index ./src -s myproject

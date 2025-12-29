@@ -59,12 +59,13 @@ A source file to be indexed.
 
 ```go
 type Document struct {
-    Path     string   `json:"path"`     // File path (unique within store)
-    Content  string   `json:"content"`  // File content
-    Language string   `json:"language"` // Programming language
-    Symbols  []string `json:"symbols"`  // Extracted symbols (functions, classes)
-    Hash     string   `json:"hash"`     // Content hash (SHA-256)
-    Size     int64    `json:"size"`     // Content size (bytes)
+    Path         string   `json:"path"`                    // File path (unique within store)
+    Content      string   `json:"content"`                 // File content
+    Language     string   `json:"language"`                // Programming language
+    Symbols      []string `json:"symbols"`                 // Extracted symbols (functions, classes)
+    Hash         string   `json:"hash"`                    // Content hash (SHA-256)
+    Size         int64    `json:"size"`                    // Content size (bytes)
+    ConnectionID string   `json:"connection_id,omitempty"` // Originating connection (optional)
 }
 ```
 
@@ -104,20 +105,21 @@ A searchable unit extracted from a document.
 
 ```go
 type Chunk struct {
-    ID          string    `json:"id"`           // Unique chunk ID
-    DocumentID  string    `json:"document_id"`  // Parent document ID (path hash)
-    Store       string    `json:"store"`        // Store name
-    Path        string    `json:"path"`         // Source file path
-    Language    string    `json:"language"`     // Programming language
-    Content     string    `json:"content"`      // Chunk content
-    Symbols     []string  `json:"symbols"`      // Symbols in this chunk
-    StartLine   int       `json:"start_line"`   // Starting line number (1-indexed)
-    EndLine     int       `json:"end_line"`     // Ending line number (1-indexed)
-    StartChar   int       `json:"start_char"`   // Starting character offset
-    EndChar     int       `json:"end_char"`     // Ending character offset
-    TokenCount  int       `json:"token_count"`  // Number of tokens
-    Hash        string    `json:"hash"`         // Content hash
-    IndexedAt   time.Time `json:"indexed_at"`   // When indexed
+    ID           string    `json:"id"`                      // Unique chunk ID
+    DocumentID   string    `json:"document_id"`             // Parent document ID (path hash)
+    Store        string    `json:"store"`                   // Store name
+    Path         string    `json:"path"`                    // Source file path
+    Language     string    `json:"language"`                // Programming language
+    Content      string    `json:"content"`                 // Chunk content
+    Symbols      []string  `json:"symbols"`                 // Symbols in this chunk
+    StartLine    int       `json:"start_line"`              // Starting line number (1-indexed)
+    EndLine      int       `json:"end_line"`                // Ending line number (1-indexed)
+    StartChar    int       `json:"start_char"`              // Starting character offset
+    EndChar      int       `json:"end_char"`                // Ending character offset
+    TokenCount   int       `json:"token_count"`             // Number of tokens
+    Hash         string    `json:"hash"`                    // Content hash
+    IndexedAt    time.Time `json:"indexed_at"`              // When indexed
+    ConnectionID string    `json:"connection_id,omitempty"` // Originating connection (optional)
 }
 ```
 
@@ -199,13 +201,14 @@ type Filter struct {
 
 ```go
 type SearchResult struct {
-    ID          string   `json:"id"`
-    Path        string   `json:"path"`
-    Language    string   `json:"language"`
-    StartLine   int      `json:"start_line"`
-    EndLine     int      `json:"end_line"`
-    Content     string   `json:"content,omitempty"`
-    Symbols     []string `json:"symbols,omitempty"`
+    ID           string   `json:"id"`
+    Path         string   `json:"path"`
+    Language     string   `json:"language"`
+    StartLine    int      `json:"start_line"`
+    EndLine      int      `json:"end_line"`
+    Content      string   `json:"content,omitempty"`
+    Symbols      []string `json:"symbols,omitempty"`
+    ConnectionID string   `json:"connection_id,omitempty"` // Connection that indexed this chunk
     
     // Scoring
     Score       float32  `json:"score"`                // Final fused score
@@ -245,20 +248,25 @@ type SearchMetadata struct {
 
 ```go
 type IndexRequest struct {
-    Store        string      `json:"store"`
-    Documents    []*Document `json:"documents"`
-    Force        bool        `json:"force"` // Re-index even if unchanged
-    ConnectionID string      `json:"connection_id,omitempty"` // Optional connection tracking
+    Store     string      `json:"store"`
+    Documents []*Document `json:"documents"`
+    Force     bool        `json:"force"` // Re-index even if unchanged
 }
 
 // Document is defined in index package
 type Document struct {
-    Path     string   `json:"path"`
-    Content  string   `json:"content"`
-    Language string   `json:"language,omitempty"`
-    Hash     string   `json:"hash,omitempty"` // Optional content hash
+    Path         string   `json:"path"`
+    Content      string   `json:"content"`
+    Language     string   `json:"language,omitempty"`
+    Hash         string   `json:"hash,omitempty"`          // Optional content hash
+    ConnectionID string   `json:"connection_id,omitempty"` // Originating connection (set via header or document)
 }
 ```
+
+**Note:** The `ConnectionID` is typically set automatically:
+- Via HTTP request header: `X-Connection-ID` 
+- Propagated to all documents and chunks created from that request
+- Used for connection-scoped search filtering
 
 ### IndexResult
 
@@ -336,3 +344,122 @@ type CachedSparse struct {
 | Chunk | id, store, path, content, start_line, end_line |
 | SearchRequest | store, query |
 | IndexRequest | store, documents |
+
+---
+
+## Connection Tracking
+
+### Overview
+
+Rice Search tracks the **originating connection** for all indexed content via the `ConnectionID` field. This enables connection-scoped search and activity monitoring.
+
+### ConnectionID Field
+
+The `ConnectionID` field appears in:
+
+| Structure | Field | Purpose |
+|-----------|-------|---------|
+| **Document** | `ConnectionID string` | Tracks which connection indexed this file |
+| **Chunk** | `ConnectionID string` | Inherited from parent document |
+| **SearchRequest.Filter** | `ConnectionID string` | Filter results by connection |
+| **SearchResult** | `ConnectionID string` | Shows which connection indexed this result |
+
+### ConnectionID Flow
+
+**During Indexing:**
+```
+1. Client sends HTTP request with X-Connection-ID header
+2. Server extracts header and sets doc.ConnectionID for each document
+3. Chunker copies ConnectionID to all chunks created from that document
+4. Qdrant stores ConnectionID in point payload
+```
+
+**During Search:**
+```
+1. Client can optionally filter by ConnectionID via Filter.ConnectionID
+2. Default behavior: scope search to requesting connection's data only
+3. Special values:
+   - "*" or "all" = search across all connections
+   - Specific ID = search only that connection's data
+   - Empty + no header = search all connections
+```
+
+### Automatic Connection Scoping
+
+By default, searches are automatically scoped to the requesting connection:
+
+```go
+// If no explicit filter.ConnectionID provided
+if req.Filter.ConnectionID == "" {
+    // Use connection from request header
+    req.Filter.ConnectionID = r.Header.Get("X-Connection-ID")
+}
+
+// To search all connections, explicitly pass "*" or "all"
+if req.Filter.ConnectionID == "*" || req.Filter.ConnectionID == "all" {
+    req.Filter.ConnectionID = "" // Empty = no filter
+}
+```
+
+### ConnectionID Generation
+
+Deterministic ID based on client machine:
+
+```go
+func GenerateConnectionID(pcInfo PCInfo) string {
+    // Combines: hostname + OS + arch + MAC address
+    // Example: "conn_abc123def456"
+    return fmt.Sprintf("conn_%s", sha256(pcInfo)[:12])
+}
+```
+
+### Use Cases
+
+| Use Case | Implementation |
+|----------|----------------|
+| **Multi-tenant isolation** | Each client only sees their own indexed files |
+| **Team workspaces** | Share ConnectionID across team members |
+| **Cross-connection search** | Use `filter.connection_id: "*"` to search all |
+| **Connection monitoring** | Track per-connection activity and resource usage |
+| **Audit trails** | Know which connection indexed or searched what |
+
+### API Examples
+
+**Index with ConnectionID:**
+```bash
+curl -X POST http://localhost:8080/v1/stores/default/index \
+  -H "X-Connection-ID: conn_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"files": [{"path": "main.go", "content": "..."}]}'
+```
+
+**Search scoped to connection:**
+```bash
+curl -X POST http://localhost:8080/v1/stores/default/search \
+  -H "X-Connection-ID: conn_abc123" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "authentication"}'
+# Returns only results indexed by conn_abc123
+```
+
+**Search across all connections:**
+```bash
+curl -X POST http://localhost:8080/v1/stores/default/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "authentication",
+    "filter": {"connection_id": "*"}
+  }'
+# Returns results from all connections
+```
+
+**Search specific connection:**
+```bash
+curl -X POST http://localhost:8080/v1/stores/default/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "query": "authentication",
+    "filter": {"connection_id": "conn_xyz789"}
+  }'
+# Returns only results indexed by conn_xyz789
+```

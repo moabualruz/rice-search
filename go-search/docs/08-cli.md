@@ -31,45 +31,48 @@ rice-search [command] [flags]
 
 ## Commands
 
-### serve
+### rice-search-server (Server Binary)
 
-Run all services in monolith mode.
+Run the Rice Search server with gRPC, HTTP, and Web UI.
 
 ```bash
-rice-search serve [flags]
+rice-search-server [flags]
 ```
 
 | Flag | Env Var | Default | Description |
 |------|---------|---------|-------------|
-| `--port` | `PORT` | `8080` | HTTP port |
-| `--host` | `HOST` | `0.0.0.0` | Bind address |
-| `--qdrant-url` | `QDRANT_URL` | `http://localhost:6333` | Qdrant URL |
-| `--models-dir` | `MODELS_DIR` | `./models` | Models directory |
-| `--data-dir` | `DATA_DIR` | `./data` | Data directory |
-| `--device` | `DEVICE` | `auto` | Device (auto, cpu, cuda) |
+| `--http-port` | `RICE_PORT` | `8080` | HTTP/Web UI port |
+| `--grpc-port` | `RICE_GRPC_PORT` | `50051` | gRPC API port |
+| `--host` | `RICE_HOST` | `0.0.0.0` | Bind address |
+| `--qdrant` | `QDRANT_URL` | `http://localhost:6333` | Qdrant URL |
+| `--unix-socket` | - | - | Unix socket path (non-Windows only) |
+| `--config`, `-c` | `CONFIG_FILE` | - | Config file path |
+| `--verbose`, `-v` | - | `false` | Enable debug logging |
 
 **Examples:**
 
 ```bash
-# Default (port 8080, auto device detection)
-rice-search serve
+# Default (HTTP on 8080, gRPC on 50051)
+rice-search-server
 
-# Custom port, force CPU
-rice-search serve --port 3000 --device cpu
+# Custom ports
+rice-search-server --http-port 3000 --grpc-port 9000
 
-# Production with all options
-rice-search serve \
-    --port 8080 \
-    --qdrant-url http://qdrant:6333 \
-    --models-dir /models \
-    --device cuda \
-    --log-level info \
-    --log-format json
+# With custom Qdrant URL
+rice-search-server --qdrant http://qdrant:6333
+
+# Verbose mode with config file
+rice-search-server -v --config rice-search.yaml
+
+# Version info
+rice-search-server version
 ```
 
 ---
 
 ### api
+
+> **⚠️ NOT IMPLEMENTED**: Microservices mode is not available. Use `rice-search-server` for monolith mode.
 
 Run API service only (microservices mode).
 
@@ -96,6 +99,8 @@ rice-search api --port 8080 --ml-url http://ml-server:8081
 ---
 
 ### ml
+
+> **⚠️ NOT IMPLEMENTED**: Standalone ML service mode is not available. ML is embedded in `rice-search-server`.
 
 Run ML service only (microservices mode).
 
@@ -128,6 +133,10 @@ rice-search ml --port 8081 --device cuda --load-mode ondemand
 
 ### search
 
+> **⚠️ NOT IMPLEMENTED**: Standalone search service mode is not available. Search is embedded in `rice-search-server`.
+>
+> **Note**: For CLI search queries, use `rice-search query "your search"` instead.
+
 Run search service only (microservices mode).
 
 ```bash
@@ -153,6 +162,10 @@ rice-search search --bus kafka://localhost:9092 --qdrant-url http://qdrant:6333
 ---
 
 ### web
+
+> **⚠️ NOT IMPLEMENTED**: Standalone web service mode is not available. Web UI is embedded in `rice-search-server`.
+>
+> **Note**: Access the Web UI at `http://localhost:8080` after running `rice-search-server`.
 
 Run web UI service only (microservices mode).
 
@@ -442,5 +455,5 @@ logging:
 Load with:
 
 ```bash
-rice-search serve --config rice-search.yaml
+rice-search-server --config rice-search.yaml
 ```

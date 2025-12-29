@@ -69,7 +69,7 @@ All models default to GPU for maximum performance.
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `RICE_ML_DEVICE` | `--device` | `cuda` | Device (cpu, cuda, tensorrt) |
+| `RICE_ML_DEVICE` | `--device` | `cuda` | Device (cpu, cuda, tensorrt) - GPU-first default |
 | `RICE_ML_CUDA_DEVICE` | - | `0` | GPU index |
 | `RICE_EMBED_GPU` | - | `true` | Embedding model on GPU |
 | `RICE_RERANK_GPU` | - | `true` | Reranking model on GPU |
@@ -320,14 +320,16 @@ On startup, configuration is validated:
 ### Monolith Mode
 
 ```bash
-rice-search serve
+rice-search-server
 # Uses all defaults, auto device detection
 ```
 
 ### Microservices Mode
 
+> **⚠️ NOT IMPLEMENTED** - Microservices mode is not yet implemented. Currently only monolith mode (`rice-search-server`) is available.
+
 ```bash
-# API service
+# API service (FUTURE)
 rice-search api --bus kafka://kafka:9092
 
 # Defaults:
@@ -336,7 +338,7 @@ rice-search api --bus kafka://kafka:9092
 ```
 
 ```bash
-# ML service  
+# ML service (FUTURE)
 rice-search ml --bus kafka://kafka:9092 --device cuda
 
 # Defaults:

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"log/slog"
 	"runtime"
 	"sync"
 	"time"
@@ -97,9 +98,10 @@ func NewWithConfig(persistence, redisURL string) *Metrics {
 		storage, err := NewRedisStorage(redisURL)
 		if err != nil {
 			// Log warning but continue with in-memory
-			// TODO: use logger when available
-			println("WARNING: Failed to connect to Redis for metrics persistence:", err.Error())
-			println("         Falling back to in-memory metrics")
+			slog.Warn("Failed to connect to Redis for metrics persistence, falling back to in-memory",
+				"error", err.Error(),
+				"redis_url", redisURL,
+			)
 		} else {
 			redisStorage = storage
 			timeSeries = NewTimeSeriesDataWithRedis(redisStorage)

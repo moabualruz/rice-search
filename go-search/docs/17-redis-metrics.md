@@ -101,7 +101,7 @@ export RICE_METRICS_PERSISTENCE=redis
 export RICE_METRICS_REDIS_URL=redis://localhost:6379/0
 
 # 3. Start server
-./rice-search serve
+./rice-search-server
 ```
 
 ### Programmatic Usage

@@ -115,6 +115,8 @@ Memory: ~4GB
 
 ### Mode 2: Microservices
 
+> ⚠️ **NOT IMPLEMENTED**: Microservices mode is documented for future implementation. Currently only monolith mode with in-memory event bus is supported. Kafka/NATS/Redis bus implementations are not yet available.
+
 Separate binaries, distributed event bus.
 
 ```
@@ -136,6 +138,8 @@ Memory: ~5GB
 
 ### Mode 3: Hybrid
 
+> ⚠️ **NOT IMPLEMENTED**: Hybrid mode requires microservices support. Currently not available.
+
 Some services local, some remote.
 
 ```bash
@@ -156,7 +160,7 @@ Some services local, some remote.
 |--------|--------|
 | **Purpose** | HTTP gateway, request validation, event publishing |
 | **Port** | 8080 (default) |
-| **Framework** | Echo v4 |
+| **Framework** | net/http (stdlib) |
 | **Responsibilities** | Route HTTP → Events → HTTP response |
 
 ### ML Service
@@ -194,7 +198,7 @@ Some services local, some remote.
 | Layer | Technology | Rationale |
 |-------|------------|-----------|
 | Language | Go 1.23+ | Single language, native concurrency |
-| HTTP | Echo v4 | Fast, minimal, middleware support |
+| HTTP | net/http (stdlib) | Standard library, no dependencies |
 | Templates | Templ | Type-safe, compiled, Go-native |
 | Frontend | HTMX + Alpine.js | No build step, SSR-first |
 | Vector DB | Qdrant | Simple, fast, native hybrid search |

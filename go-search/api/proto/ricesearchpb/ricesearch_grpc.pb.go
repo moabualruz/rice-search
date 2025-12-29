@@ -51,6 +51,7 @@ const (
 	RiceSearch_DeleteMapper_FullMethodName       = "/ricesearch.v1.RiceSearch/DeleteMapper"
 	RiceSearch_GenerateMapper_FullMethodName     = "/ricesearch.v1.RiceSearch/GenerateMapper"
 	RiceSearch_ListFiles_FullMethodName          = "/ricesearch.v1.RiceSearch/ListFiles"
+	RiceSearch_GetChunks_FullMethodName          = "/ricesearch.v1.RiceSearch/GetChunks"
 )
 
 // RiceSearchClient is the client API for RiceSearch service.
@@ -108,6 +109,8 @@ type RiceSearchClient interface {
 	GenerateMapper(ctx context.Context, in *GenerateMapperRequest, opts ...grpc.CallOption) (*ModelMapper, error)
 	// File Browser
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
+	// GetChunks retrieves all chunks for a specific file.
+	GetChunks(ctx context.Context, in *GetChunksRequest, opts ...grpc.CallOption) (*GetChunksResponse, error)
 }
 
 type riceSearchClient struct {
@@ -420,6 +423,16 @@ func (c *riceSearchClient) ListFiles(ctx context.Context, in *ListFilesRequest, 
 	return out, nil
 }
 
+func (c *riceSearchClient) GetChunks(ctx context.Context, in *GetChunksRequest, opts ...grpc.CallOption) (*GetChunksResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetChunksResponse)
+	err := c.cc.Invoke(ctx, RiceSearch_GetChunks_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RiceSearchServer is the server API for RiceSearch service.
 // All implementations must embed UnimplementedRiceSearchServer
 // for forward compatibility.
@@ -475,6 +488,8 @@ type RiceSearchServer interface {
 	GenerateMapper(context.Context, *GenerateMapperRequest) (*ModelMapper, error)
 	// File Browser
 	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
+	// GetChunks retrieves all chunks for a specific file.
+	GetChunks(context.Context, *GetChunksRequest) (*GetChunksResponse, error)
 	mustEmbedUnimplementedRiceSearchServer()
 }
 
@@ -571,6 +586,9 @@ func (UnimplementedRiceSearchServer) GenerateMapper(context.Context, *GenerateMa
 }
 func (UnimplementedRiceSearchServer) ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFiles not implemented")
+}
+func (UnimplementedRiceSearchServer) GetChunks(context.Context, *GetChunksRequest) (*GetChunksResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetChunks not implemented")
 }
 func (UnimplementedRiceSearchServer) mustEmbedUnimplementedRiceSearchServer() {}
 func (UnimplementedRiceSearchServer) testEmbeddedByValue()                    {}
@@ -1097,6 +1115,24 @@ func _RiceSearch_ListFiles_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _RiceSearch_GetChunks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetChunksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(RiceSearchServer).GetChunks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: RiceSearch_GetChunks_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(RiceSearchServer).GetChunks(ctx, req.(*GetChunksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // RiceSearch_ServiceDesc is the grpc.ServiceDesc for RiceSearch service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1211,6 +1247,10 @@ var RiceSearch_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListFiles",
 			Handler:    _RiceSearch_ListFiles_Handler,
+		},
+		{
+			MethodName: "GetChunks",
+			Handler:    _RiceSearch_GetChunks_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

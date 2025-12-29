@@ -200,6 +200,83 @@ func pointToQdrant(p Point) (*qdrant.PointStruct, error) {
 	}, nil
 }
 
+// GetChunksByPath retrieves all chunks for a specific file path.
+func (c *Client) GetChunksByPath(ctx context.Context, collection, path string) ([]SearchResult, error) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	if c.closed {
+		return nil, fmt.Errorf("client is closed")
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, c.config.Timeout)
+	defer cancel()
+
+	// Build filter for exact path match
+	filter := &qdrant.Filter{
+		Must: []*qdrant.Condition{
+			{
+				ConditionOneOf: &qdrant.Condition_Field{
+					Field: &qdrant.FieldCondition{
+						Key: "path",
+						Match: &qdrant.Match{
+							MatchValue: &qdrant.Match_Keyword{
+								Keyword: path,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Use scroll to get all matching points
+	var results []SearchResult
+	var offset *qdrant.PointId
+	const batchSize = 100
+
+	for {
+		scrollReq := &qdrant.ScrollPoints{
+			CollectionName: collectionName(collection),
+			Filter:         filter,
+			Limit:          qdrant.PtrOf(uint32(batchSize)),
+			WithPayload:    qdrant.NewWithPayload(true),
+			Offset:         offset,
+		}
+
+		// Scroll returns []*qdrant.RetrievedPoint directly
+		points, err := c.client.Scroll(ctx, scrollReq)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scroll points: %w", err)
+		}
+
+		for _, p := range points {
+			result := SearchResult{
+				Payload: extractPayload(p.Payload),
+			}
+			switch v := p.Id.PointIdOptions.(type) {
+			case *qdrant.PointId_Uuid:
+				result.ID = v.Uuid
+			case *qdrant.PointId_Num:
+				result.ID = fmt.Sprintf("%d", v.Num)
+			}
+			results = append(results, result)
+		}
+
+		// If we got fewer than batchSize, we've reached the end
+		if len(points) < batchSize {
+			break
+		}
+
+		// Use last point's ID as offset for next page
+		if len(points) > 0 {
+			offset = points[len(points)-1].Id
+		}
+	}
+
+	return results, nil
+}
+
 // buildDeleteFilter builds a Qdrant filter from DeleteFilter.
 func buildDeleteFilter(f DeleteFilter) *qdrant.Filter {
 	var conditions []*qdrant.Condition

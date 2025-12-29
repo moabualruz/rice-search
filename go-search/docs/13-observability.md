@@ -278,7 +278,9 @@ func sanitizeQuery(q string) string {
 
 ## Tracing (OpenTelemetry)
 
-### Configuration
+> **⚠️ NOT IMPLEMENTED**: Tracing infrastructure is planned but not yet implemented. Configuration options exist in the codebase (`RICE_TRACING_ENABLED`, `RICE_TRACING_ENDPOINT`) but are currently non-functional. OpenTelemetry dependencies are not included.
+
+### Configuration (Planned)
 
 ```yaml
 tracing:

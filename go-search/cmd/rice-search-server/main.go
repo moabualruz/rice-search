@@ -29,6 +29,7 @@ import (
 	"github.com/ricesearch/rice-search/internal/qdrant"
 	"github.com/ricesearch/rice-search/internal/query"
 	"github.com/ricesearch/rice-search/internal/search"
+	"github.com/ricesearch/rice-search/internal/search/reranker"
 	"github.com/ricesearch/rice-search/internal/settings"
 	"github.com/ricesearch/rice-search/internal/store"
 	"github.com/ricesearch/rice-search/internal/web"
@@ -128,8 +129,9 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Initialize metrics EARLY (needed for instrumented bus and ML wiring)
-	metricsSvc := metrics.New()
-	log.Info("Initialized metrics")
+	// Uses Redis persistence if configured, otherwise falls back to memory
+	metricsSvc := metrics.NewWithConfig(appCfg.Metrics.Persistence, appCfg.Metrics.RedisURL)
+	log.Info("Initialized metrics", "persistence", appCfg.Metrics.Persistence)
 
 	// Initialize event bus
 	innerBus := bus.NewMemoryBus()
@@ -145,7 +147,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	// Wrap bus with logging if enabled, then instrument with metrics
 	var eventBus bus.Bus
 	if appCfg.Bus.EventLogEnabled {
-		eventBus = bus.NewInstrumentedBus(bus.NewLoggedBus(innerBus, eventLogger), metricsSvc)
+		eventBus = bus.NewInstrumentedBus(bus.NewLoggedBus(innerBus, eventLogger, log), metricsSvc)
 		log.Info("Event logging enabled", "path", appCfg.Bus.EventLogPath)
 	} else {
 		eventBus = bus.NewInstrumentedBus(innerBus, metricsSvc)
@@ -229,6 +231,12 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	// Initialize search service with query understanding, event bus, and metrics
 	searchCfg := search.DefaultConfig()
 	searchSvc := search.NewService(mlSvc, qc, log, searchCfg, querySvc, eventBus, metricsSvc)
+
+	// Initialize and wire multi-pass reranker
+	multiPassReranker := reranker.NewMultiPassReranker(mlSvc, log)
+	multiPassAdapter := reranker.NewAdapter(multiPassReranker)
+	searchSvc.SetMultiPassReranker(multiPassAdapter)
+	log.Info("Initialized multi-pass reranker (two-pass with early exit)")
 
 	// Wire monitoring service to search service (will be set after monSvc is created)
 	var monitoringSvc *connection.MonitoringService
@@ -470,6 +478,18 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			"version": version,
 			"ml":      health,
 		})
+	})
+
+	// Readiness probe - returns 503 if ML service is not healthy
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		health := mlSvc.Health()
+		if !health.Healthy {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "not_ready", "reason": "ml_unhealthy"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 
 	// Search handler

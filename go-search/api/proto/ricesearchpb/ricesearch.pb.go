@@ -3948,6 +3948,213 @@ func (x *ListFilesResponse) GetTotalPages() int32 {
 	return 0
 }
 
+type GetChunksRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Store is the target store.
+	Store string `protobuf:"bytes,1,opt,name=store,proto3" json:"store,omitempty"`
+	// Path is the file path to get chunks for.
+	Path          string `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChunksRequest) Reset() {
+	*x = GetChunksRequest{}
+	mi := &file_ricesearch_proto_msgTypes[60]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChunksRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChunksRequest) ProtoMessage() {}
+
+func (x *GetChunksRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_ricesearch_proto_msgTypes[60]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChunksRequest.ProtoReflect.Descriptor instead.
+func (*GetChunksRequest) Descriptor() ([]byte, []int) {
+	return file_ricesearch_proto_rawDescGZIP(), []int{60}
+}
+
+func (x *GetChunksRequest) GetStore() string {
+	if x != nil {
+		return x.Store
+	}
+	return ""
+}
+
+func (x *GetChunksRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+type Chunk struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// ID is the chunk identifier.
+	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	// StartLine is the starting line number.
+	StartLine int32 `protobuf:"varint,2,opt,name=start_line,json=startLine,proto3" json:"start_line,omitempty"`
+	// EndLine is the ending line number.
+	EndLine int32 `protobuf:"varint,3,opt,name=end_line,json=endLine,proto3" json:"end_line,omitempty"`
+	// Content is the chunk content.
+	Content string `protobuf:"bytes,4,opt,name=content,proto3" json:"content,omitempty"`
+	// Symbols are extracted symbols.
+	Symbols []string `protobuf:"bytes,5,rep,name=symbols,proto3" json:"symbols,omitempty"`
+	// Hash is the chunk hash.
+	Hash          string `protobuf:"bytes,6,opt,name=hash,proto3" json:"hash,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Chunk) Reset() {
+	*x = Chunk{}
+	mi := &file_ricesearch_proto_msgTypes[61]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Chunk) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Chunk) ProtoMessage() {}
+
+func (x *Chunk) ProtoReflect() protoreflect.Message {
+	mi := &file_ricesearch_proto_msgTypes[61]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Chunk.ProtoReflect.Descriptor instead.
+func (*Chunk) Descriptor() ([]byte, []int) {
+	return file_ricesearch_proto_rawDescGZIP(), []int{61}
+}
+
+func (x *Chunk) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Chunk) GetStartLine() int32 {
+	if x != nil {
+		return x.StartLine
+	}
+	return 0
+}
+
+func (x *Chunk) GetEndLine() int32 {
+	if x != nil {
+		return x.EndLine
+	}
+	return 0
+}
+
+func (x *Chunk) GetContent() string {
+	if x != nil {
+		return x.Content
+	}
+	return ""
+}
+
+func (x *Chunk) GetSymbols() []string {
+	if x != nil {
+		return x.Symbols
+	}
+	return nil
+}
+
+func (x *Chunk) GetHash() string {
+	if x != nil {
+		return x.Hash
+	}
+	return ""
+}
+
+type GetChunksResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Path is the file path.
+	Path string `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	// Chunks are the file chunks.
+	Chunks []*Chunk `protobuf:"bytes,2,rep,name=chunks,proto3" json:"chunks,omitempty"`
+	// Total is the total number of chunks.
+	Total         int32 `protobuf:"varint,3,opt,name=total,proto3" json:"total,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetChunksResponse) Reset() {
+	*x = GetChunksResponse{}
+	mi := &file_ricesearch_proto_msgTypes[62]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetChunksResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetChunksResponse) ProtoMessage() {}
+
+func (x *GetChunksResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_ricesearch_proto_msgTypes[62]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetChunksResponse.ProtoReflect.Descriptor instead.
+func (*GetChunksResponse) Descriptor() ([]byte, []int) {
+	return file_ricesearch_proto_rawDescGZIP(), []int{62}
+}
+
+func (x *GetChunksResponse) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *GetChunksResponse) GetChunks() []*Chunk {
+	if x != nil {
+		return x.Chunks
+	}
+	return nil
+}
+
+func (x *GetChunksResponse) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
 type ParsedQuery struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Original is the original query text.
@@ -3976,7 +4183,7 @@ type ParsedQuery struct {
 
 func (x *ParsedQuery) Reset() {
 	*x = ParsedQuery{}
-	mi := &file_ricesearch_proto_msgTypes[60]
+	mi := &file_ricesearch_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3988,7 +4195,7 @@ func (x *ParsedQuery) String() string {
 func (*ParsedQuery) ProtoMessage() {}
 
 func (x *ParsedQuery) ProtoReflect() protoreflect.Message {
-	mi := &file_ricesearch_proto_msgTypes[60]
+	mi := &file_ricesearch_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -4001,7 +4208,7 @@ func (x *ParsedQuery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ParsedQuery.ProtoReflect.Descriptor instead.
 func (*ParsedQuery) Descriptor() ([]byte, []int) {
-	return file_ricesearch_proto_rawDescGZIP(), []int{60}
+	return file_ricesearch_proto_rawDescGZIP(), []int{63}
 }
 
 func (x *ParsedQuery) GetOriginal() string {
@@ -4386,7 +4593,22 @@ const file_ricesearch_proto_rawDesc = "" +
 	"\x04page\x18\x03 \x01(\x05R\x04page\x12\x1b\n" +
 	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\x12\x1f\n" +
 	"\vtotal_pages\x18\x05 \x01(\x05R\n" +
-	"totalPages\"\xc8\x02\n" +
+	"totalPages\"<\n" +
+	"\x10GetChunksRequest\x12\x14\n" +
+	"\x05store\x18\x01 \x01(\tR\x05store\x12\x12\n" +
+	"\x04path\x18\x02 \x01(\tR\x04path\"\x99\x01\n" +
+	"\x05Chunk\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1d\n" +
+	"\n" +
+	"start_line\x18\x02 \x01(\x05R\tstartLine\x12\x19\n" +
+	"\bend_line\x18\x03 \x01(\x05R\aendLine\x12\x18\n" +
+	"\acontent\x18\x04 \x01(\tR\acontent\x12\x18\n" +
+	"\asymbols\x18\x05 \x03(\tR\asymbols\x12\x12\n" +
+	"\x04hash\x18\x06 \x01(\tR\x04hash\"k\n" +
+	"\x11GetChunksResponse\x12\x12\n" +
+	"\x04path\x18\x01 \x01(\tR\x04path\x12,\n" +
+	"\x06chunks\x18\x02 \x03(\v2\x14.ricesearch.v1.ChunkR\x06chunks\x12\x14\n" +
+	"\x05total\x18\x03 \x01(\x05R\x05total\"\xc8\x02\n" +
 	"\vParsedQuery\x12\x1a\n" +
 	"\boriginal\x18\x01 \x01(\tR\boriginal\x12\x1e\n" +
 	"\n" +
@@ -4410,7 +4632,7 @@ const file_ricesearch_proto_rawDesc = "" +
 	"\x19HEALTH_STATUS_UNSPECIFIED\x10\x00\x12\x19\n" +
 	"\x15HEALTH_STATUS_HEALTHY\x10\x01\x12\x1a\n" +
 	"\x16HEALTH_STATUS_DEGRADED\x10\x02\x12\x1b\n" +
-	"\x17HEALTH_STATUS_UNHEALTHY\x10\x032\x9b\x12\n" +
+	"\x17HEALTH_STATUS_UNHEALTHY\x10\x032\xeb\x12\n" +
 	"\n" +
 	"RiceSearch\x12E\n" +
 	"\x06Search\x12\x1c.ricesearch.v1.SearchRequest\x1a\x1d.ricesearch.v1.SearchResponse\x12K\n" +
@@ -4444,7 +4666,8 @@ const file_ricesearch_proto_rawDesc = "" +
 	"\fUpdateMapper\x12\".ricesearch.v1.UpdateMapperRequest\x1a\x1a.ricesearch.v1.ModelMapper\x12W\n" +
 	"\fDeleteMapper\x12\".ricesearch.v1.DeleteMapperRequest\x1a#.ricesearch.v1.DeleteMapperResponse\x12R\n" +
 	"\x0eGenerateMapper\x12$.ricesearch.v1.GenerateMapperRequest\x1a\x1a.ricesearch.v1.ModelMapper\x12N\n" +
-	"\tListFiles\x12\x1f.ricesearch.v1.ListFilesRequest\x1a .ricesearch.v1.ListFilesResponseB:Z8github.com/ricesearch/rice-search/api/proto/ricesearchpbb\x06proto3"
+	"\tListFiles\x12\x1f.ricesearch.v1.ListFilesRequest\x1a .ricesearch.v1.ListFilesResponse\x12N\n" +
+	"\tGetChunks\x12\x1f.ricesearch.v1.GetChunksRequest\x1a .ricesearch.v1.GetChunksResponseB:Z8github.com/ricesearch/rice-search/api/proto/ricesearchpbb\x06proto3"
 
 var (
 	file_ricesearch_proto_rawDescOnce sync.Once
@@ -4459,7 +4682,7 @@ func file_ricesearch_proto_rawDescGZIP() []byte {
 }
 
 var file_ricesearch_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_ricesearch_proto_msgTypes = make([]protoimpl.MessageInfo, 64)
+var file_ricesearch_proto_msgTypes = make([]protoimpl.MessageInfo, 67)
 var file_ricesearch_proto_goTypes = []any{
 	(HealthStatus)(0),                 // 0: ricesearch.v1.HealthStatus
 	(*SearchRequest)(nil),             // 1: ricesearch.v1.SearchRequest
@@ -4522,115 +4745,121 @@ var file_ricesearch_proto_goTypes = []any{
 	(*IndexedFile)(nil),               // 58: ricesearch.v1.IndexedFile
 	(*ListFilesRequest)(nil),          // 59: ricesearch.v1.ListFilesRequest
 	(*ListFilesResponse)(nil),         // 60: ricesearch.v1.ListFilesResponse
-	(*ParsedQuery)(nil),               // 61: ricesearch.v1.ParsedQuery
-	nil,                               // 62: ricesearch.v1.HealthResponse.ComponentsEntry
-	nil,                               // 63: ricesearch.v1.ModelMapper.InputMappingEntry
-	nil,                               // 64: ricesearch.v1.ModelMapper.OutputMappingEntry
-	(*durationpb.Duration)(nil),       // 65: google.protobuf.Duration
-	(*timestamppb.Timestamp)(nil),     // 66: google.protobuf.Timestamp
+	(*GetChunksRequest)(nil),          // 61: ricesearch.v1.GetChunksRequest
+	(*Chunk)(nil),                     // 62: ricesearch.v1.Chunk
+	(*GetChunksResponse)(nil),         // 63: ricesearch.v1.GetChunksResponse
+	(*ParsedQuery)(nil),               // 64: ricesearch.v1.ParsedQuery
+	nil,                               // 65: ricesearch.v1.HealthResponse.ComponentsEntry
+	nil,                               // 66: ricesearch.v1.ModelMapper.InputMappingEntry
+	nil,                               // 67: ricesearch.v1.ModelMapper.OutputMappingEntry
+	(*durationpb.Duration)(nil),       // 68: google.protobuf.Duration
+	(*timestamppb.Timestamp)(nil),     // 69: google.protobuf.Timestamp
 }
 var file_ricesearch_proto_depIdxs = []int32{
 	2,  // 0: ricesearch.v1.SearchRequest.filter:type_name -> ricesearch.v1.SearchFilter
 	3,  // 1: ricesearch.v1.SearchResponse.results:type_name -> ricesearch.v1.SearchResult
 	5,  // 2: ricesearch.v1.SearchResponse.metadata:type_name -> ricesearch.v1.SearchMetadata
-	61, // 3: ricesearch.v1.SearchResponse.parsed_query:type_name -> ricesearch.v1.ParsedQuery
+	64, // 3: ricesearch.v1.SearchResponse.parsed_query:type_name -> ricesearch.v1.ParsedQuery
 	8,  // 4: ricesearch.v1.IndexRequest.document:type_name -> ricesearch.v1.Document
 	8,  // 5: ricesearch.v1.IndexBatchRequest.documents:type_name -> ricesearch.v1.Document
-	65, // 6: ricesearch.v1.IndexResponse.duration:type_name -> google.protobuf.Duration
+	68, // 6: ricesearch.v1.IndexResponse.duration:type_name -> google.protobuf.Duration
 	10, // 7: ricesearch.v1.IndexResponse.errors:type_name -> ricesearch.v1.IndexError
 	11, // 8: ricesearch.v1.IndexResponse.document_info:type_name -> ricesearch.v1.DocumentInfo
 	8,  // 9: ricesearch.v1.ReindexRequest.documents:type_name -> ricesearch.v1.Document
 	20, // 10: ricesearch.v1.Store.config:type_name -> ricesearch.v1.StoreConfig
 	21, // 11: ricesearch.v1.Store.stats:type_name -> ricesearch.v1.StoreStats
-	66, // 12: ricesearch.v1.Store.created_at:type_name -> google.protobuf.Timestamp
-	66, // 13: ricesearch.v1.Store.updated_at:type_name -> google.protobuf.Timestamp
-	66, // 14: ricesearch.v1.StoreStats.last_indexed:type_name -> google.protobuf.Timestamp
+	69, // 12: ricesearch.v1.Store.created_at:type_name -> google.protobuf.Timestamp
+	69, // 13: ricesearch.v1.Store.updated_at:type_name -> google.protobuf.Timestamp
+	69, // 14: ricesearch.v1.StoreStats.last_indexed:type_name -> google.protobuf.Timestamp
 	19, // 15: ricesearch.v1.ListStoresResponse.stores:type_name -> ricesearch.v1.Store
 	20, // 16: ricesearch.v1.CreateStoreRequest.config:type_name -> ricesearch.v1.StoreConfig
 	0,  // 17: ricesearch.v1.HealthResponse.status:type_name -> ricesearch.v1.HealthStatus
-	62, // 18: ricesearch.v1.HealthResponse.components:type_name -> ricesearch.v1.HealthResponse.ComponentsEntry
+	65, // 18: ricesearch.v1.HealthResponse.components:type_name -> ricesearch.v1.HealthResponse.ComponentsEntry
 	0,  // 19: ricesearch.v1.ComponentHealth.status:type_name -> ricesearch.v1.HealthStatus
-	65, // 20: ricesearch.v1.ComponentHealth.latency:type_name -> google.protobuf.Duration
+	68, // 20: ricesearch.v1.ComponentHealth.latency:type_name -> google.protobuf.Duration
 	32, // 21: ricesearch.v1.ComponentHealth.device_info:type_name -> ricesearch.v1.DeviceInfo
 	36, // 22: ricesearch.v1.Connection.pc_info:type_name -> ricesearch.v1.PCInfo
-	66, // 23: ricesearch.v1.Connection.created_at:type_name -> google.protobuf.Timestamp
-	66, // 24: ricesearch.v1.Connection.last_seen_at:type_name -> google.protobuf.Timestamp
+	69, // 23: ricesearch.v1.Connection.created_at:type_name -> google.protobuf.Timestamp
+	69, // 24: ricesearch.v1.Connection.last_seen_at:type_name -> google.protobuf.Timestamp
 	36, // 25: ricesearch.v1.RegisterConnectionRequest.pc_info:type_name -> ricesearch.v1.PCInfo
 	35, // 26: ricesearch.v1.ListConnectionsResponse.connections:type_name -> ricesearch.v1.Connection
 	43, // 27: ricesearch.v1.ListModelsResponse.models:type_name -> ricesearch.v1.ModelInfo
-	63, // 28: ricesearch.v1.ModelMapper.input_mapping:type_name -> ricesearch.v1.ModelMapper.InputMappingEntry
-	64, // 29: ricesearch.v1.ModelMapper.output_mapping:type_name -> ricesearch.v1.ModelMapper.OutputMappingEntry
-	66, // 30: ricesearch.v1.ModelMapper.created_at:type_name -> google.protobuf.Timestamp
-	66, // 31: ricesearch.v1.ModelMapper.updated_at:type_name -> google.protobuf.Timestamp
+	66, // 28: ricesearch.v1.ModelMapper.input_mapping:type_name -> ricesearch.v1.ModelMapper.InputMappingEntry
+	67, // 29: ricesearch.v1.ModelMapper.output_mapping:type_name -> ricesearch.v1.ModelMapper.OutputMappingEntry
+	69, // 30: ricesearch.v1.ModelMapper.created_at:type_name -> google.protobuf.Timestamp
+	69, // 31: ricesearch.v1.ModelMapper.updated_at:type_name -> google.protobuf.Timestamp
 	50, // 32: ricesearch.v1.ListMappersResponse.mappers:type_name -> ricesearch.v1.ModelMapper
 	50, // 33: ricesearch.v1.CreateMapperRequest.mapper:type_name -> ricesearch.v1.ModelMapper
 	50, // 34: ricesearch.v1.UpdateMapperRequest.mapper:type_name -> ricesearch.v1.ModelMapper
-	66, // 35: ricesearch.v1.IndexedFile.indexed_at:type_name -> google.protobuf.Timestamp
+	69, // 35: ricesearch.v1.IndexedFile.indexed_at:type_name -> google.protobuf.Timestamp
 	58, // 36: ricesearch.v1.ListFilesResponse.files:type_name -> ricesearch.v1.IndexedFile
-	31, // 37: ricesearch.v1.HealthResponse.ComponentsEntry.value:type_name -> ricesearch.v1.ComponentHealth
-	1,  // 38: ricesearch.v1.RiceSearch.Search:input_type -> ricesearch.v1.SearchRequest
-	1,  // 39: ricesearch.v1.RiceSearch.SearchStream:input_type -> ricesearch.v1.SearchRequest
-	6,  // 40: ricesearch.v1.RiceSearch.Index:input_type -> ricesearch.v1.IndexRequest
-	7,  // 41: ricesearch.v1.RiceSearch.IndexBatch:input_type -> ricesearch.v1.IndexBatchRequest
-	12, // 42: ricesearch.v1.RiceSearch.Delete:input_type -> ricesearch.v1.DeleteRequest
-	14, // 43: ricesearch.v1.RiceSearch.Sync:input_type -> ricesearch.v1.SyncRequest
-	16, // 44: ricesearch.v1.RiceSearch.Reindex:input_type -> ricesearch.v1.ReindexRequest
-	17, // 45: ricesearch.v1.RiceSearch.GetIndexStats:input_type -> ricesearch.v1.GetIndexStatsRequest
-	22, // 46: ricesearch.v1.RiceSearch.ListStores:input_type -> ricesearch.v1.ListStoresRequest
-	24, // 47: ricesearch.v1.RiceSearch.CreateStore:input_type -> ricesearch.v1.CreateStoreRequest
-	25, // 48: ricesearch.v1.RiceSearch.GetStore:input_type -> ricesearch.v1.GetStoreRequest
-	26, // 49: ricesearch.v1.RiceSearch.DeleteStore:input_type -> ricesearch.v1.DeleteStoreRequest
-	28, // 50: ricesearch.v1.RiceSearch.GetStoreStats:input_type -> ricesearch.v1.GetStoreStatsRequest
-	29, // 51: ricesearch.v1.RiceSearch.Health:input_type -> ricesearch.v1.HealthRequest
-	33, // 52: ricesearch.v1.RiceSearch.Version:input_type -> ricesearch.v1.VersionRequest
-	37, // 53: ricesearch.v1.RiceSearch.RegisterConnection:input_type -> ricesearch.v1.RegisterConnectionRequest
-	38, // 54: ricesearch.v1.RiceSearch.ListConnections:input_type -> ricesearch.v1.ListConnectionsRequest
-	40, // 55: ricesearch.v1.RiceSearch.GetConnection:input_type -> ricesearch.v1.GetConnectionRequest
-	41, // 56: ricesearch.v1.RiceSearch.DeleteConnection:input_type -> ricesearch.v1.DeleteConnectionRequest
-	44, // 57: ricesearch.v1.RiceSearch.ListModels:input_type -> ricesearch.v1.ListModelsRequest
-	46, // 58: ricesearch.v1.RiceSearch.DownloadModel:input_type -> ricesearch.v1.DownloadModelRequest
-	48, // 59: ricesearch.v1.RiceSearch.SetDefaultModel:input_type -> ricesearch.v1.SetDefaultModelRequest
-	49, // 60: ricesearch.v1.RiceSearch.ToggleGPU:input_type -> ricesearch.v1.ToggleGPURequest
-	51, // 61: ricesearch.v1.RiceSearch.ListMappers:input_type -> ricesearch.v1.ListMappersRequest
-	53, // 62: ricesearch.v1.RiceSearch.CreateMapper:input_type -> ricesearch.v1.CreateMapperRequest
-	54, // 63: ricesearch.v1.RiceSearch.UpdateMapper:input_type -> ricesearch.v1.UpdateMapperRequest
-	55, // 64: ricesearch.v1.RiceSearch.DeleteMapper:input_type -> ricesearch.v1.DeleteMapperRequest
-	57, // 65: ricesearch.v1.RiceSearch.GenerateMapper:input_type -> ricesearch.v1.GenerateMapperRequest
-	59, // 66: ricesearch.v1.RiceSearch.ListFiles:input_type -> ricesearch.v1.ListFilesRequest
-	4,  // 67: ricesearch.v1.RiceSearch.Search:output_type -> ricesearch.v1.SearchResponse
-	3,  // 68: ricesearch.v1.RiceSearch.SearchStream:output_type -> ricesearch.v1.SearchResult
-	9,  // 69: ricesearch.v1.RiceSearch.Index:output_type -> ricesearch.v1.IndexResponse
-	9,  // 70: ricesearch.v1.RiceSearch.IndexBatch:output_type -> ricesearch.v1.IndexResponse
-	13, // 71: ricesearch.v1.RiceSearch.Delete:output_type -> ricesearch.v1.DeleteResponse
-	15, // 72: ricesearch.v1.RiceSearch.Sync:output_type -> ricesearch.v1.SyncResponse
-	9,  // 73: ricesearch.v1.RiceSearch.Reindex:output_type -> ricesearch.v1.IndexResponse
-	18, // 74: ricesearch.v1.RiceSearch.GetIndexStats:output_type -> ricesearch.v1.IndexStats
-	23, // 75: ricesearch.v1.RiceSearch.ListStores:output_type -> ricesearch.v1.ListStoresResponse
-	19, // 76: ricesearch.v1.RiceSearch.CreateStore:output_type -> ricesearch.v1.Store
-	19, // 77: ricesearch.v1.RiceSearch.GetStore:output_type -> ricesearch.v1.Store
-	27, // 78: ricesearch.v1.RiceSearch.DeleteStore:output_type -> ricesearch.v1.DeleteStoreResponse
-	21, // 79: ricesearch.v1.RiceSearch.GetStoreStats:output_type -> ricesearch.v1.StoreStats
-	30, // 80: ricesearch.v1.RiceSearch.Health:output_type -> ricesearch.v1.HealthResponse
-	34, // 81: ricesearch.v1.RiceSearch.Version:output_type -> ricesearch.v1.VersionResponse
-	35, // 82: ricesearch.v1.RiceSearch.RegisterConnection:output_type -> ricesearch.v1.Connection
-	39, // 83: ricesearch.v1.RiceSearch.ListConnections:output_type -> ricesearch.v1.ListConnectionsResponse
-	35, // 84: ricesearch.v1.RiceSearch.GetConnection:output_type -> ricesearch.v1.Connection
-	42, // 85: ricesearch.v1.RiceSearch.DeleteConnection:output_type -> ricesearch.v1.DeleteConnectionResponse
-	45, // 86: ricesearch.v1.RiceSearch.ListModels:output_type -> ricesearch.v1.ListModelsResponse
-	47, // 87: ricesearch.v1.RiceSearch.DownloadModel:output_type -> ricesearch.v1.DownloadModelResponse
-	43, // 88: ricesearch.v1.RiceSearch.SetDefaultModel:output_type -> ricesearch.v1.ModelInfo
-	43, // 89: ricesearch.v1.RiceSearch.ToggleGPU:output_type -> ricesearch.v1.ModelInfo
-	52, // 90: ricesearch.v1.RiceSearch.ListMappers:output_type -> ricesearch.v1.ListMappersResponse
-	50, // 91: ricesearch.v1.RiceSearch.CreateMapper:output_type -> ricesearch.v1.ModelMapper
-	50, // 92: ricesearch.v1.RiceSearch.UpdateMapper:output_type -> ricesearch.v1.ModelMapper
-	56, // 93: ricesearch.v1.RiceSearch.DeleteMapper:output_type -> ricesearch.v1.DeleteMapperResponse
-	50, // 94: ricesearch.v1.RiceSearch.GenerateMapper:output_type -> ricesearch.v1.ModelMapper
-	60, // 95: ricesearch.v1.RiceSearch.ListFiles:output_type -> ricesearch.v1.ListFilesResponse
-	67, // [67:96] is the sub-list for method output_type
-	38, // [38:67] is the sub-list for method input_type
-	38, // [38:38] is the sub-list for extension type_name
-	38, // [38:38] is the sub-list for extension extendee
-	0,  // [0:38] is the sub-list for field type_name
+	62, // 37: ricesearch.v1.GetChunksResponse.chunks:type_name -> ricesearch.v1.Chunk
+	31, // 38: ricesearch.v1.HealthResponse.ComponentsEntry.value:type_name -> ricesearch.v1.ComponentHealth
+	1,  // 39: ricesearch.v1.RiceSearch.Search:input_type -> ricesearch.v1.SearchRequest
+	1,  // 40: ricesearch.v1.RiceSearch.SearchStream:input_type -> ricesearch.v1.SearchRequest
+	6,  // 41: ricesearch.v1.RiceSearch.Index:input_type -> ricesearch.v1.IndexRequest
+	7,  // 42: ricesearch.v1.RiceSearch.IndexBatch:input_type -> ricesearch.v1.IndexBatchRequest
+	12, // 43: ricesearch.v1.RiceSearch.Delete:input_type -> ricesearch.v1.DeleteRequest
+	14, // 44: ricesearch.v1.RiceSearch.Sync:input_type -> ricesearch.v1.SyncRequest
+	16, // 45: ricesearch.v1.RiceSearch.Reindex:input_type -> ricesearch.v1.ReindexRequest
+	17, // 46: ricesearch.v1.RiceSearch.GetIndexStats:input_type -> ricesearch.v1.GetIndexStatsRequest
+	22, // 47: ricesearch.v1.RiceSearch.ListStores:input_type -> ricesearch.v1.ListStoresRequest
+	24, // 48: ricesearch.v1.RiceSearch.CreateStore:input_type -> ricesearch.v1.CreateStoreRequest
+	25, // 49: ricesearch.v1.RiceSearch.GetStore:input_type -> ricesearch.v1.GetStoreRequest
+	26, // 50: ricesearch.v1.RiceSearch.DeleteStore:input_type -> ricesearch.v1.DeleteStoreRequest
+	28, // 51: ricesearch.v1.RiceSearch.GetStoreStats:input_type -> ricesearch.v1.GetStoreStatsRequest
+	29, // 52: ricesearch.v1.RiceSearch.Health:input_type -> ricesearch.v1.HealthRequest
+	33, // 53: ricesearch.v1.RiceSearch.Version:input_type -> ricesearch.v1.VersionRequest
+	37, // 54: ricesearch.v1.RiceSearch.RegisterConnection:input_type -> ricesearch.v1.RegisterConnectionRequest
+	38, // 55: ricesearch.v1.RiceSearch.ListConnections:input_type -> ricesearch.v1.ListConnectionsRequest
+	40, // 56: ricesearch.v1.RiceSearch.GetConnection:input_type -> ricesearch.v1.GetConnectionRequest
+	41, // 57: ricesearch.v1.RiceSearch.DeleteConnection:input_type -> ricesearch.v1.DeleteConnectionRequest
+	44, // 58: ricesearch.v1.RiceSearch.ListModels:input_type -> ricesearch.v1.ListModelsRequest
+	46, // 59: ricesearch.v1.RiceSearch.DownloadModel:input_type -> ricesearch.v1.DownloadModelRequest
+	48, // 60: ricesearch.v1.RiceSearch.SetDefaultModel:input_type -> ricesearch.v1.SetDefaultModelRequest
+	49, // 61: ricesearch.v1.RiceSearch.ToggleGPU:input_type -> ricesearch.v1.ToggleGPURequest
+	51, // 62: ricesearch.v1.RiceSearch.ListMappers:input_type -> ricesearch.v1.ListMappersRequest
+	53, // 63: ricesearch.v1.RiceSearch.CreateMapper:input_type -> ricesearch.v1.CreateMapperRequest
+	54, // 64: ricesearch.v1.RiceSearch.UpdateMapper:input_type -> ricesearch.v1.UpdateMapperRequest
+	55, // 65: ricesearch.v1.RiceSearch.DeleteMapper:input_type -> ricesearch.v1.DeleteMapperRequest
+	57, // 66: ricesearch.v1.RiceSearch.GenerateMapper:input_type -> ricesearch.v1.GenerateMapperRequest
+	59, // 67: ricesearch.v1.RiceSearch.ListFiles:input_type -> ricesearch.v1.ListFilesRequest
+	61, // 68: ricesearch.v1.RiceSearch.GetChunks:input_type -> ricesearch.v1.GetChunksRequest
+	4,  // 69: ricesearch.v1.RiceSearch.Search:output_type -> ricesearch.v1.SearchResponse
+	3,  // 70: ricesearch.v1.RiceSearch.SearchStream:output_type -> ricesearch.v1.SearchResult
+	9,  // 71: ricesearch.v1.RiceSearch.Index:output_type -> ricesearch.v1.IndexResponse
+	9,  // 72: ricesearch.v1.RiceSearch.IndexBatch:output_type -> ricesearch.v1.IndexResponse
+	13, // 73: ricesearch.v1.RiceSearch.Delete:output_type -> ricesearch.v1.DeleteResponse
+	15, // 74: ricesearch.v1.RiceSearch.Sync:output_type -> ricesearch.v1.SyncResponse
+	9,  // 75: ricesearch.v1.RiceSearch.Reindex:output_type -> ricesearch.v1.IndexResponse
+	18, // 76: ricesearch.v1.RiceSearch.GetIndexStats:output_type -> ricesearch.v1.IndexStats
+	23, // 77: ricesearch.v1.RiceSearch.ListStores:output_type -> ricesearch.v1.ListStoresResponse
+	19, // 78: ricesearch.v1.RiceSearch.CreateStore:output_type -> ricesearch.v1.Store
+	19, // 79: ricesearch.v1.RiceSearch.GetStore:output_type -> ricesearch.v1.Store
+	27, // 80: ricesearch.v1.RiceSearch.DeleteStore:output_type -> ricesearch.v1.DeleteStoreResponse
+	21, // 81: ricesearch.v1.RiceSearch.GetStoreStats:output_type -> ricesearch.v1.StoreStats
+	30, // 82: ricesearch.v1.RiceSearch.Health:output_type -> ricesearch.v1.HealthResponse
+	34, // 83: ricesearch.v1.RiceSearch.Version:output_type -> ricesearch.v1.VersionResponse
+	35, // 84: ricesearch.v1.RiceSearch.RegisterConnection:output_type -> ricesearch.v1.Connection
+	39, // 85: ricesearch.v1.RiceSearch.ListConnections:output_type -> ricesearch.v1.ListConnectionsResponse
+	35, // 86: ricesearch.v1.RiceSearch.GetConnection:output_type -> ricesearch.v1.Connection
+	42, // 87: ricesearch.v1.RiceSearch.DeleteConnection:output_type -> ricesearch.v1.DeleteConnectionResponse
+	45, // 88: ricesearch.v1.RiceSearch.ListModels:output_type -> ricesearch.v1.ListModelsResponse
+	47, // 89: ricesearch.v1.RiceSearch.DownloadModel:output_type -> ricesearch.v1.DownloadModelResponse
+	43, // 90: ricesearch.v1.RiceSearch.SetDefaultModel:output_type -> ricesearch.v1.ModelInfo
+	43, // 91: ricesearch.v1.RiceSearch.ToggleGPU:output_type -> ricesearch.v1.ModelInfo
+	52, // 92: ricesearch.v1.RiceSearch.ListMappers:output_type -> ricesearch.v1.ListMappersResponse
+	50, // 93: ricesearch.v1.RiceSearch.CreateMapper:output_type -> ricesearch.v1.ModelMapper
+	50, // 94: ricesearch.v1.RiceSearch.UpdateMapper:output_type -> ricesearch.v1.ModelMapper
+	56, // 95: ricesearch.v1.RiceSearch.DeleteMapper:output_type -> ricesearch.v1.DeleteMapperResponse
+	50, // 96: ricesearch.v1.RiceSearch.GenerateMapper:output_type -> ricesearch.v1.ModelMapper
+	60, // 97: ricesearch.v1.RiceSearch.ListFiles:output_type -> ricesearch.v1.ListFilesResponse
+	63, // 98: ricesearch.v1.RiceSearch.GetChunks:output_type -> ricesearch.v1.GetChunksResponse
+	69, // [69:99] is the sub-list for method output_type
+	39, // [39:69] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_ricesearch_proto_init() }
@@ -4647,7 +4876,7 @@ func file_ricesearch_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_ricesearch_proto_rawDesc), len(file_ricesearch_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   64,
+			NumMessages:   67,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

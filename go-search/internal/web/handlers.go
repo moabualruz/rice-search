@@ -34,8 +34,15 @@ type GRPCClient interface {
 	DeleteStore(ctx context.Context, req *pb.DeleteStoreRequest) (*pb.DeleteStoreResponse, error)
 	GetStoreStats(ctx context.Context, req *pb.GetStoreStatsRequest) (*pb.StoreStats, error)
 	ListFiles(ctx context.Context, req *pb.ListFilesRequest) (*pb.ListFilesResponse, error)
+	Delete(ctx context.Context, req *pb.DeleteRequest) (*pb.DeleteResponse, error)
+	GetChunks(ctx context.Context, req *pb.GetChunksRequest) (*pb.GetChunksResponse, error)
 	Health(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error)
 	Version(ctx context.Context, req *pb.VersionRequest) (*pb.VersionResponse, error)
+	// Index operations
+	IndexBatch(ctx context.Context, req *pb.IndexBatchRequest) (*pb.IndexResponse, error)
+	Sync(ctx context.Context, req *pb.SyncRequest) (*pb.SyncResponse, error)
+	Reindex(ctx context.Context, req *pb.ReindexRequest) (*pb.IndexResponse, error)
+	GetIndexStats(ctx context.Context, req *pb.GetIndexStatsRequest) (*pb.IndexStats, error)
 }
 
 // Handler handles all web UI requests.
@@ -232,13 +239,12 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 				status.Latency = comp.Latency.AsDuration().Milliseconds()
 			}
 			// Extract device info for ML component
-			// TODO: Uncomment after regenerating protobuf with DeviceInfo
-			// if comp.DeviceInfo != nil {
-			// 	status.Device = comp.DeviceInfo.Device
-			// 	status.ActualDevice = comp.DeviceInfo.ActualDevice
-			// 	status.DeviceFallback = comp.DeviceInfo.DeviceFallback
-			// 	status.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
-			// }
+			if comp.DeviceInfo != nil {
+				status.Device = comp.DeviceInfo.Device
+				status.ActualDevice = comp.DeviceInfo.ActualDevice
+				status.DeviceFallback = comp.DeviceInfo.DeviceFallback
+				status.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
+			}
 			switch name {
 			case "ml", "onnx":
 				data.Health.ML = status
@@ -793,8 +799,26 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			// TODO: Get chunks for this file when chunk API is available
-			// For now, we show the chunk count but not individual chunks
+			// Get chunks for this file
+			chunksResp, err := h.grpc.GetChunks(ctx, &pb.GetChunksRequest{
+				Store: storeName,
+				Path:  filePath,
+			})
+			if err != nil {
+				h.log.Warn("Failed to get chunks for file", "path", filePath, "error", err)
+			} else if chunksResp != nil && len(chunksResp.Chunks) > 0 {
+				data.Chunks = make([]ChunkInfo, 0, len(chunksResp.Chunks))
+				for _, chunk := range chunksResp.Chunks {
+					data.Chunks = append(data.Chunks, ChunkInfo{
+						ID:        chunk.Id,
+						StartLine: int(chunk.StartLine),
+						EndLine:   int(chunk.EndLine),
+						Content:   chunk.Content,
+						Symbols:   chunk.Symbols,
+						Size:      int64(len(chunk.Content)),
+					})
+				}
+			}
 		} else {
 			data.Error = fmt.Sprintf("File not found: %s", filePath)
 		}
@@ -813,13 +837,14 @@ func (h *Handler) handleReindexFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	filePath := r.PathValue("path")
 
-	// TODO: Implement file reindex when API is available
-	// For now, return a success message indicating the feature is pending
 	h.log.Info("Reindex file requested", "path", filePath)
 
+	// Reindexing requires the original file content, which the web UI doesn't have access to.
+	// Users should re-index through the CLI or API with the actual file content.
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("Re-index requested for %s (feature pending)", filePath)).Render(ctx, w); err != nil {
-		h.log.Error("Failed to render success message", "error", err)
+	w.WriteHeader(http.StatusBadRequest)
+	if err := ErrorMessage("Cannot re-index from Web UI. Re-indexing requires the original file content. Please use the CLI (rice-search index <path>) or API to re-index this file.").Render(ctx, w); err != nil {
+		h.log.Error("Failed to render error message", "error", err)
 	}
 }
 
@@ -827,13 +852,39 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	filePath := r.PathValue("path")
 
-	// TODO: Implement file deletion when API is available
-	// For now, return a success message indicating the feature is pending
-	h.log.Info("Delete file requested", "path", filePath)
+	// Get store from query parameter or default to "default"
+	store := r.URL.Query().Get("store")
+	if store == "" {
+		store = "default"
+	}
+
+	h.log.Info("Delete file requested", "path", filePath, "store", store)
+
+	// Call gRPC Delete method
+	resp, err := h.grpc.Delete(ctx, &pb.DeleteRequest{
+		Store: store,
+		Paths: []string{filePath},
+	})
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("Delete requested for %s (feature pending)", filePath)).Render(ctx, w); err != nil {
-		h.log.Error("Failed to render success message", "error", err)
+
+	if err != nil {
+		h.log.Error("Failed to delete file", "error", err, "path", filePath, "store", store)
+		if err := ErrorMessage(fmt.Sprintf("Failed to delete %s: %v", filePath, err)).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error message", "error", err)
+		}
+		return
+	}
+
+	// Success - show confirmation message
+	if resp.Deleted > 0 {
+		if err := SuccessMessage(fmt.Sprintf("Successfully deleted %s (%d chunk(s) removed)", filePath, resp.Deleted)).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render success message", "error", err)
+		}
+	} else {
+		if err := ErrorMessage(fmt.Sprintf("File not found: %s", filePath)).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error message", "error", err)
+		}
 	}
 }
 
@@ -2407,13 +2458,12 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 				Latency: latency,
 			}
 			// Extract device info for ML component
-			// TODO: Uncomment after regenerating protobuf with DeviceInfo
-			// if comp.DeviceInfo != nil {
-			// 	healthStatus.Device = comp.DeviceInfo.Device
-			// 	healthStatus.ActualDevice = comp.DeviceInfo.ActualDevice
-			// 	healthStatus.DeviceFallback = comp.DeviceInfo.DeviceFallback
-			// 	healthStatus.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
-			// }
+			if comp.DeviceInfo != nil {
+				healthStatus.Device = comp.DeviceInfo.Device
+				healthStatus.ActualDevice = comp.DeviceInfo.ActualDevice
+				healthStatus.DeviceFallback = comp.DeviceInfo.DeviceFallback
+				healthStatus.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
+			}
 			data.Components[name] = healthStatus
 		}
 	} else {

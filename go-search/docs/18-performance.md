@@ -173,13 +173,15 @@ At 70% hit rate:
   Effective latency = 0.7 * 0ms + 0.3 * 50ms = 15ms
 ```
 
-#### Use FP16 Models
+#### Model Precision
 
-| Precision | Memory | Speed | Quality |
-|-----------|--------|-------|---------|
-| FP32 | 100% | 1x | 100% |
-| FP16 | 50% | 1.5x | ~100% |
-| INT8 | 25% | 2x | 99%+ |
+> **Note**: Current implementation uses FP32 models. FP16/INT8 quantization is a future optimization.
+
+| Precision | Memory | Speed | Quality | Status |
+|-----------|--------|-------|---------|--------|
+| FP32 | 100% | 1x | 100% | ✅ Current |
+| FP16 | 50% | 1.5x | ~100% | ❌ Not implemented |
+| INT8 | 25% | 2x | 99%+ | ❌ Not implemented |
 
 ---
 
@@ -287,8 +289,8 @@ Search workers: CPU cores * 2
 ### CPU Profiling
 
 ```bash
-# Enable pprof
-./rice-search serve --pprof
+# Enable pprof (NOT IMPLEMENTED)
+./rice-search-server --pprof
 
 # Collect profile
 go tool pprof http://localhost:6060/debug/pprof/profile?seconds=30

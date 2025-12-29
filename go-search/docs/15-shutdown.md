@@ -344,7 +344,7 @@ func (s *IndexService) indexBatch(ctx context.Context, docs []Document) error {
 
 ```bash
 # Start server
-./rice-search serve &
+./rice-search-server &
 PID=$!
 
 # Send requests

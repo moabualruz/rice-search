@@ -72,6 +72,11 @@ func (c *Client) HybridSearch(ctx context.Context, collection string, req Search
 		WithPayload:    qdrant.NewWithPayload(req.WithPayload),
 	}
 
+	// Include vectors if requested (needed for postrank dedup/diversity)
+	if req.WithVectors {
+		queryPoints.WithVectors = qdrant.NewWithVectorsInclude("dense")
+	}
+
 	if req.ScoreThreshold != nil {
 		queryPoints.ScoreThreshold = req.ScoreThreshold
 	}
@@ -111,6 +116,11 @@ func (c *Client) DenseSearch(ctx context.Context, collection string, req SearchR
 		Using:          qdrant.PtrOf("dense"),
 		Limit:          qdrant.PtrOf(limit),
 		WithPayload:    qdrant.NewWithPayload(req.WithPayload),
+	}
+
+	// Include vectors if requested (needed for postrank dedup/diversity)
+	if req.WithVectors {
+		queryPoints.WithVectors = qdrant.NewWithVectorsInclude("dense")
 	}
 
 	if req.Filter != nil {
@@ -156,6 +166,11 @@ func (c *Client) SparseSearch(ctx context.Context, collection string, req Search
 		Using:          qdrant.PtrOf("sparse"),
 		Limit:          qdrant.PtrOf(limit),
 		WithPayload:    qdrant.NewWithPayload(req.WithPayload),
+	}
+
+	// Include vectors if requested (needed for postrank dedup/diversity)
+	if req.WithVectors {
+		queryPoints.WithVectors = qdrant.NewWithVectorsInclude("dense")
 	}
 
 	if req.Filter != nil {
@@ -280,11 +295,42 @@ func scoredPointToResult(p *qdrant.ScoredPoint) (SearchResult, error) {
 
 	payload := extractPayload(p.Payload)
 
-	return SearchResult{
+	result := SearchResult{
 		ID:      id,
 		Score:   p.Score,
 		Payload: payload,
-	}, nil
+	}
+
+	// Extract dense vector if present
+	if p.Vectors != nil {
+		result.DenseVector = extractDenseVector(p.Vectors)
+	}
+
+	return result, nil
+}
+
+// extractDenseVector extracts the dense vector from Qdrant's vector response.
+func extractDenseVector(vectors *qdrant.VectorsOutput) []float32 {
+	if vectors == nil {
+		return nil
+	}
+
+	switch v := vectors.VectorsOptions.(type) {
+	case *qdrant.VectorsOutput_Vector:
+		// Single unnamed vector
+		if v.Vector != nil {
+			return v.Vector.Data
+		}
+	case *qdrant.VectorsOutput_Vectors:
+		// Named vectors - look for "dense"
+		if v.Vectors != nil && v.Vectors.Vectors != nil {
+			if denseVec, ok := v.Vectors.Vectors["dense"]; ok {
+				return denseVec.Data
+			}
+		}
+	}
+
+	return nil
 }
 
 // extractPayload extracts PointPayload from Qdrant payload map.

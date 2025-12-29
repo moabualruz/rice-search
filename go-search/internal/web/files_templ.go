@@ -592,7 +592,7 @@ func FilesTable(data FilesPageData) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			for _, file := range data.Files {
-				templ_7745c5c3_Err = FileRow(file).Render(ctx, templ_7745c5c3_Buffer)
+				templ_7745c5c3_Err = FileRow(file, data.Store).Render(ctx, templ_7745c5c3_Buffer)
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
@@ -611,7 +611,7 @@ func FilesTable(data FilesPageData) templ.Component {
 }
 
 // FileRow renders a single file row
-func FileRow(file IndexedFileInfo) templ.Component {
+func FileRow(file IndexedFileInfo, store string) templ.Component {
 	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
 		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
 		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
@@ -774,9 +774,9 @@ func FileRow(file IndexedFileInfo) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var26 string
-		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/files/%s", file.Path))
+		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/files/%s?store=%s", file.Path, store))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/files.templ`, Line: 360, Col: 51}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/files.templ`, Line: 360, Col: 66}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 		if templ_7745c5c3_Err != nil {
@@ -789,7 +789,7 @@ func FileRow(file IndexedFileInfo) templ.Component {
 		var templ_7745c5c3_Var27 string
 		templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Delete %s? This cannot be undone.", file.Path))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/files.templ`, Line: 361, Col: 76}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/files.templ`, Line: 361, Col: 75}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 		if templ_7745c5c3_Err != nil {

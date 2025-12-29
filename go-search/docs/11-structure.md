@@ -5,8 +5,10 @@
 ```
 go-search/
 ├── cmd/
-│   └── rice-search/
-│       └── main.go                 # CLI entry point
+│   ├── rice-search/
+│   │   └── main.go                 # CLI entry point
+│   └── rice-search-server/
+│       └── main.go                 # Server entry point (primary)
 │
 ├── internal/
 │   ├── api/                        # API service
@@ -66,15 +68,38 @@ go-search/
 │   │   ├── tensor.go               # Tensor helpers
 │   │   └── tokenizer.go            # Tokenizer wrapper
 │   │
-│   ├── cache/                      # Caching
-│   │   ├── cache.go                # Cache interface
-│   │   ├── memory.go               # In-memory LRU
-│   │   └── redis.go                # Redis cache
-│   │
 │   ├── config/                     # Configuration
 │   │   ├── config.go               # Config struct
-│   │   ├── loader.go               # Load from env/file
-│   │   └── validate.go             # Validation
+│   │   └── loader.go               # Load from env/file
+│   │
+│   ├── connection/                 # Connection tracking (UNIQUE)
+│   │   ├── service.go              # Connection service
+│   │   ├── generator.go            # ID generation
+│   │   └── storage.go              # Persistence
+│   │
+│   ├── grpcclient/                 # gRPC client (future)
+│   │   └── client.go
+│   │
+│   ├── grpcserver/                 # gRPC server (future)
+│   │   └── server.go
+│   │
+│   ├── metrics/                    # Prometheus metrics
+│   │   ├── registry.go             # Metric registry
+│   │   ├── collectors.go           # Metric collectors
+│   │   └── handlers.go             # HTTP handlers
+│   │
+│   ├── postrank/                   # Post-ranking pipeline
+│   │   ├── dedup.go                # Semantic deduplication
+│   │   ├── diversity.go            # MMR diversity
+│   │   └── aggregation.go          # File aggregation
+│   │
+│   ├── qdrant/                     # Qdrant client
+│   │   ├── client.go               # Client wrapper
+│   │   ├── search.go               # Search operations
+│   │   └── types.go                # Type definitions
+│   │
+│   ├── settings/                   # Runtime settings
+│   │   └── service.go              # Settings service
 │   │
 │   └── pkg/                        # Shared utilities
 │       ├── hash/                   # Hashing utilities

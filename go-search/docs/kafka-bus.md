@@ -335,7 +335,7 @@ func (h *consumerGroupHandler) ConsumeClaim(
 ```bash
 # Use MemoryBus (default)
 RICE_BUS_TYPE=memory
-./rice-search serve
+./rice-search-server
 ```
 
 ### Multi-Node (Production)
@@ -411,7 +411,7 @@ KAFKA_INTEGRATION_TESTS=1 go test ./internal/bus/... -v -tags=integration
 RICE_BUS_TYPE=kafka \
 RICE_KAFKA_BROKERS=localhost:9092 \
 RICE_KAFKA_GROUP=test-group \
-./rice-search serve
+./rice-search-server
 ```
 
 ## Best Practices
