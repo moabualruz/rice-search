@@ -1,0 +1,68 @@
+# Rice Search - Go Edition
+# Development Docker Compose - Data resets on down, includes Qdrant UI
+
+services:
+  # ===========================================================================
+  # Rice Search Application (Dev Mode)
+  # ===========================================================================
+  rice-search:
+    build:
+      context: ../..
+      dockerfile: deployments/docker/Dockerfile
+    container_name: rice-search-dev
+    ports:
+      - "8080:8080"
+    environment:
+      - RICE_HOST=0.0.0.0
+      - RICE_PORT=8080
+      - RICE_LOG_LEVEL=debug
+      - RICE_LOG_FORMAT=text
+      - QDRANT_URL=http://qdrant:6333
+      - RICE_ML_DEVICE=cpu
+      - RICE_CACHE_TYPE=memory
+      - RICE_BUS_TYPE=memory
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    profiles:
+      - app
+
+  # ===========================================================================
+  # Qdrant Vector Database (Ephemeral - no persistence)
+  # ===========================================================================
+  qdrant:
+    image: qdrant/qdrant:v1.12.4
+    container_name: rice-qdrant-dev
+    ports:
+      - "6333:6333"   # HTTP API + Dashboard
+      - "6334:6334"   # gRPC API
+    environment:
+      - QDRANT__SERVICE__GRPC_PORT=6334
+      - QDRANT__LOG_LEVEL=DEBUG
+      # No storage path = in-memory only, resets on restart
+    tmpfs:
+      - /qdrant/storage:size=2G
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:6333/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  # ===========================================================================
+  # Qdrant Web UI (Better UI for browsing collections)
+  # ===========================================================================
+  qdrant-ui:
+    image: qdrant/qdrant-web-ui:latest
+    container_name: rice-qdrant-ui
+    ports:
+      - "8001:80"
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      qdrant:
+        condition: service_healthy
+
+networks:
+  default:
+    name: rice-dev-network

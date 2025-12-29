@@ -1,0 +1,139 @@
+package bus
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/ricesearch/rice-search/internal/pkg/errors"
+)
+
+// MemoryBus is an in-memory event bus using Go channels.
+type MemoryBus struct {
+	mu       sync.RWMutex
+	handlers map[string][]Handler
+	pending  map[string]chan Event
+	closed   bool
+	timeout  time.Duration
+}
+
+// NewMemoryBus creates a new in-memory event bus.
+func NewMemoryBus() *MemoryBus {
+	return &MemoryBus{
+		handlers: make(map[string][]Handler),
+		pending:  make(map[string]chan Event),
+		timeout:  30 * time.Second,
+	}
+}
+
+// Publish publishes an event to all subscribers of a topic.
+func (b *MemoryBus) Publish(ctx context.Context, topic string, event Event) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.closed {
+		return errors.New(errors.CodeUnavailable, "bus is closed")
+	}
+
+	handlers, ok := b.handlers[topic]
+	if !ok || len(handlers) == 0 {
+		return nil // No subscribers, not an error
+	}
+
+	// Fan out to all handlers
+	for _, handler := range handlers {
+		go func(h Handler) {
+			if err := h(ctx, event); err != nil {
+				// Log error but don't fail the publish
+				fmt.Printf("handler error for topic %s: %v\n", topic, err)
+			}
+		}(handler)
+	}
+
+	return nil
+}
+
+// Subscribe registers a handler for events on a topic.
+func (b *MemoryBus) Subscribe(ctx context.Context, topic string, handler Handler) error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if b.closed {
+		return errors.New(errors.CodeUnavailable, "bus is closed")
+	}
+
+	b.handlers[topic] = append(b.handlers[topic], handler)
+	return nil
+}
+
+// Request sends a request and waits for a response.
+func (b *MemoryBus) Request(ctx context.Context, topic string, req Event) (Event, error) {
+	b.mu.Lock()
+	if b.closed {
+		b.mu.Unlock()
+		return Event{}, errors.New(errors.CodeUnavailable, "bus is closed")
+	}
+
+	// Create a response channel for this correlation ID
+	responseChan := make(chan Event, 1)
+	b.pending[req.CorrelationID] = responseChan
+	b.mu.Unlock()
+
+	// Clean up when done
+	defer func() {
+		b.mu.Lock()
+		delete(b.pending, req.CorrelationID)
+		close(responseChan)
+		b.mu.Unlock()
+	}()
+
+	// Publish the request
+	if err := b.Publish(ctx, topic, req); err != nil {
+		return Event{}, err
+	}
+
+	// Wait for response
+	select {
+	case <-ctx.Done():
+		return Event{}, errors.Wrap(errors.CodeTimeout, "request timeout", ctx.Err())
+	case <-time.After(b.timeout):
+		return Event{}, errors.New(errors.CodeTimeout, "request timeout")
+	case resp := <-responseChan:
+		return resp, nil
+	}
+}
+
+// Respond sends a response for a pending request.
+func (b *MemoryBus) Respond(correlationID string, event Event) error {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	if b.closed {
+		return errors.New(errors.CodeUnavailable, "bus is closed")
+	}
+
+	ch, ok := b.pending[correlationID]
+	if !ok {
+		return errors.New(errors.CodeNotFound, "no pending request for correlation ID")
+	}
+
+	select {
+	case ch <- event:
+		return nil
+	default:
+		return errors.New(errors.CodeInternal, "response channel full")
+	}
+}
+
+// Close closes the bus.
+func (b *MemoryBus) Close() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	b.closed = true
+	b.handlers = nil
+	b.pending = nil
+
+	return nil
+}

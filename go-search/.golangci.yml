@@ -1,0 +1,165 @@
+# golangci-lint configuration
+# https://golangci-lint.run/usage/configuration/
+
+run:
+  timeout: 5m
+  issues-exit-code: 1
+  tests: true
+  skip-dirs:
+    - vendor
+    - models
+  skip-files:
+    - ".*_templ\\.go$"
+
+output:
+  formats:
+    - format: colored-line-number
+  print-issued-lines: true
+  print-linter-name: true
+
+linters:
+  enable:
+    # Default linters
+    - errcheck
+    - gosimple
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    
+    # Additional linters
+    - bodyclose
+    - dogsled
+    - dupl
+    - errorlint
+    - exhaustive
+    - exportloopref
+    - gochecknoinits
+    - goconst
+    - gocritic
+    - gocyclo
+    - godot
+    - gofmt
+    - goimports
+    - goprintffuncname
+    - gosec
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - prealloc
+    - predeclared
+    - revive
+    - stylecheck
+    - unconvert
+    - unparam
+    - whitespace
+
+  disable:
+    - gochecknoglobals  # We use globals for version info
+    - wsl               # Too strict on whitespace
+    - lll               # Line length handled by editor
+    - funlen            # Function length - context dependent
+    - gocognit          # Cognitive complexity - context dependent
+
+linters-settings:
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment  # Too noisy
+
+  gocyclo:
+    min-complexity: 15
+
+  goconst:
+    min-len: 3
+    min-occurrences: 3
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - experimental
+      - opinionated
+      - performance
+      - style
+    disabled-checks:
+      - hugeParam  # We pass structs by value intentionally
+
+  gofmt:
+    simplify: true
+
+  goimports:
+    local-prefixes: github.com/ricesearch/rice-search
+
+  gosec:
+    excludes:
+      - G104  # Unhandled errors - errcheck handles this
+
+  misspell:
+    locale: US
+
+  nakedret:
+    max-func-lines: 30
+
+  prealloc:
+    simple: true
+    range-loops: true
+    for-loops: true
+
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: context-keys-type
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: error-naming
+      - name: exported
+      - name: increment-decrement
+      - name: indent-error-flow
+      - name: package-comments
+      - name: range
+      - name: receiver-naming
+      - name: time-naming
+      - name: unexported-return
+      - name: var-declaration
+      - name: var-naming
+
+  stylecheck:
+    checks:
+      - all
+      - -ST1000  # Package comments - we'll add these later
+
+  unparam:
+    check-exported: false
+
+issues:
+  exclude-rules:
+    # Ignore long lines in generated files
+    - path: "_templ\\.go$"
+      linters:
+        - lll
+
+    # Test files can have longer functions
+    - path: "_test\\.go$"
+      linters:
+        - funlen
+        - gocyclo
+        - dupl
+
+    # Allow dot imports in tests
+    - path: "_test\\.go$"
+      text: "dot-imports"
+
+    # Allow error shadowing in tests
+    - path: "_test\\.go$"
+      text: "shadow: declaration of \"err\""
+
+  max-issues-per-linter: 50
+  max-same-issues: 10
+  new: false
