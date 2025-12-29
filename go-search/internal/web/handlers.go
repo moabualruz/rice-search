@@ -3,6 +3,7 @@ package web
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"runtime"
@@ -29,6 +30,7 @@ type GRPCClient interface {
 	GetStore(ctx context.Context, req *pb.GetStoreRequest) (*pb.Store, error)
 	DeleteStore(ctx context.Context, req *pb.DeleteStoreRequest) (*pb.DeleteStoreResponse, error)
 	GetStoreStats(ctx context.Context, req *pb.GetStoreStatsRequest) (*pb.StoreStats, error)
+	ListFiles(ctx context.Context, req *pb.ListFilesRequest) (*pb.ListFilesResponse, error)
 	Health(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error)
 	Version(ctx context.Context, req *pb.VersionRequest) (*pb.VersionResponse, error)
 }
@@ -81,8 +83,14 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /stores", h.handleStoresPage)
 	mux.HandleFunc("GET /stores/{name}", h.handleStoreDetail)
 	mux.HandleFunc("GET /stores/{name}/files", h.handleFilesPage)
+	mux.HandleFunc("GET /stores/{name}/files/{path...}", h.handleFileDetail)
 	mux.HandleFunc("GET /files", h.handleFilesPage)
 	mux.HandleFunc("GET /stats", h.handleStatsPage)
+
+	// File Operations API (HTMX)
+	mux.HandleFunc("POST /files/{path...}/reindex", h.handleReindexFile)
+	mux.HandleFunc("DELETE /files/{path...}", h.handleDeleteFile)
+	mux.HandleFunc("GET /stores/{name}/files/export", h.handleExportFiles)
 
 	// Admin Pages
 	mux.HandleFunc("GET /admin", h.handleAdminPage)
@@ -114,10 +122,18 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Connections API (HTMX)
 	mux.HandleFunc("POST /admin/connections/{id}/enable", h.handleEnableConnection)
 	mux.HandleFunc("POST /admin/connections/{id}/disable", h.handleDisableConnection)
+	mux.HandleFunc("POST /admin/connections/{id}/rename", h.handleRenameConnection)
 	mux.HandleFunc("DELETE /admin/connections/{id}", h.handleDeleteConnection)
 
 	// Settings API (HTMX)
 	mux.HandleFunc("POST /admin/settings", h.handleSaveSettings)
+	mux.HandleFunc("GET /admin/settings/export", h.handleExportSettings)
+	mux.HandleFunc("POST /admin/settings/import", h.handleImportSettings)
+	mux.HandleFunc("POST /admin/settings/reset", h.handleResetSettings)
+
+	// Settings REST API (JSON)
+	mux.HandleFunc("GET /api/v1/settings", h.handleAPIGetSettings)
+	mux.HandleFunc("PUT /api/v1/settings", h.handleAPIPutSettings)
 
 	// Stats API (HTMX)
 	mux.HandleFunc("GET /stats/refresh", h.handleStatsRefresh)
@@ -194,6 +210,14 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 			if comp.Latency != nil {
 				status.Latency = comp.Latency.AsDuration().Milliseconds()
 			}
+			// Extract device info for ML component
+			// TODO: Uncomment after regenerating protobuf with DeviceInfo
+			// if comp.DeviceInfo != nil {
+			// 	status.Device = comp.DeviceInfo.Device
+			// 	status.ActualDevice = comp.DeviceInfo.ActualDevice
+			// 	status.DeviceFallback = comp.DeviceInfo.DeviceFallback
+			// 	status.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
+			// }
 			switch name {
 			case "ml", "onnx":
 				data.Health.ML = status
@@ -239,6 +263,41 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	data.System.MemoryTotalMB = int64(memStats.Sys / 1024 / 1024)
 	data.System.Goroutines = runtime.NumGoroutine()
 	data.System.Uptime = formatDuration(time.Since(h.startTime))
+
+	// Recent files (get from default store, sorted by indexed_at desc)
+	filesResp, err := h.grpc.ListFiles(ctx, &pb.ListFilesRequest{
+		Store:     "default",
+		Page:      1,
+		PageSize:  5,
+		SortBy:    "indexed_at",
+		SortOrder: "desc",
+	})
+	if err == nil && filesResp != nil {
+		for _, f := range filesResp.Files {
+			data.RecentFiles = append(data.RecentFiles, RecentFile{
+				Path:      f.Path,
+				Language:  f.Language,
+				Chunks:    int(f.ChunkCount),
+				IndexedAt: f.GetIndexedAt(),
+			})
+		}
+	}
+
+	// Recent searches from metrics (if we have time-series data)
+	if h.metrics != nil && h.metrics.TimeSeries != nil {
+		// Get recent search count per time bucket as pseudo "recent searches"
+		history := h.metrics.TimeSeries.SearchRate.GetHistoryWithCurrent()
+		for i := len(history) - 1; i >= 0 && len(data.RecentSearches) < 5; i-- {
+			if history[i].Value > 0 {
+				data.RecentSearches = append(data.RecentSearches, RecentSearch{
+					Query:     fmt.Sprintf("%.0f searches", history[i].Value),
+					Store:     "all",
+					Results:   int(history[i].Value),
+					Timestamp: history[i].Timestamp,
+				})
+			}
+		}
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := DashboardPage(data).Render(ctx, w); err != nil {
@@ -476,10 +535,91 @@ func (h *Handler) handleStoreDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	// For now, redirect to stores page (detail page can be implemented later)
-	http.Redirect(w, r, "/stores", http.StatusSeeOther)
-	_ = ctx
-	_ = name
+	data := StoreDetailPageData{
+		Layout: h.getLayoutData(ctx, name+" Store", "/stores"),
+	}
+
+	// Get store details
+	storeResp, err := h.grpc.GetStore(ctx, &pb.GetStoreRequest{Name: name})
+	if err != nil {
+		data.Error = fmt.Sprintf("Failed to get store: %v", err)
+	} else if storeResp != nil {
+		data.Store = StoreInfo{
+			Name:        storeResp.Name,
+			DisplayName: storeResp.DisplayName,
+			Description: storeResp.Description,
+		}
+		if storeResp.CreatedAt != nil {
+			data.Store.CreatedAt = storeResp.CreatedAt.AsTime()
+		}
+	}
+
+	// Get store stats
+	statsResp, err := h.grpc.GetStoreStats(ctx, &pb.GetStoreStatsRequest{Name: name})
+	if err == nil && statsResp != nil {
+		data.Store.DocumentCount = statsResp.DocumentCount
+		data.Store.ChunkCount = statsResp.ChunkCount
+		data.Store.TotalSize = statsResp.TotalSize
+		if statsResp.LastIndexed != nil {
+			data.Store.LastIndexed = statsResp.LastIndexed.AsTime()
+		}
+	}
+
+	// Get connections for this store
+	if h.connSvc != nil {
+		conns, err := h.connSvc.GetConnectionsForStore(ctx, name)
+		if err == nil {
+			for _, c := range conns {
+				conn := ConnectionDetail{
+					ID:           c.ID,
+					Name:         c.Name,
+					FilesIndexed: c.IndexedFiles,
+					SearchCount:  c.SearchCount,
+					LastSeen:     c.LastSeenAt,
+					LastIP:       c.LastIP,
+					CreatedAt:    c.CreatedAt,
+					PCInfo: PCInfoDisplay{
+						Hostname: c.PCInfo.Hostname,
+						OS:       c.PCInfo.OS,
+						Arch:     c.PCInfo.Arch,
+						Username: c.PCInfo.Username,
+					},
+				}
+				data.Connections = append(data.Connections, conn)
+			}
+		}
+	}
+
+	// Get recent files (last 10)
+	filesResp, err := h.grpc.ListFiles(ctx, &pb.ListFilesRequest{
+		Store:     name,
+		Page:      1,
+		PageSize:  10,
+		SortBy:    "indexed_at",
+		SortOrder: "desc",
+	})
+	if err == nil && filesResp != nil {
+		for _, f := range filesResp.Files {
+			file := IndexedFileInfo{
+				Path:       f.Path,
+				Language:   f.Language,
+				Size:       f.Size,
+				ChunkCount: int(f.ChunkCount),
+				Hash:       f.Hash,
+				Status:     "indexed",
+			}
+			if f.IndexedAt != nil {
+				file.IndexedAt = f.IndexedAt.AsTime()
+			}
+			data.RecentFiles = append(data.RecentFiles, file)
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := StoreDetailPage(data).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render store detail page", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 // =============================================================================
@@ -492,12 +632,18 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 	if store == "" {
 		store = r.URL.Query().Get("store")
 	}
+	if store == "" {
+		store = "default"
+	}
+
+	page := parseIntOr(r.URL.Query().Get("page"), 1)
+	pageSize := parseIntOr(r.URL.Query().Get("page_size"), 50)
 
 	data := FilesPageData{
 		Layout:   h.getLayoutData(ctx, "Files", "/files"),
 		Store:    store,
-		Page:     parseIntOr(r.URL.Query().Get("page"), 1),
-		PageSize: parseIntOr(r.URL.Query().Get("page_size"), 50),
+		Page:     page,
+		PageSize: pageSize,
 		Filters: FileFilters{
 			Store:      store,
 			PathPrefix: r.URL.Query().Get("path"),
@@ -507,14 +653,221 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// TODO: Implement file listing from store
-	// For now, just render empty
-	data.TotalPages = 1
+	// Fetch files from gRPC service
+	resp, err := h.grpc.ListFiles(ctx, &pb.ListFilesRequest{
+		Store:      store,
+		PathPrefix: data.Filters.PathPrefix,
+		Language:   data.Filters.Language,
+		Page:       int32(page),
+		PageSize:   int32(pageSize),
+		SortBy:     data.Filters.SortBy,
+		SortOrder:  data.Filters.SortOrder,
+	})
+	if err != nil {
+		h.log.Error("Failed to list files", "store", store, "error", err)
+		data.Error = fmt.Sprintf("Failed to list files: %v", err)
+	} else {
+		// Convert protobuf files to display format
+		for _, f := range resp.Files {
+			data.Files = append(data.Files, IndexedFileInfo{
+				Path:      f.Path,
+				Language:  f.Language,
+				Size:      f.Size,
+				Hash:      f.Hash,
+				IndexedAt: f.GetIndexedAt(),
+				Status:    f.Status,
+			})
+		}
+		data.Total = int(resp.Total)
+		data.TotalPages = int(resp.TotalPages)
+	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := FilesPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render files page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+// =============================================================================
+// File Detail Page
+// =============================================================================
+
+func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	storeName := r.PathValue("name")
+	filePath := r.PathValue("path")
+
+	data := FileDetailPageData{
+		Layout: h.getLayoutData(ctx, filePath, "/files"),
+		Store:  storeName,
+	}
+
+	// Get file info from the list with path filter
+	filesResp, err := h.grpc.ListFiles(ctx, &pb.ListFilesRequest{
+		Store:      storeName,
+		PathPrefix: filePath,
+		Page:       1,
+		PageSize:   1,
+	})
+	if err != nil {
+		data.Error = fmt.Sprintf("Failed to get file info: %v", err)
+	} else if filesResp != nil && len(filesResp.Files) > 0 {
+		f := filesResp.Files[0]
+		// Only use if exact match
+		if f.Path == filePath {
+			data.File = IndexedFileInfo{
+				Path:         f.Path,
+				Language:     f.Language,
+				Size:         f.Size,
+				ChunkCount:   int(f.ChunkCount),
+				ConnectionID: f.ConnectionID,
+				Hash:         f.Hash,
+				Status:       "indexed",
+			}
+			if f.IndexedAt != nil {
+				data.File.IndexedAt = f.IndexedAt.AsTime()
+			}
+
+			// Get connection info if available
+			if h.connSvc != nil && f.ConnectionID != "" {
+				conn, err := h.connSvc.GetConnection(ctx, f.ConnectionID)
+				if err == nil && conn != nil {
+					data.Connection = ConnectionDetail{
+						ID:           conn.ID,
+						Name:         conn.Name,
+						FilesIndexed: conn.IndexedFiles,
+						SearchCount:  conn.SearchCount,
+						LastSeen:     conn.LastSeenAt,
+						LastIP:       conn.LastIP,
+						CreatedAt:    conn.CreatedAt,
+						PCInfo: PCInfoDisplay{
+							Hostname: conn.PCInfo.Hostname,
+							OS:       conn.PCInfo.OS,
+							Arch:     conn.PCInfo.Arch,
+							Username: conn.PCInfo.Username,
+						},
+					}
+					data.File.ConnectionName = conn.Name
+				}
+			}
+
+			// TODO: Get chunks for this file when chunk API is available
+			// For now, we show the chunk count but not individual chunks
+		} else {
+			data.Error = fmt.Sprintf("File not found: %s", filePath)
+		}
+	} else {
+		data.Error = fmt.Sprintf("File not found: %s", filePath)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := FileDetailPage(data).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render file detail page", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) handleReindexFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	filePath := r.PathValue("path")
+
+	// TODO: Implement file reindex when API is available
+	// For now, return a success message indicating the feature is pending
+	h.log.Info("Reindex file requested", "path", filePath)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := SuccessMessage(fmt.Sprintf("Re-index requested for %s (feature pending)", filePath)).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render success message", "error", err)
+	}
+}
+
+func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	filePath := r.PathValue("path")
+
+	// TODO: Implement file deletion when API is available
+	// For now, return a success message indicating the feature is pending
+	h.log.Info("Delete file requested", "path", filePath)
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := SuccessMessage(fmt.Sprintf("Delete requested for %s (feature pending)", filePath)).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render success message", "error", err)
+	}
+}
+
+func (h *Handler) handleExportFiles(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	storeName := r.PathValue("name")
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "csv"
+	}
+
+	// Get all files from store
+	var allFiles []*pb.IndexedFile
+	page := int32(1)
+	for {
+		resp, err := h.grpc.ListFiles(ctx, &pb.ListFilesRequest{
+			Store:     storeName,
+			Page:      page,
+			PageSize:  100,
+			SortBy:    "path",
+			SortOrder: "asc",
+		})
+		if err != nil {
+			http.Error(w, "Failed to list files: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		allFiles = append(allFiles, resp.Files...)
+		if int32(len(allFiles)) >= resp.Total || len(resp.Files) == 0 {
+			break
+		}
+		page++
+	}
+
+	switch format {
+	case "json":
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-files.json", storeName))
+
+		type ExportFile struct {
+			Path       string `json:"path"`
+			Language   string `json:"language"`
+			Size       int64  `json:"size"`
+			ChunkCount int32  `json:"chunk_count"`
+			Hash       string `json:"hash"`
+			IndexedAt  string `json:"indexed_at"`
+		}
+
+		export := make([]ExportFile, len(allFiles))
+		for i, f := range allFiles {
+			export[i] = ExportFile{
+				Path:       f.Path,
+				Language:   f.Language,
+				Size:       f.Size,
+				ChunkCount: f.ChunkCount,
+				Hash:       f.Hash,
+				IndexedAt:  f.GetIndexedAt().Format(time.RFC3339),
+			}
+		}
+
+		data, _ := json.MarshalIndent(export, "", "  ")
+		w.Write(data)
+
+	default: // CSV
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s-files.csv", storeName))
+
+		// Write CSV header
+		w.Write([]byte("path,language,size,chunk_count,hash,indexed_at\n"))
+
+		// Write data rows
+		for _, f := range allFiles {
+			line := fmt.Sprintf("%q,%s,%d,%d,%s,%s\n",
+				f.Path, f.Language, f.Size, f.ChunkCount, f.Hash, f.GetIndexedAt().Format(time.RFC3339))
+			w.Write([]byte(line))
+		}
 	}
 }
 
@@ -1009,6 +1362,67 @@ func (h *Handler) handleDeleteMapper(w http.ResponseWriter, r *http.Request) {
 	h.refreshMappersList(w, r)
 }
 
+func (h *Handler) handleEditMapperModal(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.mapperSvc == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Mapper service not available").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	mapperID := r.PathValue("id")
+	if mapperID == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Mapper ID is required").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Get mapper
+	mapper, err := h.mapperSvc.GetMapper(ctx, mapperID)
+	if err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage(err.Error()).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Get models for the editor
+	var models []ModelInfoDisplay
+	if h.modelReg != nil {
+		for _, m := range h.modelReg.ListAllModels() {
+			models = append(models, ModelInfoDisplay{
+				ID:          m.ID,
+				Type:        string(m.Type),
+				DisplayName: m.DisplayName,
+			})
+		}
+	}
+
+	// Convert mapper to display format
+	mapperDisplay := &ModelMapperDisplay{
+		ID:             mapper.ID,
+		Name:           mapper.Name,
+		ModelID:        mapper.ModelID,
+		Type:           string(mapper.Type),
+		PromptTemplate: mapper.PromptTemplate,
+		InputMapping:   mapper.InputMapping,
+		OutputMapping:  mapper.OutputMapping,
+	}
+
+	// Render modal with mapper data
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := MapperEditorModal(models, mapperDisplay).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render mapper editor modal", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 func (h *Handler) handleMapperYAML(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -1058,8 +1472,65 @@ func (h *Handler) handleMapperYAML(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleGenerateMapper(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement generate mapper
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	ctx := r.Context()
+
+	// Check mapper service is available
+	if h.mapperSvc == nil {
+		http.Error(w, "Mapper service not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Parse form data
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	modelID := r.FormValue("model_id")
+	if modelID == "" {
+		http.Error(w, "model_id is required", http.StatusBadRequest)
+		return
+	}
+
+	// Generate mapper using the service
+	mapper, err := h.mapperSvc.GenerateMapper(ctx, modelID)
+	if err != nil {
+		h.log.Error("Failed to generate mapper", "model_id", modelID, "error", err)
+		http.Error(w, fmt.Sprintf("Failed to generate mapper: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Get models list for dropdown
+	var modelsList []ModelInfoDisplay
+	if h.modelReg != nil {
+		for _, m := range h.modelReg.ListAllModels() {
+			modelsList = append(modelsList, ModelInfoDisplay{
+				ID:          m.ID,
+				Type:        string(m.Type),
+				DisplayName: m.DisplayName,
+			})
+		}
+	}
+
+	// Convert to display struct
+	mapperDisplay := &ModelMapperDisplay{
+		ID:             mapper.ID,
+		Name:           mapper.Name,
+		ModelID:        mapper.ModelID,
+		Type:           string(mapper.Type),
+		InputMapping:   mapper.InputMapping,
+		OutputMapping:  mapper.OutputMapping,
+		PromptTemplate: mapper.PromptTemplate,
+		CreatedAt:      mapper.CreatedAt,
+		UpdatedAt:      mapper.UpdatedAt,
+	}
+
+	// Render the mapper editor modal with pre-filled data
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := MapperEditorModal(modelsList, mapperDisplay).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render mapper editor modal", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 // refreshMappersList refreshes the mappers list after an operation.
@@ -1440,6 +1911,183 @@ func (h *Handler) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) handleExportSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.settingsSvc == nil {
+		http.Error(w, "Settings service not available", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Determine format from query param (default: yaml)
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "yaml"
+	}
+
+	var data []byte
+	var err error
+	var contentType, filename string
+
+	switch format {
+	case "json":
+		data, err = h.settingsSvc.ExportJSON(ctx)
+		contentType = "application/json"
+		filename = "settings.json"
+	default:
+		data, err = h.settingsSvc.ExportYAML(ctx)
+		contentType = "application/x-yaml"
+		filename = "settings.yaml"
+	}
+
+	if err != nil {
+		http.Error(w, "Failed to export settings: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+	w.Write(data)
+}
+
+func (h *Handler) handleImportSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	if h.settingsSvc == nil {
+		if err := ErrorMessage("Settings service not available").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Parse multipart form for file upload
+	if err := r.ParseMultipartForm(1 << 20); err != nil { // 1MB max
+		if err := ErrorMessage("Failed to parse form: "+err.Error()).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	file, header, err := r.FormFile("settings_file")
+	if err != nil {
+		if err := ErrorMessage("No file uploaded").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+	defer file.Close()
+
+	// Read file content
+	data := make([]byte, header.Size)
+	if _, err := file.Read(data); err != nil {
+		if err := ErrorMessage("Failed to read file: "+err.Error()).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Determine format from filename
+	var importErr error
+	if strings.HasSuffix(header.Filename, ".json") {
+		importErr = h.settingsSvc.ImportJSON(ctx, data, "admin-import")
+	} else {
+		importErr = h.settingsSvc.ImportYAML(ctx, data, "admin-import")
+	}
+
+	if importErr != nil {
+		if err := ErrorMessage("Failed to import settings: "+importErr.Error()).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	if err := SuccessMessage("Settings imported successfully").Render(ctx, w); err != nil {
+		h.log.Error("Failed to render success", "error", err)
+	}
+}
+
+func (h *Handler) handleResetSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	if h.settingsSvc == nil {
+		if err := ErrorMessage("Settings service not available").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	if err := h.settingsSvc.Reset(ctx, "admin-reset"); err != nil {
+		if err := ErrorMessage("Failed to reset settings: "+err.Error()).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	if err := SuccessMessage("Settings reset to defaults").Render(ctx, w); err != nil {
+		h.log.Error("Failed to render success", "error", err)
+	}
+}
+
+// =============================================================================
+// Settings REST API (JSON)
+// =============================================================================
+
+// handleAPIGetSettings returns the current settings as JSON.
+// GET /api/v1/settings
+func (h *Handler) handleAPIGetSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.settingsSvc == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "settings service not available"})
+		return
+	}
+
+	cfg := h.settingsSvc.Get(ctx)
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(cfg); err != nil {
+		h.log.Error("Failed to encode settings", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to encode settings"})
+	}
+}
+
+// handleAPIPutSettings updates settings from a JSON body.
+// PUT /api/v1/settings
+func (h *Handler) handleAPIPutSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	if h.settingsSvc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "settings service not available"})
+		return
+	}
+
+	// Parse JSON body
+	var cfg settings.RuntimeConfig
+	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON: " + err.Error()})
+		return
+	}
+
+	// Update settings
+	if err := h.settingsSvc.Update(ctx, cfg, "api"); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to update settings: " + err.Error()})
+		return
+	}
+
+	// Return updated settings
+	updatedCfg := h.settingsSvc.Get(ctx)
+	json.NewEncoder(w).Encode(updatedCfg)
+}
+
 // parseIntOr parses an integer or returns a default value.
 func parseIntOr(s string, defaultVal int) int {
 	if s == "" {
@@ -1470,7 +2118,9 @@ func parseFloatOr(s string, defaultVal float32) float32 {
 
 func (h *Handler) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	data := h.getStatsData(ctx)
+	store := r.URL.Query().Get("store")
+	timeRange := r.URL.Query().Get("time_range")
+	data := h.getStatsData(ctx, store, timeRange)
 	data.Layout = h.getLayoutData(ctx, "Stats", "/stats")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1482,7 +2132,9 @@ func (h *Handler) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) handleStatsRefresh(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	data := h.getStatsData(ctx)
+	store := r.URL.Query().Get("store")
+	timeRange := r.URL.Query().Get("time_range")
+	data := h.getStatsData(ctx, store, timeRange)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := StatsContent(data).Render(ctx, w); err != nil {
@@ -1491,9 +2143,11 @@ func (h *Handler) handleStatsRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) getStatsData(ctx context.Context) StatsPageData {
+func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange string) StatsPageData {
 	data := StatsPageData{
 		Components: make(map[string]HealthStatus),
+		Store:      storeFilter,
+		TimeRange:  timeRange,
 	}
 
 	// Get version
@@ -1523,11 +2177,20 @@ func (h *Handler) getStatsData(ctx context.Context) StatsPageData {
 			if comp.Latency != nil {
 				latency = comp.Latency.AsDuration().Milliseconds()
 			}
-			data.Components[name] = HealthStatus{
+			healthStatus := HealthStatus{
 				Status:  status,
 				Message: comp.Message,
 				Latency: latency,
 			}
+			// Extract device info for ML component
+			// TODO: Uncomment after regenerating protobuf with DeviceInfo
+			// if comp.DeviceInfo != nil {
+			// 	healthStatus.Device = comp.DeviceInfo.Device
+			// 	healthStatus.ActualDevice = comp.DeviceInfo.ActualDevice
+			// 	healthStatus.DeviceFallback = comp.DeviceInfo.DeviceFallback
+			// 	healthStatus.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
+			// }
+			data.Components[name] = healthStatus
 		}
 	} else {
 		data.Components["server"] = HealthStatus{
@@ -1539,19 +2202,101 @@ func (h *Handler) getStatsData(ctx context.Context) StatsPageData {
 	// Get stores stats
 	storesResp, err := h.grpc.ListStores(ctx, &pb.ListStoresRequest{})
 	if err == nil {
+		// Populate available stores for the dropdown
+		for _, s := range storesResp.Stores {
+			data.Stores = append(data.Stores, s.Name)
+		}
+
+		// Calculate totals (filtered or all stores)
 		data.TotalStores = len(storesResp.Stores)
 		for _, s := range storesResp.Stores {
+			// If store filter is set, only count matching store
+			if storeFilter != "" && s.Name != storeFilter {
+				continue
+			}
+
 			if s.Stats != nil {
 				data.TotalFiles += s.Stats.DocumentCount
 				data.TotalChunks += s.Stats.ChunkCount
 			}
 		}
+
+		// If filtering by store, adjust total stores count
+		if storeFilter != "" {
+			data.TotalStores = 1
+		}
 	}
 
-	// Get connections count
+	// Get connections count and stats
 	if h.connSvc != nil {
 		conns, _ := h.connSvc.ListAllConnections(ctx)
 		data.TotalConnections = len(conns)
+
+		// Build per-connection metrics
+		for _, c := range conns {
+			data.FilesByConnection = append(data.FilesByConnection, ConnectionMetric{
+				ConnectionID:   c.ID,
+				ConnectionName: c.Name,
+				FilesIndexed:   c.IndexedFiles,
+				SearchCount:    c.SearchCount,
+				LastActive:     c.LastSeenAt,
+			})
+		}
+	}
+
+	// Get time-series data from metrics
+	if h.metrics != nil && h.metrics.TimeSeries != nil {
+		// Searches over time (5-minute buckets)
+		searchRateHistory := h.metrics.TimeSeries.SearchRate.GetHistoryWithCurrent()
+		for _, dp := range searchRateHistory {
+			data.SearchesOverTime = append(data.SearchesOverTime, TimeSeriesPoint{
+				Timestamp: dp.Timestamp,
+				Value:     dp.Value,
+				Label:     dp.Timestamp.Format("15:04"),
+			})
+		}
+
+		// Indexing over time
+		indexRateHistory := h.metrics.TimeSeries.IndexRate.GetHistoryWithCurrent()
+		for _, dp := range indexRateHistory {
+			data.IndexingOverTime = append(data.IndexingOverTime, TimeSeriesPoint{
+				Timestamp: dp.Timestamp,
+				Value:     dp.Value,
+				Label:     dp.Timestamp.Format("15:04"),
+			})
+		}
+
+		// Latency over time (average search latency per bucket)
+		latencyHistory := h.metrics.TimeSeries.SearchLatency.GetHistoryWithCurrent()
+		for _, dp := range latencyHistory {
+			data.LatencyOverTime = append(data.LatencyOverTime, TimeSeriesPoint{
+				Timestamp: dp.Timestamp,
+				Value:     dp.Value,
+				Label:     dp.Timestamp.Format("15:04"),
+			})
+		}
+
+		// Get total searches from metrics
+		data.TotalSearches = h.metrics.SearchRequests.Value()
+	}
+
+	// Build per-store metrics (filtered or all)
+	if storesResp != nil {
+		for _, s := range storesResp.Stores {
+			// If store filter is set, only include matching store
+			if storeFilter != "" && s.Name != storeFilter {
+				continue
+			}
+
+			metric := StoreMetric{
+				Store: s.Name,
+			}
+			if s.Stats != nil {
+				metric.FileCount = s.Stats.DocumentCount
+				metric.ChunkCount = s.Stats.ChunkCount
+			}
+			data.SearchesByStore = append(data.SearchesByStore, metric)
+		}
 	}
 
 	return data

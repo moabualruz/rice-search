@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/ml"
 	"github.com/ricesearch/rice-search/internal/pkg/errors"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
@@ -43,6 +44,7 @@ type Pipeline struct {
 	cfg     PipelineConfig
 	ml      ml.Service
 	qdrant  *qdrant.Client
+	bus     bus.Bus
 	chunker *Chunker
 	tracker *Tracker
 	log     *logger.Logger
@@ -50,7 +52,8 @@ type Pipeline struct {
 }
 
 // NewPipeline creates a new indexing pipeline.
-func NewPipeline(cfg PipelineConfig, mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger) *Pipeline {
+// eventBus is optional - if nil, event publishing is disabled.
+func NewPipeline(cfg PipelineConfig, mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, eventBus bus.Bus) *Pipeline {
 	if cfg.EmbedBatchSize == 0 {
 		cfg = DefaultPipelineConfig()
 	}
@@ -59,6 +62,7 @@ func NewPipeline(cfg PipelineConfig, mlSvc ml.Service, qc *qdrant.Client, log *l
 		cfg:     cfg,
 		ml:      mlSvc,
 		qdrant:  qc,
+		bus:     eventBus,
 		chunker: NewChunker(DefaultChunkerConfig()),
 		tracker: NewTracker(),
 		log:     log,
@@ -199,7 +203,33 @@ func (p *Pipeline) Index(ctx context.Context, req IndexRequest) (*IndexResult, e
 		"duration", result.Duration,
 	)
 
+	// Publish index response event for metrics
+	p.publishIndexEvent(ctx, result)
+
 	return result, nil
+}
+
+// publishIndexEvent publishes an index response event to the event bus.
+func (p *Pipeline) publishIndexEvent(ctx context.Context, result *IndexResult) {
+	if p.bus == nil {
+		return
+	}
+
+	event := bus.Event{
+		Type:   bus.TopicIndexResponse,
+		Source: "index",
+		Payload: map[string]interface{}{
+			"store":        result.Store,
+			"indexed":      result.Indexed,
+			"skipped":      result.Skipped,
+			"failed":       result.Failed,
+			"chunks_total": result.ChunksTotal,
+			"duration_ms":  result.Duration.Milliseconds(),
+		},
+	}
+	if err := p.bus.Publish(ctx, bus.TopicIndexResponse, event); err != nil {
+		p.log.Debug("Failed to publish index event", "error", err)
+	}
 }
 
 // processDocuments converts documents to chunks.
@@ -400,4 +430,9 @@ func containsError(errs []IndexError, path string) bool {
 		}
 	}
 	return false
+}
+
+// ListFiles returns paginated list of indexed files for a store.
+func (p *Pipeline) ListFiles(store string, page, pageSize int) ([]FileInfo, int) {
+	return p.tracker.ListFiles(store, page, pageSize)
 }

@@ -5,12 +5,14 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/qdrant"
 )
 
 // Service provides store management operations.
 type Service struct {
 	qdrant  *qdrant.Client
+	bus     bus.Bus
 	storage Storage
 	stores  map[string]*Store
 	mu      sync.RWMutex
@@ -26,7 +28,8 @@ type ServiceConfig struct {
 }
 
 // NewService creates a new store service.
-func NewService(qdrantClient *qdrant.Client, cfg ServiceConfig) (*Service, error) {
+// eventBus is optional - if nil, event publishing is disabled.
+func NewService(qdrantClient *qdrant.Client, cfg ServiceConfig, eventBus ...bus.Bus) (*Service, error) {
 	var storage Storage
 	if cfg.StoragePath != "" {
 		storage = NewFileStorage(cfg.StoragePath)
@@ -38,6 +41,11 @@ func NewService(qdrantClient *qdrant.Client, cfg ServiceConfig) (*Service, error
 		qdrant:  qdrantClient,
 		storage: storage,
 		stores:  make(map[string]*Store),
+	}
+
+	// Set bus if provided
+	if len(eventBus) > 0 && eventBus[0] != nil {
+		svc.bus = eventBus[0]
 	}
 
 	// Load existing stores from storage
@@ -106,6 +114,10 @@ func (s *Service) CreateStore(ctx context.Context, store *Store) error {
 	}
 
 	s.stores[store.Name] = store
+
+	// Publish store created event
+	s.publishStoreEvent(ctx, bus.TopicStoreCreated, store.Name)
+
 	return nil
 }
 
@@ -190,7 +202,27 @@ func (s *Service) DeleteStore(ctx context.Context, name string) error {
 	}
 
 	delete(s.stores, name)
+
+	// Publish store deleted event
+	s.publishStoreEvent(ctx, bus.TopicStoreDeleted, name)
+
 	return nil
+}
+
+// publishStoreEvent publishes a store event to the event bus.
+func (s *Service) publishStoreEvent(ctx context.Context, topic, storeName string) {
+	if s.bus == nil {
+		return
+	}
+
+	event := bus.Event{
+		Type:   topic,
+		Source: "store",
+		Payload: map[string]interface{}{
+			"store": storeName,
+		},
+	}
+	_ = s.bus.Publish(ctx, topic, event)
 }
 
 // GetStoreStats returns the current statistics for a store.

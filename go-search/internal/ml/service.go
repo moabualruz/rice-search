@@ -25,6 +25,9 @@ type Service interface {
 	// Health returns the service health status.
 	Health() HealthStatus
 
+	// ReloadModels reloads all models (for hot-reload after download).
+	ReloadModels() error
+
 	// Close releases resources.
 	Close() error
 }
@@ -43,10 +46,13 @@ type RankedResult struct {
 
 // HealthStatus represents service health.
 type HealthStatus struct {
-	Healthy      bool            `json:"healthy"`
-	ModelsLoaded map[string]bool `json:"models_loaded"`
-	Device       string          `json:"device"`
-	Error        string          `json:"error,omitempty"`
+	Healthy        bool            `json:"healthy"`
+	ModelsLoaded   map[string]bool `json:"models_loaded"`
+	Device         string          `json:"device"`            // Requested device
+	ActualDevice   string          `json:"actual_device"`     // Actual device being used
+	DeviceFallback bool            `json:"device_fallback"`   // True if actual differs from requested
+	RuntimeAvail   bool            `json:"runtime_available"` // True if ONNX Runtime is available
+	Error          string          `json:"error,omitempty"`
 }
 
 // ServiceImpl implements the ML Service.
@@ -201,6 +207,16 @@ func (s *ServiceImpl) Health() HealthStatus {
 		Healthy:      true,
 		ModelsLoaded: make(map[string]bool),
 		Device:       s.cfg.Device,
+		RuntimeAvail: onnx.IsAvailable(),
+	}
+
+	// Get actual device info from runtime
+	if s.runtime != nil {
+		status.ActualDevice = string(s.runtime.ActualDevice())
+		status.DeviceFallback = s.runtime.DeviceFallback()
+	} else {
+		status.ActualDevice = "none"
+		status.DeviceFallback = true
 	}
 
 	status.ModelsLoaded["embedder"] = s.embedder != nil
@@ -213,7 +229,83 @@ func (s *ServiceImpl) Health() HealthStatus {
 		status.Error = "required models not loaded"
 	}
 
+	// Add warning about device fallback
+	if status.DeviceFallback && status.Error == "" {
+		if s.cfg.Device == "cuda" || s.cfg.Device == "tensorrt" {
+			status.Error = "GPU requested but not available; using fallback"
+		} else if !status.RuntimeAvail {
+			status.Error = "ONNX Runtime not available"
+		}
+	}
+
 	return status
+}
+
+// ReloadModels unloads existing models and reloads them from disk.
+// This enables hot-reload after model download without server restart.
+func (s *ServiceImpl) ReloadModels() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.log.Info("Reloading ML models...")
+
+	// Close existing models
+	if s.embedder != nil {
+		if err := s.embedder.Close(); err != nil {
+			s.log.Warn("Failed to close embedder", "error", err)
+		}
+		s.embedder = nil
+	}
+
+	if s.sparse != nil {
+		if err := s.sparse.Close(); err != nil {
+			s.log.Warn("Failed to close sparse encoder", "error", err)
+		}
+		s.sparse = nil
+	}
+
+	if s.reranker != nil {
+		if err := s.reranker.Close(); err != nil {
+			s.log.Warn("Failed to close reranker", "error", err)
+		}
+		s.reranker = nil
+	}
+
+	// Clear embedding cache
+	s.cache = NewEmbeddingCache(10000)
+
+	// Reload models
+	var lastErr error
+
+	embedder, err := NewEmbedder(s.runtime, s.cfg, s.log)
+	if err != nil {
+		s.log.Error("Failed to reload embedder", "error", err)
+		lastErr = err
+	} else {
+		s.embedder = embedder
+		s.log.Info("Reloaded embedder")
+	}
+
+	sparse, err := NewSparseEncoder(s.runtime, s.cfg, s.log)
+	if err != nil {
+		s.log.Error("Failed to reload sparse encoder", "error", err)
+		lastErr = err
+	} else {
+		s.sparse = sparse
+		s.log.Info("Reloaded sparse encoder")
+	}
+
+	reranker, err := NewReranker(s.runtime, s.cfg, s.log)
+	if err != nil {
+		s.log.Error("Failed to reload reranker", "error", err)
+		lastErr = err
+	} else {
+		s.reranker = reranker
+		s.log.Info("Reloaded reranker")
+	}
+
+	s.log.Info("ML model reload complete")
+	return lastErr
 }
 
 // Close releases resources.

@@ -1,23 +1,42 @@
 # Rice Search - Go Edition
 # Development Docker Compose - Only Qdrant (run server from code locally)
-# Data resets on `docker-compose down`
 
 services:
   # ===========================================================================
-  # Qdrant Vector Database (Ephemeral - no persistence)
+  # Qdrant Vector Database
   # Dashboard: http://localhost:6333/dashboard
+  # GPU support requires v1.13.0+. Switch images by commenting/uncommenting:
   # ===========================================================================
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    # GPU NVIDIA (requires nvidia-container-toolkit on host)
+    image: qdrant/qdrant:v1.13.0-gpu-nvidia
+    # GPU AMD (requires ROCm on host) - uncomment and comment above:
+    # image: qdrant/qdrant:v1.13.0-gpu-amd
+    # CPU only - uncomment and comment above:
+    # image: qdrant/qdrant:v1.13.0
     container_name: rice-qdrant-dev
     ports:
       - "6333:6333"   # HTTP API + Dashboard
       - "6334:6334"   # gRPC API
+    volumes:
+      - ../data/qdrant-dev:/qdrant/storage
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__LOG_LEVEL=DEBUG
-    tmpfs:
-      - /qdrant/storage:size=2G
+      # GPU indexing - set to 0 or remove if using CPU image
+      - QDRANT__GPU__INDEXING=1
+    # NVIDIA GPU support - remove/comment this block if using CPU or AMD image
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # AMD GPU support - uncomment this block if using AMD image (and remove NVIDIA block above):
+    # devices:
+    #   - /dev/kfd
+    #   - /dev/dri
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:6333/healthz"]
       interval: 5s

@@ -18,12 +18,17 @@ import (
 
 	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/config"
+	"github.com/ricesearch/rice-search/internal/connection"
 	"github.com/ricesearch/rice-search/internal/grpcserver"
 	"github.com/ricesearch/rice-search/internal/index"
+	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/ml"
+	"github.com/ricesearch/rice-search/internal/models"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/qdrant"
+	"github.com/ricesearch/rice-search/internal/query"
 	"github.com/ricesearch/rice-search/internal/search"
+	"github.com/ricesearch/rice-search/internal/settings"
 	"github.com/ricesearch/rice-search/internal/store"
 	"github.com/ricesearch/rice-search/internal/web"
 )
@@ -156,23 +161,84 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		log.Warn("Some ML models failed to load", "error", err)
 	}
 
-	// Initialize store service
+	// Initialize store service with event bus
 	storeCfg := store.ServiceConfig{
 		StoragePath:   "./data/stores",
 		EnsureDefault: true,
 	}
-	storeSvc, err := store.NewService(qc, storeCfg)
+	storeSvc, err := store.NewService(qc, storeCfg, eventBus)
 	if err != nil {
 		return fmt.Errorf("failed to create store service: %w", err)
 	}
 
-	// Initialize index pipeline
+	// Initialize index pipeline with event bus
 	pipelineCfg := index.DefaultPipelineConfig()
-	indexSvc := index.NewPipeline(pipelineCfg, mlSvc, qc, log)
+	indexSvc := index.NewPipeline(pipelineCfg, mlSvc, qc, log, eventBus)
 
-	// Initialize search service
+	// Initialize query understanding service (Option B/C fallback)
+	querySvc := query.NewService(log)
+	log.Info("Initialized query understanding service")
+
+	// Initialize search service with query understanding and event bus
 	searchCfg := search.DefaultConfig()
-	searchSvc := search.NewService(mlSvc, qc, log, searchCfg)
+	searchSvc := search.NewService(mlSvc, qc, log, searchCfg, querySvc, eventBus)
+
+	// Initialize metrics
+	metricsSvc := metrics.New()
+	log.Info("Initialized metrics")
+
+	// Initialize model registry
+	var modelReg *models.Registry
+	modelRegCfg := models.RegistryConfig{
+		StoragePath:  "./data/models",
+		ModelsDir:    appCfg.ML.ModelsDir,
+		LoadDefaults: true,
+	}
+	modelReg, err = models.NewRegistry(modelRegCfg, log)
+	if err != nil {
+		log.Warn("Failed to create model registry, continuing without it", "error", err)
+		modelReg = nil
+	} else {
+		log.Info("Initialized model registry")
+	}
+
+	// Initialize mapper service (requires model registry)
+	var mapperSvc *models.MapperService
+	if modelReg != nil {
+		modelStorage := models.NewFileStorage("./data/models")
+		mapperSvc, err = models.NewMapperService(modelStorage, modelReg, log)
+		if err != nil {
+			log.Warn("Failed to create mapper service, continuing without it", "error", err)
+			mapperSvc = nil
+		} else {
+			log.Info("Initialized mapper service")
+		}
+	}
+
+	// Initialize connection service
+	var connSvc *connection.Service
+	connSvc, err = connection.NewService(eventBus, connection.ServiceConfig{
+		StoragePath: "./data/connections",
+	})
+	if err != nil {
+		log.Warn("Failed to create connection service, continuing without it", "error", err)
+		connSvc = nil
+	} else {
+		log.Info("Initialized connection service")
+	}
+
+	// Initialize settings service
+	var settingsSvc *settings.Service
+	settingsSvc, err = settings.NewService(settings.ServiceConfig{
+		StoragePath:  "./data/settings",
+		LoadDefaults: true,
+	}, eventBus, log)
+	if err != nil {
+		log.Warn("Failed to create settings service, continuing without it", "error", err)
+		settingsSvc = nil
+	} else {
+		log.Info("Initialized settings service")
+	}
 
 	// Start gRPC server
 	grpcCfg := grpcserver.Config{
@@ -192,17 +258,15 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	mux := http.NewServeMux()
 
 	// Register Web UI routes (uses gRPC server as backend)
-	// Note: Some services (modelReg, mapperSvc, connSvc, metrics) are not yet wired up
-	// The web handler checks for nil and handles gracefully
 	webHandler := web.NewHandler(
 		grpcSrv,           // GRPCClient
 		log,               // Logger
 		appCfg,            // Config
-		nil,               // modelReg (TODO: wire up models.Registry)
-		nil,               // mapperSvc (TODO: wire up models.MapperService)
-		nil,               // connSvc (TODO: wire up connection.Service)
-		nil,               // settingsSvc (TODO: wire up settings.Service)
-		nil,               // metrics (TODO: wire up metrics.Metrics)
+		modelReg,          // Model registry
+		mapperSvc,         // Mapper service
+		connSvc,           // Connection service
+		settingsSvc,       // Settings service
+		metricsSvc,        // Metrics
 		appCfg.Qdrant.URL, // qdrantURL
 	)
 	webHandler.RegisterRoutes(mux)

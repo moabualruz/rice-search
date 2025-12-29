@@ -46,6 +46,9 @@ type Metrics struct {
 	MemoryUsage    *Gauge // in bytes
 	Uptime         *Counter
 
+	// Time-series data for charts
+	TimeSeries *TimeSeriesData
+
 	startTime time.Time
 	mu        sync.RWMutex
 }
@@ -195,6 +198,9 @@ func New() *Metrics {
 			nil,
 		),
 
+		// Time-series data for charts
+		TimeSeries: NewTimeSeriesData(),
+
 		startTime: time.Now(),
 	}
 
@@ -229,6 +235,11 @@ func (m *Metrics) RecordSearch(latencyMs int64, resultCount int, err error) {
 	m.SearchLatency.Observe(float64(latencyMs))
 	m.SearchResults.Observe(float64(resultCount))
 
+	// Record time-series data for charts
+	if m.TimeSeries != nil {
+		m.TimeSeries.RecordSearch(float64(latencyMs))
+	}
+
 	if err != nil {
 		m.SearchErrors.WithLabels(errorType(err)).Inc()
 	}
@@ -239,6 +250,11 @@ func (m *Metrics) RecordIndex(docCount, chunkCount int, latencyMs int64, err err
 	m.IndexedDocuments.Add(int64(docCount))
 	m.IndexedChunks.Add(int64(chunkCount))
 	m.IndexLatency.Observe(float64(latencyMs))
+
+	// Record time-series data for charts
+	if m.TimeSeries != nil {
+		m.TimeSeries.RecordIndex(docCount)
+	}
 
 	if err != nil {
 		m.IndexErrors.WithLabels(errorType(err)).Inc()

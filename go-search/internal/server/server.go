@@ -155,13 +155,13 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 	}
 	s.store = storeSvc
 
-	// Initialize index pipeline
+	// Initialize index pipeline (events disabled in deprecated server)
 	pipelineCfg := index.DefaultPipelineConfig()
-	s.index = index.NewPipeline(pipelineCfg, s.ml, s.qdrant, log)
+	s.index = index.NewPipeline(pipelineCfg, s.ml, s.qdrant, log, nil)
 
-	// Initialize search service
+	// Initialize search service (query understanding and events disabled in deprecated server)
 	searchCfg := search.DefaultConfig()
-	s.search = search.NewService(s.ml, s.qdrant, log, searchCfg)
+	s.search = search.NewService(s.ml, s.qdrant, log, searchCfg, nil, nil)
 
 	// Initialize connection service
 	if appCfg.Connection.Enabled {

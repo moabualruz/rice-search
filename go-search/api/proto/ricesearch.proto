@@ -466,6 +466,23 @@ message ComponentHealth {
   
   // Latency is the component check latency.
   google.protobuf.Duration latency = 3;
+  
+  // DeviceInfo contains ML device information (only for ML component)
+  DeviceInfo device_info = 4;
+}
+
+message DeviceInfo {
+  // Device is the requested device (cpu, cuda, tensorrt)
+  string device = 1;
+  
+  // ActualDevice is the device actually being used
+  string actual_device = 2;
+  
+  // DeviceFallback is true if actual differs from requested
+  bool device_fallback = 3;
+  
+  // RuntimeAvailable is true if ONNX Runtime is available
+  bool runtime_available = 4;
 }
 
 message VersionRequest {}

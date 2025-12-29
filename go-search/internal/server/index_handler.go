@@ -259,16 +259,30 @@ func (h *IndexHandler) handleListFiles(w http.ResponseWriter, r *http.Request, s
 	page := parseInt(r.URL.Query().Get("page"), 1)
 	pageSize := parseInt(r.URL.Query().Get("page_size"), 50)
 
-	// TODO: Implement file listing using pipeline.ListFiles(storeName, page, pageSize)
-	// For now, return empty since we need tracker access
-	// The storeName parameter will be used once tracker is exposed via pipeline
-	_ = storeName // Will be used when file listing is fully implemented
+	// Get files from pipeline
+	files, total := h.pipeline.ListFiles(storeName, page, pageSize)
+
+	// Convert to response format
+	fileList := make([]map[string]interface{}, len(files))
+	for i, f := range files {
+		fileList[i] = map[string]interface{}{
+			"path":       f.Path,
+			"hash":       f.Hash,
+			"indexed_at": f.IndexedAt,
+		}
+	}
+
+	totalPages := total / pageSize
+	if total%pageSize > 0 {
+		totalPages++
+	}
+
 	writeIndexJSON(w, http.StatusOK, map[string]interface{}{
-		"files":       []interface{}{},
-		"total":       0,
+		"files":       fileList,
+		"total":       total,
 		"page":        page,
 		"page_size":   pageSize,
-		"total_pages": 0,
+		"total_pages": totalPages,
 	})
 }
 

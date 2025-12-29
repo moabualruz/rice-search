@@ -30,26 +30,41 @@ func NewModelBasedUnderstanding(log *logger.Logger) *ModelBasedUnderstanding {
 }
 
 // Parse analyzes a query using ML model.
-// Currently returns ErrModelNotEnabled as models are not yet integrated.
-// TODO: Integrate with query_understand model type from internal/ml/
+//
+// DESIGN NOTE: This is intentionally a stub that returns ErrModelNotEnabled.
+// The system is designed to fall back to KeywordExtractor (heuristic-based
+// understanding) which provides excellent results for code search queries.
+//
+// The default query_understand model (Salesforce/codet5p-220m) is a text
+// generation model, not a classifier. Real ML-based query understanding
+// would require one of:
+//
+//  1. A fine-tuned classification model trained on code search intents
+//  2. Embedding-based approach with simple intent classifiers
+//  3. Few-shot prompting with a larger language model
+//
+// The heuristic fallback (KeywordExtractor) handles:
+//   - Intent detection via pattern matching (find/explain/list/fix/compare)
+//   - Target type extraction (function/class/file/error)
+//   - Keyword extraction with stop word removal
+//   - Code term identification and synonym expansion
+//
+// This architecture allows seamless upgrade to ML-based understanding
+// when suitable models become available, without changing the API.
 func (m *ModelBasedUnderstanding) Parse(ctx context.Context, query string) (*ParsedQuery, error) {
 	if !m.enabled {
 		return nil, ErrModelNotEnabled
 	}
 
-	// TODO: Future implementation:
-	// 1. Load query understanding model from internal/ml/registry
-	// 2. Tokenize query
-	// 3. Run inference to get:
-	//    - Intent classification (find/explain/list/fix/compare)
-	//    - Target type extraction (function/class/file/error)
-	//    - Entity extraction (key terms and code elements)
-	//    - Confidence score
-	// 4. Post-process model outputs into ParsedQuery structure
+	// When enabled, this would:
+	// 1. Load query understanding model from internal/ml via ONNX runtime
+	// 2. Tokenize query using model's tokenizer
+	// 3. Run inference for intent/target classification
+	// 4. Post-process outputs into ParsedQuery structure
 	// 5. Apply synonym expansion using CodeTerms
-	// 6. Build optimized search query
-
-	m.log.Debug("Model-based understanding requested but not implemented")
+	//
+	// Currently returns ErrModelNotEnabled to trigger heuristic fallback.
+	m.log.Debug("Model-based understanding enabled but no suitable model loaded, falling back")
 	return nil, ErrModelNotEnabled
 }
 

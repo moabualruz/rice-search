@@ -157,22 +157,24 @@ compose-down: ## Stop docker-compose
 compose-logs: ## View docker-compose logs
 	docker-compose -f deployments/docker-compose.yml logs -f
 
-##@ Development (Ephemeral)
+##@ Development
 
 .PHONY: dev-up
-dev-up: ## Start dev environment (ephemeral data, Qdrant UI)
+dev-up: ## Start dev environment
 	docker-compose -f deployments/docker-compose.dev.yml up -d
 
 .PHONY: dev-down
-dev-down: ## Stop dev environment (data is lost!)
+dev-down: ## Stop dev environment
 	docker-compose -f deployments/docker-compose.dev.yml down
 
 .PHONY: dev-logs
 dev-logs: ## View dev logs
 	docker-compose -f deployments/docker-compose.dev.yml logs -f
 
-.PHONY: dev-restart
-dev-restart: dev-down dev-up ## Restart dev (fresh data)
+.PHONY: dev-reset
+dev-reset: dev-down ## Reset dev environment (deletes data)
+	rm -rf data/qdrant-dev
+	docker-compose -f deployments/docker-compose.dev.yml up -d
 
 ##@ Code Generation
 

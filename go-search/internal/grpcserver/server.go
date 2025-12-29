@@ -439,6 +439,49 @@ func (s *Server) GetIndexStats(ctx context.Context, req *pb.GetIndexStatsRequest
 	}, nil
 }
 
+// ListFiles returns a paginated list of indexed files.
+func (s *Server) ListFiles(_ context.Context, req *pb.ListFilesRequest) (*pb.ListFilesResponse, error) {
+	if req.Store == "" {
+		req.Store = "default"
+	}
+
+	page := int(req.Page)
+	if page < 1 {
+		page = 1
+	}
+	pageSize := int(req.PageSize)
+	if pageSize < 1 {
+		pageSize = 50
+	}
+
+	// Get files from pipeline tracker
+	files, total := s.indexSvc.ListFiles(req.Store, page, pageSize)
+
+	// Convert to protobuf
+	pbFiles := make([]*pb.IndexedFile, len(files))
+	for i, f := range files {
+		pbFiles[i] = &pb.IndexedFile{
+			Path:      f.Path,
+			Hash:      f.Hash,
+			IndexedAt: timestamppb.New(f.IndexedAt),
+			Status:    "indexed",
+		}
+	}
+
+	totalPages := int32(total / pageSize)
+	if total%pageSize > 0 {
+		totalPages++
+	}
+
+	return &pb.ListFilesResponse{
+		Files:      pbFiles,
+		Total:      int32(total),
+		Page:       int32(page),
+		PageSize:   int32(pageSize),
+		TotalPages: totalPages,
+	}, nil
+}
+
 // =============================================================================
 // Store Methods
 // =============================================================================

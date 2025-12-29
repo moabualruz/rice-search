@@ -7,9 +7,13 @@ import (
 
 // HealthStatus represents component health
 type HealthStatus struct {
-	Status  string // healthy, degraded, unhealthy
-	Message string
-	Latency int64 // milliseconds
+	Status         string
+	Message        string
+	Latency        int64 // milliseconds
+	Device         string // Requested device (for ML component)
+	ActualDevice   string // Actual device being used (for ML component)
+	DeviceFallback bool   // True if actual differs from requested
+	RuntimeAvail   bool   // True if ONNX Runtime is available
 }
 
 // TimeSeriesPoint represents a single data point in a time series
@@ -95,8 +99,9 @@ type StatsPageData struct {
 	Presets []MetricPreset
 
 	// Current filters
-	TimeRange string // 1h, 6h, 24h, 7d, 30d
-	Store     string
+	TimeRange string   // 1h, 6h, 24h, 7d, 30d
+	Store     string   // Selected store filter
+	Stores    []string // Available stores
 	Preset    string
 
 	Error string
@@ -115,6 +120,21 @@ templ StatsPage(data StatsPageData) {
 					</p>
 				</div>
 				<div class="mt-4 sm:ml-16 sm:mt-0 flex gap-2">
+					<!-- Store selector -->
+					<select
+						id="store-filter"
+						name="store"
+						hx-get="/stats/refresh"
+						hx-target="#stats-content"
+						hx-trigger="change"
+						hx-include="[name='time_range'], [name='preset']"
+						class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border"
+					>
+						<option value="" selected?={ data.Store == "" }>All Stores</option>
+						for _, store := range data.Stores {
+							<option value={ store } selected?={ data.Store == store }>{ store }</option>
+						}
+					</select>
 					<!-- Time range selector -->
 					<select
 						id="time-range"
@@ -122,7 +142,7 @@ templ StatsPage(data StatsPageData) {
 						hx-get="/stats/refresh"
 						hx-target="#stats-content"
 						hx-trigger="change"
-						hx-include="[name='preset']"
+						hx-include="[name='store'], [name='preset']"
 						class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border"
 					>
 						<option value="1h" selected?={ data.TimeRange == "1h" || data.TimeRange == "" }>Last Hour</option>
@@ -136,7 +156,7 @@ templ StatsPage(data StatsPageData) {
 						hx-get="/stats/refresh"
 						hx-target="#stats-content"
 						hx-indicator="#refresh-spinner"
-						hx-include="[name='time_range'], [name='preset']"
+						hx-include="[name='store'], [name='time_range'], [name='preset']"
 						class="inline-flex items-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
 					>
 						<svg id="refresh-spinner" class="htmx-indicator animate-spin -ml-0.5 mr-1.5 h-4 w-4" fill="none" viewBox="0 0 24 24">
@@ -182,7 +202,7 @@ templ StatsContent(data StatsPageData) {
 				hx-get="/stats/refresh"
 				hx-target="#stats-content"
 				hx-trigger="change"
-				hx-include="[name='time_range']"
+				hx-include="[name='store'], [name='time_range']"
 				class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2 px-3 border w-full max-w-md"
 			>
 				<option value="">All Metrics</option>
@@ -477,17 +497,54 @@ templ ProgressBar(label string, count int64, percentage float64, color string) {
 
 // HealthRow renders a health status row
 templ HealthRow(name string, health HealthStatus) {
-	<div class="flex items-center justify-between py-3 border-b border-gray-200 last:border-0">
-		<div class="flex items-center min-w-0 flex-1">
-			@HealthBadge(health.Status)
-			<span class="ml-2 text-sm font-medium text-gray-900 capitalize truncate">{ name }</span>
+	<div class="py-3 border-b border-gray-200 last:border-0">
+		<div class="flex items-center justify-between">
+			<div class="flex items-center min-w-0 flex-1">
+				@HealthBadge(health.Status)
+				<span class="ml-2 text-sm font-medium text-gray-900 capitalize truncate">{ name }</span>
+			</div>
+			<div class="flex items-center gap-3 ml-4">
+				<span class="text-sm text-gray-500 truncate">{ health.Message }</span>
+				if health.Latency > 0 {
+					<span class="text-sm text-gray-400 flex-shrink-0">{ fmt.Sprint(health.Latency) }ms</span>
+				}
+			</div>
 		</div>
-		<div class="flex items-center gap-3 ml-4">
-			<span class="text-sm text-gray-500 truncate">{ health.Message }</span>
-			if health.Latency > 0 {
-				<span class="text-sm text-gray-400 flex-shrink-0">{ fmt.Sprint(health.Latency) }ms</span>
-			}
-		</div>
+		// Show device info for ML component
+		if health.Device != "" {
+			<div class="ml-5 mt-2 pl-4 border-l-2 border-gray-200">
+				<dl class="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+					<div>
+						<dt class="text-gray-500">Requested:</dt>
+						<dd class="mt-0.5 font-medium text-gray-900">{ health.Device }</dd>
+					</div>
+					<div>
+						<dt class="text-gray-500">Actual:</dt>
+						<dd class="mt-0.5 flex items-center gap-1">
+							if health.DeviceFallback {
+								<svg class="h-3 w-3 text-yellow-500" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd"/>
+								</svg>
+								<span class="font-medium text-yellow-700">{ health.ActualDevice }</span>
+							} else {
+								<svg class="h-3 w-3 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
+								</svg>
+								<span class="font-medium text-gray-900">{ health.ActualDevice }</span>
+							}
+						</dd>
+					</div>
+				</dl>
+				if health.DeviceFallback {
+					<div class="mt-2 flex items-start gap-1 text-xs text-yellow-700 bg-yellow-50 px-2 py-1 rounded">
+						<svg class="h-3 w-3 mt-0.5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+							<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a.75.75 0 000 1.5h.253a.25.25 0 01.244.304l-.459 2.066A1.75 1.75 0 0010.747 15H11a.75.75 0 000-1.5h-.253a.25.25 0 01-.244-.304l.459-2.066A1.75 1.75 0 009.253 9H9z" clip-rule="evenodd"/>
+						</svg>
+						<span>Device fallback: Requested { health.Device } but using { health.ActualDevice }</span>
+					</div>
+				}
+			</div>
+		}
 	</div>
 }
 

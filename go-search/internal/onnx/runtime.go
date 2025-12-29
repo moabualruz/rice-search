@@ -8,11 +8,12 @@ import (
 
 // Runtime manages the ONNX Runtime environment.
 type Runtime struct {
-	mu          sync.Mutex
-	initialized bool
-	device      Device
-	sessions    map[string]*Session
-	impl        runtimeImpl
+	mu           sync.Mutex
+	initialized  bool
+	device       Device // Requested device
+	actualDevice Device // Actual device being used (may differ if fallback occurred)
+	sessions     map[string]*Session
+	impl         runtimeImpl
 }
 
 // Device represents the execution device.
@@ -22,6 +23,7 @@ const (
 	DeviceCPU      Device = "cpu"
 	DeviceCUDA     Device = "cuda"
 	DeviceTensorRT Device = "tensorrt"
+	DeviceStub     Device = "stub" // Stub implementation (ONNX Runtime not available)
 )
 
 // RuntimeConfig holds runtime configuration.
@@ -50,19 +52,27 @@ func DefaultRuntimeConfig() RuntimeConfig {
 	}
 }
 
+// runtimeResult holds the result of runtime initialization.
+type runtimeResult struct {
+	impl         runtimeImpl
+	actualDevice Device
+}
+
 // NewRuntime creates a new ONNX Runtime.
 func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	r := &Runtime{
-		device:   cfg.Device,
-		sessions: make(map[string]*Session),
+		device:       cfg.Device,
+		actualDevice: cfg.Device, // Default: assume requested device works
+		sessions:     make(map[string]*Session),
 	}
 
 	// Initialize platform-specific implementation
-	impl, err := newRuntimeImpl(cfg)
+	result, err := newRuntimeImpl(cfg)
 	if err != nil {
 		return nil, err
 	}
-	r.impl = impl
+	r.impl = result.impl
+	r.actualDevice = result.actualDevice
 	r.initialized = true
 
 	return r, nil
@@ -144,13 +154,28 @@ func (r *Runtime) Close() error {
 	return lastErr
 }
 
-// Device returns the configured device.
+// Device returns the configured (requested) device.
 func (r *Runtime) Device() Device {
 	return r.device
 }
 
-// IsGPU returns true if using GPU acceleration.
+// ActualDevice returns the device actually being used (may differ from requested if fallback occurred).
+func (r *Runtime) ActualDevice() Device {
+	return r.actualDevice
+}
+
+// DeviceFallback returns true if the actual device differs from the requested device.
+func (r *Runtime) DeviceFallback() bool {
+	return r.device != r.actualDevice
+}
+
+// IsGPU returns true if actually using GPU acceleration.
 func (r *Runtime) IsGPU() bool {
+	return r.actualDevice == DeviceCUDA || r.actualDevice == DeviceTensorRT
+}
+
+// RequestedGPU returns true if GPU was requested (may not be what's actually used).
+func (r *Runtime) RequestedGPU() bool {
 	return r.device == DeviceCUDA || r.device == DeviceTensorRT
 }
 
@@ -164,3 +189,5 @@ type runtimeImpl interface {
 	createSession(name, modelPath string, device Device, opts SessionOptions) (*Session, error)
 	close() error
 }
+
+// Note: newRuntimeImpl(cfg) must return (runtimeResult, error) containing impl and actualDevice

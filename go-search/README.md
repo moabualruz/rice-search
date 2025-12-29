@@ -82,7 +82,7 @@ Pure Go code search platform. Single binary. Event-driven microservices.
 ## Quick Start
 
 ```bash
-# 1. Start Qdrant (dev mode - ephemeral data)
+# 1. Start Qdrant
 make dev-up
 # Qdrant API:       http://localhost:6333
 # Qdrant Dashboard: http://localhost:6333/dashboard
@@ -135,9 +135,9 @@ rice-search models check             # Check installed models
 ### Development Commands
 
 ```bash
-make dev-up       # Start Qdrant (data resets on down)
-make dev-down     # Stop and lose all data
-make dev-restart  # Fresh restart with clean data
+make dev-up       # Start Qdrant
+make dev-down     # Stop Qdrant
+make dev-reset    # Reset Qdrant (delete data and restart)
 make dev-logs     # View logs
 make build        # Build the binary
 make test         # Run tests

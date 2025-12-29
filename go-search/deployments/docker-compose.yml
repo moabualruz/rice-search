@@ -39,18 +39,38 @@ services:
 
   # ===========================================================================
   # Qdrant Vector Database
+  # GPU support requires v1.13.0+. Switch images by commenting/uncommenting:
   # ===========================================================================
   qdrant:
-    image: qdrant/qdrant:v1.12.4
+    # GPU NVIDIA (requires nvidia-container-toolkit on host)
+    image: qdrant/qdrant:v1.13.0-gpu-nvidia
+    # GPU AMD (requires ROCm on host) - uncomment and comment above:
+    # image: qdrant/qdrant:v1.13.0-gpu-amd
+    # CPU only - uncomment and comment above:
+    # image: qdrant/qdrant:v1.13.0
     container_name: rice-qdrant
     ports:
       - "6333:6333"   # HTTP API
       - "6334:6334"   # gRPC API
     volumes:
-      - qdrant-data:/qdrant/storage
+      - ../data/qdrant:/qdrant/storage
     environment:
       - QDRANT__SERVICE__GRPC_PORT=6334
       - QDRANT__LOG_LEVEL=INFO
+      # GPU indexing - set to 0 or remove if using CPU image
+      - QDRANT__GPU__INDEXING=1
+    # NVIDIA GPU support - remove/comment this block if using CPU or AMD image
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    # AMD GPU support - uncomment this block if using AMD image (and remove NVIDIA block above):
+    # devices:
+    #   - /dev/kfd
+    #   - /dev/dri
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:6333/healthz"]
       interval: 10s
@@ -95,8 +115,6 @@ services:
       - distributed
 
 volumes:
-  qdrant-data:
-    name: rice-qdrant-data
   rice-models:
     name: rice-models
   rice-data:

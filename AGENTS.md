@@ -426,7 +426,7 @@ Pure Go rewrite of Rice Search. Single binary, no Python/Node dependencies.
 ```bash
 cd go-search
 
-# 1. Start Qdrant only (data is ephemeral, resets on down)
+# 1. Start Qdrant only
 docker-compose -f deployments/docker-compose.dev.yml up -d
 
 # 2. Verify Qdrant is running
@@ -583,6 +583,7 @@ RICE_CACHE_TYPE=memory        # memory, redis
 # Reset Qdrant (loses all data)
 cd go-search
 docker-compose -f deployments/docker-compose.dev.yml down
+rm -rf data/qdrant-dev
 docker-compose -f deployments/docker-compose.dev.yml up -d
 
 # Check Qdrant collections

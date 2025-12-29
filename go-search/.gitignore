@@ -1,0 +1,74 @@
+# Binaries for programs and plugins
+rice-search
+rice-search.exe
+rice-search-server
+rice-search-server.exe
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+coverage.txt
+coverage.html
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Dependency directories
+vendor/
+
+# IDE and editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# ML models (large files, download separately)
+models/*.onnx
+models/*.bin
+models/*.pt
+
+# Generated code
+*.pb.go
+*_templ.go
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Build artifacts
+dist/
+build/
+bin/
+
+# Qodana inspection results
+.qodana/
+
+# Docker volumes and data
+data/
+
+# Qodana configuration
+/qodana.yaml
+
+# Todo files
+TODO.md

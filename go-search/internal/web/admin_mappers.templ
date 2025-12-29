@@ -151,8 +151,10 @@ templ MapperRow(mapper ModelMapperDisplay) {
 			<!-- Actions -->
 			<div class="ml-4 flex space-x-2">
 				<button
-					onclick="editMapper(this.dataset.id)"
-					data-id={ mapper.ID }
+					hx-get={ fmt.Sprintf("/admin/mappers/%s/edit", mapper.ID) }
+					hx-target="#mapper-editor-modal"
+					hx-swap="outerHTML"
+					onclick="document.getElementById('mapper-editor-modal').classList.remove('hidden')"
 					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
 				>
 					Edit

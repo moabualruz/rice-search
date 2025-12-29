@@ -8,18 +8,22 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/ml"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/qdrant"
+	"github.com/ricesearch/rice-search/internal/query"
 )
 
 // Service provides search capabilities.
 type Service struct {
-	ml     ml.Service
-	qdrant *qdrant.Client
-	log    *logger.Logger
-	cfg    Config
-	mu     sync.RWMutex
+	ml       ml.Service
+	qdrant   *qdrant.Client
+	querySvc *query.Service
+	bus      bus.Bus
+	log      *logger.Logger
+	cfg      Config
+	mu       sync.RWMutex
 }
 
 // Config configures the search service.
@@ -57,15 +61,18 @@ func DefaultConfig() Config {
 }
 
 // NewService creates a new search service.
-func NewService(mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, cfg Config) *Service {
+// querySvc and eventBus are optional - if nil, features are disabled.
+func NewService(mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, cfg Config, querySvc *query.Service, eventBus bus.Bus) *Service {
 	if cfg.DefaultTopK == 0 {
 		cfg = DefaultConfig()
 	}
 	return &Service{
-		ml:     mlSvc,
-		qdrant: qc,
-		log:    log,
-		cfg:    cfg,
+		ml:       mlSvc,
+		qdrant:   qc,
+		querySvc: querySvc,
+		bus:      eventBus,
+		log:      log,
+		cfg:      cfg,
 	}
 }
 
@@ -154,6 +161,9 @@ type Response struct {
 
 	// Metadata contains search metadata.
 	Metadata SearchMetadata `json:"metadata"`
+
+	// ParsedQuery contains query understanding results (if available).
+	ParsedQuery *query.ParsedQuery `json:"parsed_query,omitempty"`
 }
 
 // SearchMetadata contains information about how the search was performed.
@@ -208,6 +218,24 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	}
 	if req.Store == "" {
 		return nil, fmt.Errorf("store is required")
+	}
+
+	// Parse query for understanding (Option B/C with fallback)
+	var parsedQuery *query.ParsedQuery
+	if s.querySvc != nil {
+		parsed, err := s.querySvc.Parse(ctx, req.Query)
+		if err != nil {
+			s.log.Debug("Query understanding failed, continuing with raw query", "error", err)
+		} else {
+			parsedQuery = parsed
+			s.log.Debug("Query understood",
+				"intent", parsed.ActionIntent,
+				"target", parsed.TargetType,
+				"keywords", parsed.Keywords,
+				"confidence", parsed.Confidence,
+				"used_model", parsed.UsedModel,
+			)
+		}
 	}
 
 	// Check store exists
@@ -321,13 +349,50 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 
 	metadata.SearchTimeMs = time.Since(start).Milliseconds()
 
-	return &Response{
-		Query:    req.Query,
-		Store:    req.Store,
-		Results:  results,
-		Total:    len(qdrantResults),
-		Metadata: metadata,
-	}, nil
+	resp := &Response{
+		Query:       req.Query,
+		Store:       req.Store,
+		Results:     results,
+		Total:       len(qdrantResults),
+		Metadata:    metadata,
+		ParsedQuery: parsedQuery,
+	}
+
+	// Publish search response event for metrics
+	s.publishSearchEvent(ctx, resp, nil)
+
+	return resp, nil
+}
+
+// publishSearchEvent publishes a search response event to the event bus.
+func (s *Service) publishSearchEvent(ctx context.Context, resp *Response, err error) {
+	if s.bus == nil {
+		return
+	}
+
+	payload := map[string]interface{}{
+		"query":        resp.Query,
+		"store":        resp.Store,
+		"result_count": len(resp.Results),
+		"total":        resp.Total,
+		"latency_ms":   resp.Metadata.SearchTimeMs,
+		"embed_ms":     resp.Metadata.EmbedTimeMs,
+		"retrieval_ms": resp.Metadata.RetrievalTimeMs,
+		"rerank_ms":    resp.Metadata.RerankTimeMs,
+		"reranking":    resp.Metadata.RerankingApplied,
+	}
+	if err != nil {
+		payload["error"] = err.Error()
+	}
+
+	event := bus.Event{
+		Type:    bus.TopicSearchResponse,
+		Source:  "search",
+		Payload: payload,
+	}
+	if pubErr := s.bus.Publish(ctx, bus.TopicSearchResponse, event); pubErr != nil {
+		s.log.Debug("Failed to publish search event", "error", pubErr)
+	}
 }
 
 // SearchDenseOnly performs a dense-only (semantic) search.

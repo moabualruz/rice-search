@@ -69,4 +69,13 @@ const (
 
 	// Settings service topics.
 	TopicSettingsChanged = "settings.changed"
+
+	// Model service topics.
+	TopicModelDownloaded = "model.downloaded"
+	TopicModelValidated  = "model.validated"
+
+	// Connection service topics.
+	TopicConnectionRegistered   = "connection.registered"
+	TopicConnectionUnregistered = "connection.unregistered"
+	TopicConnectionActivity     = "connection.activity"
 )

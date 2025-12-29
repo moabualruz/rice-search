@@ -3,7 +3,12 @@ package models
 import (
 	"context"
 	"fmt"
+	"io"
+	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/ricesearch/rice-search/internal/pkg/errors"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
@@ -300,30 +305,90 @@ func (r *Registry) DownloadModel(ctx context.Context, modelID string) (<-chan Do
 		return nil, errors.NotFoundError(fmt.Sprintf("model: %s", modelID))
 	}
 
+	if model.DownloadURL == "" {
+		return nil, errors.ValidationError("model has no download URL")
+	}
+
 	progressChan := make(chan DownloadProgress, 10)
 
-	// TODO: Implement actual download logic
-	// For now, simulate download
 	go func() {
 		defer close(progressChan)
 
-		// Simulate progress
-		for i := 0; i <= 100; i += 10 {
-			select {
-			case <-ctx.Done():
+		// Create model directory
+		modelDir := filepath.Join("./models", modelID)
+		if err := os.MkdirAll(modelDir, 0755); err != nil {
+			progressChan <- DownloadProgress{
+				ModelID: modelID,
+				Error:   fmt.Sprintf("failed to create model directory: %v", err),
+			}
+			return
+		}
+
+		// Files to download for different model types
+		var files []string
+		switch model.Type {
+		case ModelTypeEmbed:
+			files = []string{"model.onnx", "tokenizer.json", "config.json"}
+		case ModelTypeRerank:
+			files = []string{"model.onnx", "tokenizer.json", "config.json"}
+		case ModelTypeQueryUnderstand:
+			files = []string{"model.onnx", "tokenizer.json", "config.json"}
+		default:
+			files = []string{"model.onnx", "config.json"}
+		}
+
+		totalFiles := len(files)
+		var totalDownloaded int64
+
+		for i, file := range files {
+			destPath := filepath.Join(modelDir, file)
+
+			// Skip if file already exists
+			if _, err := os.Stat(destPath); err == nil {
+				r.log.Debug("File already exists, skipping", "file", destPath)
+				totalDownloaded += model.Size / int64(totalFiles)
+				continue
+			}
+
+			// Construct HuggingFace URL
+			// Format: https://huggingface.co/{repo}/resolve/main/{file}
+			downloadURL := fmt.Sprintf("%s/resolve/main/%s", model.DownloadURL, file)
+
+			// Download the file
+			downloaded, err := r.downloadFile(ctx, downloadURL, destPath, func(n int64) {
+				totalDownloaded += n
+				percent := float64(totalDownloaded) / float64(model.Size) * 100
+				if percent > 100 {
+					percent = 100
+				}
+				select {
+				case progressChan <- DownloadProgress{
+					ModelID:    modelID,
+					Downloaded: totalDownloaded,
+					Total:      model.Size,
+					Percent:    percent,
+					Complete:   false,
+				}:
+				default:
+					// Channel full, skip progress update
+				}
+			})
+
+			if err != nil {
+				// Non-critical files can be skipped
+				if file != "model.onnx" {
+					r.log.Warn("Failed to download optional file", "file", file, "error", err)
+					continue
+				}
 				progressChan <- DownloadProgress{
 					ModelID: modelID,
-					Error:   "download cancelled",
+					Error:   fmt.Sprintf("failed to download %s: %v", file, err),
 				}
 				return
-			case progressChan <- DownloadProgress{
-				ModelID:    modelID,
-				Downloaded: int64(i * int(model.Size) / 100),
-				Total:      model.Size,
-				Percent:    float64(i),
-				Complete:   i == 100,
-			}:
 			}
+
+			r.log.Debug("Downloaded file", "file", file, "bytes", downloaded)
+			_ = i // Progress tracking uses totalDownloaded
 		}
 
 		// Mark as downloaded
@@ -334,10 +399,135 @@ func (r *Registry) DownloadModel(ctx context.Context, modelID string) (<-chan Do
 		}
 		r.mu.Unlock()
 
+		// Send completion
+		progressChan <- DownloadProgress{
+			ModelID:    modelID,
+			Downloaded: model.Size,
+			Total:      model.Size,
+			Percent:    100,
+			Complete:   true,
+		}
+
 		r.log.Info("Downloaded model", "model", modelID)
+
+		// Validate downloaded files
+		if err := r.ValidateModel(ctx, modelID); err != nil {
+			r.log.Warn("Model validation failed", "model", modelID, "error", err)
+		}
 	}()
 
 	return progressChan, nil
+}
+
+// ValidateModel validates that a model's files are present and valid.
+func (r *Registry) ValidateModel(ctx context.Context, modelID string) error {
+	r.mu.RLock()
+	model, exists := r.models[modelID]
+	r.mu.RUnlock()
+
+	if !exists {
+		return errors.NotFoundError(fmt.Sprintf("model: %s", modelID))
+	}
+
+	modelDir := filepath.Join("./models", modelID)
+
+	// Check model.onnx exists and is non-empty
+	onnxPath := filepath.Join(modelDir, "model.onnx")
+	info, err := os.Stat(onnxPath)
+	if err != nil {
+		return fmt.Errorf("model.onnx not found: %w", err)
+	}
+	if info.Size() == 0 {
+		return fmt.Errorf("model.onnx is empty")
+	}
+
+	// Check tokenizer.json exists (required for text models)
+	tokenizerPath := filepath.Join(modelDir, "tokenizer.json")
+	if _, err := os.Stat(tokenizerPath); err != nil {
+		r.log.Warn("tokenizer.json not found", "model", modelID)
+		// Not a fatal error - some models may not need tokenizer
+	}
+
+	// Check config.json exists
+	configPath := filepath.Join(modelDir, "config.json")
+	if _, err := os.Stat(configPath); err != nil {
+		r.log.Warn("config.json not found", "model", modelID)
+		// Not a fatal error
+	}
+
+	// Update model validation status
+	r.mu.Lock()
+	model.Validated = true
+	model.ValidatedAt = time.Now()
+	if err := r.storage.SaveModel(model); err != nil {
+		r.log.Warn("Failed to save validation status", "model", modelID, "error", err)
+	}
+	r.mu.Unlock()
+
+	r.log.Info("Model validated", "model", modelID)
+	return nil
+}
+
+// downloadFile downloads a file from URL to destPath with progress reporting.
+func (r *Registry) downloadFile(ctx context.Context, url, destPath string, onProgress func(int64)) (int64, error) {
+	// Create HTTP request with context
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	// Set headers for HuggingFace
+	req.Header.Set("User-Agent", "rice-search/1.0")
+
+	// Create HTTP client with timeout
+	client := &http.Client{
+		Timeout: 30 * time.Minute, // Long timeout for large files
+	}
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, fmt.Errorf("failed to download: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("download failed with status %d", resp.StatusCode)
+	}
+
+	// Create destination file
+	out, err := os.Create(destPath)
+	if err != nil {
+		return 0, fmt.Errorf("failed to create file: %w", err)
+	}
+	defer out.Close()
+
+	// Create progress reader
+	reader := &progressReader{
+		reader:     resp.Body,
+		onProgress: onProgress,
+	}
+
+	// Copy with progress
+	written, err := io.Copy(out, reader)
+	if err != nil {
+		return written, fmt.Errorf("failed to write file: %w", err)
+	}
+
+	return written, nil
+}
+
+// progressReader wraps an io.Reader to report progress.
+type progressReader struct {
+	reader     io.Reader
+	onProgress func(int64)
+}
+
+func (r *progressReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	if n > 0 && r.onProgress != nil {
+		r.onProgress(int64(n))
+	}
+	return n, err
 }
 
 // DeleteModel removes a model from the registry.

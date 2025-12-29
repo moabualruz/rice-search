@@ -69,6 +69,12 @@ type ModelInfo struct {
 
 	// DownloadURL is the URL to download the model.
 	DownloadURL string `json:"download_url" yaml:"download_url"`
+
+	// Validated indicates if the model files have been validated.
+	Validated bool `json:"validated" yaml:"validated"`
+
+	// ValidatedAt is when the model was last validated.
+	ValidatedAt time.Time `json:"validated_at,omitempty" yaml:"validated_at,omitempty"`
 }
 
 // Validate validates the model info.

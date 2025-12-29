@@ -80,6 +80,80 @@ templ AdminSettingsPage(data SettingsPageData) {
 				}
 			</div>
 
+			<!-- Export/Import/Reset Controls -->
+			<div class="bg-white shadow sm:rounded-lg overflow-hidden mb-6">
+				<div class="px-4 py-5 sm:p-6">
+					<h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Configuration Management</h3>
+					<div class="flex flex-wrap gap-4">
+						<!-- Export Button with Format Selector -->
+						<div class="flex gap-2">
+							<select id="export-format" class="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border">
+								<option value="yaml">YAML</option>
+								<option value="json">JSON</option>
+							</select>
+							<a
+								id="export-link"
+								href="/admin/settings/export?format=yaml"
+								download
+								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+								onclick="this.href='/admin/settings/export?format=' + document.getElementById('export-format').value"
+							>
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+								</svg>
+								Export Settings
+							</a>
+						</div>
+
+						<!-- Import Button -->
+						<div>
+							<input type="file" id="settings-file-input" accept=".yaml,.yml,.json" class="hidden" onchange="handleSettingsImport(this)"/>
+							<button
+								type="button"
+								onclick="document.getElementById('settings-file-input').click()"
+								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+							>
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+								</svg>
+								Import Settings
+							</button>
+						</div>
+
+						<!-- Reset Button -->
+						<button
+							type="button"
+							onclick="if(confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) { htmx.ajax('POST', '/admin/settings/reset', {target: '#settings-messages', swap: 'innerHTML'}).then(() => window.location.reload()) }"
+							class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+						>
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+							</svg>
+							Reset to Defaults
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Search/Filter Input -->
+			<div class="mb-6">
+				<div class="relative">
+					<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+						<svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+						</svg>
+					</div>
+					<input
+						type="text"
+						id="settings-search"
+						placeholder="Search settings..."
+						class="block w-full rounded-md border-gray-300 pl-10 focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+						oninput="filterSettings(this.value)"
+					/>
+					<div id="search-stats" class="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-gray-500"></div>
+				</div>
+			</div>
+
 			<form
 				hx-post="/admin/settings"
 				hx-target="#settings-messages"
@@ -206,6 +280,134 @@ templ AdminSettingsPage(data SettingsPageData) {
 				</div>
 			</form>
 		</div>
+		
+		<!-- Settings Import Script -->
+		<script>
+			function handleSettingsImport(input) {
+				if (!input.files || input.files.length === 0) {
+					return;
+				}
+				
+				const file = input.files[0];
+				const formData = new FormData();
+				formData.append('settings_file', file);
+				
+				// Use htmx programmatically
+				htmx.ajax('POST', '/admin/settings/import', {
+					values: formData,
+					target: '#settings-messages',
+					swap: 'innerHTML'
+				}).then(() => {
+					// Reload page after successful import
+					setTimeout(() => window.location.reload(), 1500);
+				});
+				
+				// Reset file input
+				input.value = '';
+			}
+		</script>
+		
+		<!-- Settings Filter Script -->
+		<script>
+			function filterSettings(query) {
+				const searchQuery = query.toLowerCase().trim();
+				const sections = document.querySelectorAll('.settings-section');
+				let visibleSections = 0;
+				let visibleSettings = 0;
+				let totalSettings = 0;
+				
+				sections.forEach(section => {
+					const sectionTitle = section.dataset.sectionTitle.toLowerCase();
+					const sectionId = section.dataset.sectionId.toLowerCase();
+					const settingItems = section.querySelectorAll('.setting-item');
+					let hasVisibleItems = false;
+					
+					settingItems.forEach(item => {
+						totalSettings++;
+						const label = item.dataset.label.toLowerCase();
+						const name = item.dataset.name.toLowerCase();
+						
+						// Check if query matches section title, section id, label, or name
+						const matches = !searchQuery || 
+							sectionTitle.includes(searchQuery) || 
+							sectionId.includes(searchQuery) ||
+							label.includes(searchQuery) || 
+							name.includes(searchQuery);
+						
+						if (matches) {
+							item.style.display = '';
+							// Highlight matching text
+							highlightMatch(item, searchQuery);
+							hasVisibleItems = true;
+							visibleSettings++;
+						} else {
+							item.style.display = 'none';
+							// Remove highlighting
+							removeHighlight(item);
+						}
+					});
+					
+					// Show section if it has visible items or its title matches
+					const sectionMatches = !searchQuery || 
+						sectionTitle.includes(searchQuery) || 
+						sectionId.includes(searchQuery);
+					
+					if (hasVisibleItems || (sectionMatches && !searchQuery)) {
+						section.style.display = '';
+						visibleSections++;
+					} else {
+						section.style.display = 'none';
+					}
+				});
+				
+				// Update search stats
+				const statsEl = document.getElementById('search-stats');
+				if (searchQuery) {
+					statsEl.textContent = `${visibleSettings} of ${totalSettings} settings`;
+				} else {
+					statsEl.textContent = '';
+				}
+			}
+			
+			function highlightMatch(element, query) {
+				if (!query) return;
+				
+				const label = element.querySelector('label, span.text-sm.font-medium');
+				if (!label) return;
+				
+				const originalText = label.dataset.originalText || label.textContent;
+				if (!label.dataset.originalText) {
+					label.dataset.originalText = originalText;
+				}
+				
+				const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+				const highlightedText = originalText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+				label.innerHTML = highlightedText;
+			}
+			
+			function removeHighlight(element) {
+				const label = element.querySelector('label, span.text-sm.font-medium');
+				if (!label || !label.dataset.originalText) return;
+				
+				label.textContent = label.dataset.originalText;
+			}
+			
+			function escapeRegex(str) {
+				return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			}
+			
+			// Add keyboard shortcut (Ctrl+K or Cmd+K to focus search)
+			document.addEventListener('keydown', function(e) {
+				if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+					e.preventDefault();
+					const searchInput = document.getElementById('settings-search');
+					if (searchInput) {
+						searchInput.focus();
+						searchInput.select();
+					}
+				}
+			});
+		</script>
 	}
 }
 
@@ -217,7 +419,7 @@ type SelectOption struct {
 
 // SettingsSection renders a collapsible settings section
 templ SettingsSection(title, id string) {
-	<div class="bg-white shadow sm:rounded-lg overflow-hidden">
+	<div class="settings-section bg-white shadow sm:rounded-lg overflow-hidden" data-section-title={ title } data-section-id={ id }>
 		<div class="px-4 py-5 sm:p-6">
 			<h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">{ title }</h3>
 			{ children... }
@@ -227,7 +429,7 @@ templ SettingsSection(title, id string) {
 
 // TextInput renders a text input field
 templ TextInput(label, name, value, placeholder string) {
-	<div>
+	<div class="setting-item" data-label={ label } data-name={ name }>
 		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
 		<input
 			type="text"
@@ -242,7 +444,7 @@ templ TextInput(label, name, value, placeholder string) {
 
 // NumberInput renders a number input field
 templ NumberInput(label, name string, value, defaultVal int) {
-	<div>
+	<div class="setting-item" data-label={ label } data-name={ name }>
 		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
 		<input
 			type="number"
@@ -256,7 +458,7 @@ templ NumberInput(label, name string, value, defaultVal int) {
 
 // ToggleInput renders a toggle switch
 templ ToggleInput(label, name string, checked bool) {
-	<div class="flex items-center justify-between">
+	<div class="setting-item flex items-center justify-between" data-label={ label } data-name={ name }>
 		<span class="text-sm font-medium text-gray-700">{ label }</span>
 		<button
 			type="button"
@@ -275,7 +477,7 @@ templ ToggleInput(label, name string, checked bool) {
 
 // SelectInput renders a select dropdown
 templ SelectInput(label, name, value string, options []SelectOption) {
-	<div>
+	<div class="setting-item" data-label={ label } data-name={ name }>
 		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
 		<select
 			name={ name }
@@ -291,7 +493,7 @@ templ SelectInput(label, name, value string, options []SelectOption) {
 
 // RangeInput renders a range slider with value display
 templ RangeInput(label, name string, value float32, min, max, step float64) {
-	<div>
+	<div class="setting-item" data-label={ label } data-name={ name }>
 		<div class="flex justify-between">
 			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
 			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>

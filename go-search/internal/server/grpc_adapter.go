@@ -3,6 +3,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"runtime"
 	"time"
 
@@ -176,6 +177,50 @@ func (a *LocalGRPCAdapter) GetStoreStats(ctx context.Context, req *pb.GetStoreSt
 	return pbStats, nil
 }
 
+// ListFiles returns a paginated list of indexed files.
+func (a *LocalGRPCAdapter) ListFiles(_ context.Context, req *pb.ListFilesRequest) (*pb.ListFilesResponse, error) {
+	store := req.Store
+	if store == "" {
+		store = "default"
+	}
+
+	page := int(req.Page)
+	if page < 1 {
+		page = 1
+	}
+	pageSize := int(req.PageSize)
+	if pageSize < 1 {
+		pageSize = 50
+	}
+
+	// Get files from pipeline tracker
+	files, total := a.server.index.ListFiles(store, page, pageSize)
+
+	// Convert to protobuf
+	pbFiles := make([]*pb.IndexedFile, len(files))
+	for i, f := range files {
+		pbFiles[i] = &pb.IndexedFile{
+			Path:      f.Path,
+			Hash:      f.Hash,
+			IndexedAt: timestamppb.New(f.IndexedAt),
+			Status:    "indexed",
+		}
+	}
+
+	totalPages := int32(total / pageSize)
+	if total%pageSize > 0 {
+		totalPages++
+	}
+
+	return &pb.ListFilesResponse{
+		Files:      pbFiles,
+		Total:      int32(total),
+		Page:       int32(page),
+		PageSize:   int32(pageSize),
+		TotalPages: totalPages,
+	}, nil
+}
+
 // Health returns service health status.
 func (a *LocalGRPCAdapter) Health(ctx context.Context, req *pb.HealthRequest) (*pb.HealthResponse, error) {
 	components := make(map[string]*pb.ComponentHealth)
@@ -206,6 +251,12 @@ func (a *LocalGRPCAdapter) Health(ctx context.Context, req *pb.HealthRequest) (*
 		if mlHealth.Error != "" {
 			mlMsg = mlHealth.Error
 		}
+	}
+	// Include device info in message (DeviceInfo proto field not yet generated)
+	if mlHealth.DeviceFallback {
+		mlMsg = fmt.Sprintf("%s [device: %s→%s, fallback: true]", mlMsg, mlHealth.Device, mlHealth.ActualDevice)
+	} else {
+		mlMsg = fmt.Sprintf("%s [device: %s]", mlMsg, mlHealth.ActualDevice)
 	}
 	components["ml"] = &pb.ComponentHealth{
 		Status:  mlStatus,
