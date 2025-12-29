@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -37,6 +38,9 @@ var (
 	version = "dev"
 	commit  = "none"
 	date    = "unknown"
+
+	// inFlightCounter tracks the number of active HTTP requests
+	inFlightCounter int64
 )
 
 func main() {
@@ -123,6 +127,10 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		appCfg.Qdrant.URL = qdrantURL
 	}
 
+	// Initialize metrics EARLY (needed for instrumented bus and ML wiring)
+	metricsSvc := metrics.New()
+	log.Info("Initialized metrics")
+
 	// Initialize event bus
 	innerBus := bus.NewMemoryBus()
 	defer func() { _ = innerBus.Close() }()
@@ -134,15 +142,16 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}
 	defer func() { _ = eventLogger.Close() }()
 
-	// Wrap bus with logging if enabled
+	// Wrap bus with logging if enabled, then instrument with metrics
 	var eventBus bus.Bus
 	if appCfg.Bus.EventLogEnabled {
-		eventBus = bus.NewLoggedBus(innerBus, eventLogger)
+		eventBus = bus.NewInstrumentedBus(bus.NewLoggedBus(innerBus, eventLogger), metricsSvc)
 		log.Info("Event logging enabled", "path", appCfg.Bus.EventLogPath)
 	} else {
-		eventBus = innerBus
+		eventBus = bus.NewInstrumentedBus(innerBus, metricsSvc)
 		log.Info("Event logging disabled")
 	}
+	log.Info("Event bus instrumented with metrics")
 
 	// Initialize Qdrant client
 	qdrantCfg := qdrant.DefaultClientConfig()
@@ -178,6 +187,14 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		log.Warn("Some ML models failed to load", "error", err)
 	}
 
+	// Register ML event handlers
+	mlHandler := ml.NewEventHandler(mlSvc, eventBus, log)
+	if err := mlHandler.Register(context.Background()); err != nil {
+		log.Warn("Failed to register ML event handlers", "error", err)
+	} else {
+		log.Info("Registered ML event handlers (embed, sparse, rerank)")
+	}
+
 	// Initialize store service with event bus
 	storeCfg := store.ServiceConfig{
 		StoragePath:   "./data/stores",
@@ -192,20 +209,29 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	pipelineCfg := index.DefaultPipelineConfig()
 	indexSvc := index.NewPipeline(pipelineCfg, mlSvc, qc, log, eventBus)
 
+	// Register metrics event subscriber for automatic metric collection (metricsSvc created earlier)
+	metricsSubscriber := metrics.NewEventSubscriber(metricsSvc, eventBus)
+	if err := metricsSubscriber.SubscribeToEvents(context.Background()); err != nil {
+		log.Warn("Failed to subscribe metrics to events", "error", err)
+	} else {
+		log.Info("Registered metrics event subscriber (13 topics)")
+	}
+
+	// Wire ML service with metrics
+	mlSvc.SetMLMetrics(metricsSvc)    // For ML operation metrics (embed, rerank, sparse)
+	mlSvc.SetCacheMetrics(metricsSvc) // For embedding cache hit/miss tracking
+	log.Info("Wired ML metrics (operations + cache)")
+
 	// Initialize query understanding service (Option B/C fallback)
 	querySvc := query.NewService(log)
 	log.Info("Initialized query understanding service")
 
-	// Initialize search service with query understanding and event bus
+	// Initialize search service with query understanding, event bus, and metrics
 	searchCfg := search.DefaultConfig()
-	searchSvc := search.NewService(mlSvc, qc, log, searchCfg, querySvc, eventBus)
+	searchSvc := search.NewService(mlSvc, qc, log, searchCfg, querySvc, eventBus, metricsSvc)
 
 	// Wire monitoring service to search service (will be set after monSvc is created)
 	var monitoringSvc *connection.MonitoringService
-
-	// Initialize metrics
-	metricsSvc := metrics.New()
-	log.Info("Initialized metrics")
 
 	// Initialize model registry
 	var modelReg *models.Registry
@@ -339,11 +365,11 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	// Register REST API routes
 	registerAPIRoutes(mux, searchSvc, storeSvc, indexSvc, mlSvc, qc, log, version)
 
-	// Create HTTP server
+	// Create HTTP server with in-flight tracking middleware
 	httpAddr := fmt.Sprintf("%s:%d", host, httpPort)
 	httpSrv := &http.Server{
 		Addr:         httpAddr,
-		Handler:      corsMiddleware(loggingMiddleware(mux, log)),
+		Handler:      corsMiddleware(loggingMiddleware(inFlightMiddleware(mux), log)),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 	}
@@ -363,13 +389,25 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	<-sigCh
 	log.Info("Shutdown signal received")
 
-	// Graceful shutdown
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	// Graceful shutdown with in-flight request draining
+	shutdownTimeout := 30 * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
+	// Stop accepting new requests
 	if err := httpSrv.Shutdown(ctx); err != nil {
 		log.Error("HTTP shutdown error", "error", err)
 	}
+
+	// Wait for in-flight requests to complete
+	log.Info("Draining in-flight requests...")
+	if drainInFlight(shutdownTimeout, log) {
+		log.Info("All in-flight requests completed")
+	} else {
+		remaining := atomic.LoadInt64(&inFlightCounter)
+		log.Warn("Shutdown timeout reached with pending requests", "remaining", remaining)
+	}
+
 	grpcSrv.Stop()
 
 	log.Info("Server stopped")
@@ -412,10 +450,11 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 
 	mux.HandleFunc("GET /v1/version", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{
-			"version": version,
-			"commit":  commit,
-			"date":    date,
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"version":    version,
+			"git_commit": commit,
+			"build_time": date,
+			"go_version": "go1.21+",
 		})
 	})
 
@@ -549,6 +588,234 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(stats)
 	})
+
+	mux.HandleFunc("DELETE /v1/stores/{name}/index", func(w http.ResponseWriter, r *http.Request) {
+		storeName := r.PathValue("name")
+		var req struct {
+			Paths      []string `json:"paths"`
+			PathPrefix string   `json:"path_prefix"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		// Delete by prefix if specified
+		if req.PathPrefix != "" {
+			if err := indexSvc.DeleteByPrefix(r.Context(), storeName, req.PathPrefix); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{
+				"deleted_prefix": req.PathPrefix,
+			})
+			return
+		}
+
+		// Delete specific paths
+		if len(req.Paths) == 0 {
+			http.Error(w, "paths or path_prefix required", http.StatusBadRequest)
+			return
+		}
+		if err := indexSvc.Delete(r.Context(), storeName, req.Paths); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"deleted_count": len(req.Paths),
+			"paths":         req.Paths,
+		})
+	})
+
+	mux.HandleFunc("POST /v1/stores/{name}/index/sync", func(w http.ResponseWriter, r *http.Request) {
+		storeName := r.PathValue("name")
+		var req struct {
+			CurrentPaths []string `json:"current_paths"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(req.CurrentPaths) == 0 {
+			http.Error(w, "current_paths required", http.StatusBadRequest)
+			return
+		}
+
+		removed, err := indexSvc.Sync(r.Context(), storeName, req.CurrentPaths)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"removed": removed,
+		})
+	})
+
+	mux.HandleFunc("POST /v1/stores/{name}/index/reindex", func(w http.ResponseWriter, r *http.Request) {
+		storeName := r.PathValue("name")
+		var req struct {
+			Files []struct {
+				Path     string `json:"path"`
+				Content  string `json:"content"`
+				Language string `json:"language"`
+			} `json:"files"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		docs := make([]*index.Document, len(req.Files))
+		for i, f := range req.Files {
+			doc := index.NewDocument(f.Path, f.Content)
+			if f.Language != "" {
+				doc.Language = f.Language
+			}
+			docs[i] = doc
+		}
+
+		result, err := indexSvc.Reindex(r.Context(), index.IndexRequest{
+			Store:     storeName,
+			Documents: docs,
+		})
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(result)
+	})
+
+	mux.HandleFunc("GET /v1/stores/{name}/index/files", func(w http.ResponseWriter, r *http.Request) {
+		storeName := r.PathValue("name")
+
+		// Parse pagination params
+		page := 1
+		pageSize := 50
+		if pageStr := r.URL.Query().Get("page"); pageStr != "" {
+			if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+				page = p
+			}
+		}
+		if sizeStr := r.URL.Query().Get("page_size"); sizeStr != "" {
+			if s, err := strconv.Atoi(sizeStr); err == nil && s > 0 {
+				pageSize = s
+			}
+		}
+
+		files, total := indexSvc.ListFiles(storeName, page, pageSize)
+		totalPages := (total + pageSize - 1) / pageSize
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"files":       files,
+			"total":       total,
+			"page":        page,
+			"page_size":   pageSize,
+			"total_pages": totalPages,
+		})
+	})
+
+	// Convenience search endpoint (uses default store)
+	mux.HandleFunc("POST /v1/search", func(w http.ResponseWriter, r *http.Request) {
+		var req search.Request
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		// Use default store if not specified
+		if req.Store == "" {
+			req.Store = "default"
+		}
+		resp, err := searchSvc.Search(r.Context(), req)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
+	})
+
+	// ML HTTP endpoint wrappers (expose internal ML service via HTTP)
+	mux.HandleFunc("POST /v1/ml/embed", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Texts []string `json:"texts"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(req.Texts) == 0 {
+			http.Error(w, "texts array required", http.StatusBadRequest)
+			return
+		}
+		embeddings, err := mlSvc.Embed(r.Context(), req.Texts)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"embeddings": embeddings,
+			"count":      len(embeddings),
+		})
+	})
+
+	mux.HandleFunc("POST /v1/ml/sparse", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Texts []string `json:"texts"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if len(req.Texts) == 0 {
+			http.Error(w, "texts array required", http.StatusBadRequest)
+			return
+		}
+		vectors, err := mlSvc.SparseEncode(r.Context(), req.Texts)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"vectors": vectors,
+			"count":   len(vectors),
+		})
+	})
+
+	mux.HandleFunc("POST /v1/ml/rerank", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			Query     string   `json:"query"`
+			Documents []string `json:"documents"`
+			TopK      int      `json:"top_k"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.Query == "" || len(req.Documents) == 0 {
+			http.Error(w, "query and documents required", http.StatusBadRequest)
+			return
+		}
+		if req.TopK == 0 {
+			req.TopK = len(req.Documents)
+		}
+		results, err := mlSvc.Rerank(r.Context(), req.Query, req.Documents, req.TopK)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"results": results,
+			"count":   len(results),
+		})
+	})
 }
 
 // corsMiddleware adds CORS headers to responses.
@@ -594,4 +861,39 @@ type responseWriter struct {
 func (w *responseWriter) WriteHeader(code int) {
 	w.status = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// inFlightMiddleware tracks in-flight HTTP requests for graceful shutdown.
+func inFlightMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt64(&inFlightCounter, 1)
+		defer atomic.AddInt64(&inFlightCounter, -1)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// drainInFlight waits for all in-flight requests to complete or timeout.
+// Returns true if all requests completed, false if timeout reached.
+func drainInFlight(timeout time.Duration, log *logger.Logger) bool {
+	deadline := time.Now().Add(timeout)
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		count := atomic.LoadInt64(&inFlightCounter)
+		if count == 0 {
+			return true
+		}
+
+		if time.Now().After(deadline) {
+			return false
+		}
+
+		select {
+		case <-ticker.C:
+			log.Info("Draining in-flight requests", "remaining", count)
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }

@@ -138,25 +138,20 @@ Ensures:
 
 ### Dense Vector
 
-Fixed-size semantic embedding.
+Fixed-size semantic embedding (represented as `[]float32` in Go).
 
 ```go
-type DenseVector struct {
-    Values     []float32 `json:"values"`     // 1536 floats
-    Dimensions int       `json:"dimensions"` // Always 1536 for Jina
-    Normalized bool      `json:"normalized"` // L2 normalized
-}
+// No DenseVector struct - code uses []float32 directly
+// Example: embedding := []float32{0.1, 0.2, ..., 0.9} // 1536 dimensions
 ```
 
 ### Sparse Vector
 
-Variable-size keyword representation (SPLADE).
+Variable-size keyword representation (SPLADE) stored in Qdrant's native sparse format.
 
 ```go
-type SparseVector struct {
-    Indices []int32   `json:"indices"` // Token IDs (from BERT vocab)
-    Values  []float32 `json:"values"`  // Token weights
-}
+// Sparse vectors are stored directly in Qdrant
+// Go code uses Qdrant client types for sparse vectors
 ```
 
 ### Sparse Vector Properties
@@ -173,25 +168,30 @@ type SparseVector struct {
 
 ### SearchRequest
 
+Flattened structure with filters and options as direct fields.
+
 ```go
 type SearchRequest struct {
-    Store   string        `json:"store"`
-    Query   string        `json:"query"`
-    TopK    int           `json:"top_k"`
-    Filters SearchFilters `json:"filters"`
-    Options SearchOptions `json:"options"`
+    Query           string   `json:"query"`
+    TopK            int      `json:"top_k,omitempty"`
+    
+    // Filters (flattened)
+    Filter          *Filter  `json:"filter,omitempty"`
+    
+    // Options (flattened)
+    EnableReranking *bool    `json:"enable_reranking,omitempty"`
+    RerankTopK      int      `json:"rerank_top_k,omitempty"`
+    IncludeContent  bool     `json:"include_content,omitempty"`
+    SparseWeight    *float32 `json:"sparse_weight,omitempty"`
+    DenseWeight     *float32 `json:"dense_weight,omitempty"`
+    GroupByFile     bool     `json:"group_by_file,omitempty"`
+    MaxPerFile      int      `json:"max_per_file,omitempty"`
 }
 
-type SearchFilters struct {
-    PathPrefix string   `json:"path_prefix"` // e.g., "src/auth/"
-    Languages  []string `json:"languages"`   // e.g., ["go", "typescript"]
-}
-
-type SearchOptions struct {
-    SparseWeight    float32 `json:"sparse_weight"`     // 0.0 - 1.0
-    DenseWeight     float32 `json:"dense_weight"`      // 0.0 - 1.0
-    EnableReranking bool    `json:"enable_reranking"`
-    RerankTopK      int     `json:"rerank_top_k"`
+type Filter struct {
+    PathPrefix   string   `json:"path_prefix,omitempty"`
+    Languages    []string `json:"languages,omitempty"`
+    ConnectionID string   `json:"connection_id,omitempty"` // Optional connection scope
 }
 ```
 
@@ -199,16 +199,20 @@ type SearchOptions struct {
 
 ```go
 type SearchResult struct {
-    DocID       string   `json:"doc_id"`
+    ID          string   `json:"id"`
     Path        string   `json:"path"`
     Language    string   `json:"language"`
-    Content     string   `json:"content"`
-    Symbols     []string `json:"symbols"`
     StartLine   int      `json:"start_line"`
     EndLine     int      `json:"end_line"`
-    Score       float32  `json:"score"`        // Final score
-    SparseScore float32  `json:"sparse_score"` // BM25/SPLADE score
-    DenseScore  float32  `json:"dense_score"`  // Semantic score
+    Content     string   `json:"content,omitempty"`
+    Symbols     []string `json:"symbols,omitempty"`
+    
+    // Scoring
+    Score       float32  `json:"score"`                // Final fused score
+    RerankScore *float32 `json:"rerank_score,omitempty"` // Reranking score (if applied)
+    SparseRank  *int     `json:"sparse_rank,omitempty"`  // Rank in sparse results
+    DenseRank   *int     `json:"dense_rank,omitempty"`   // Rank in dense results
+    FusedScore  float32  `json:"fused_score,omitempty"`  // RRF fusion score
 }
 ```
 
@@ -216,18 +220,20 @@ type SearchResult struct {
 
 ```go
 type SearchResponse struct {
-    Query      string          `json:"query"`
-    Results    []SearchResult  `json:"results"`
-    Total      int             `json:"total"`       // Total matches (before top_k)
-    LatencyMS  int64           `json:"latency_ms"`
-    Stages     SearchStages    `json:"stages"`
+    Query    string         `json:"query"`
+    Store    string         `json:"store"`
+    Results  []SearchResult `json:"results"`
+    Total    int            `json:"total"`
+    Metadata SearchMetadata `json:"metadata"`
 }
 
-type SearchStages struct {
-    SparseMS  int64 `json:"sparse_ms"`
-    DenseMS   int64 `json:"dense_ms"`
-    FusionMS  int64 `json:"fusion_ms"`
-    RerankMS  int64 `json:"rerank_ms"`
+type SearchMetadata struct {
+    SearchTimeMs       int64 `json:"search_time_ms"`
+    EmbedTimeMs        int64 `json:"embed_time_ms"`
+    RetrievalTimeMs    int64 `json:"retrieval_time_ms"`
+    RerankTimeMs       int64 `json:"rerank_time_ms,omitempty"`
+    CandidatesReranked int   `json:"candidates_reranked,omitempty"`
+    RerankingApplied   bool  `json:"reranking_applied"`
 }
 ```
 
@@ -239,33 +245,45 @@ type SearchStages struct {
 
 ```go
 type IndexRequest struct {
-    Store     string          `json:"store"`
-    Documents []IndexDocument `json:"documents"`
-    Options   IndexOptions    `json:"options"`
+    Store        string      `json:"store"`
+    Documents    []*Document `json:"documents"`
+    Force        bool        `json:"force"` // Re-index even if unchanged
+    ConnectionID string      `json:"connection_id,omitempty"` // Optional connection tracking
 }
 
-type IndexDocument struct {
-    Path    string `json:"path"`
-    Content string `json:"content"`
-}
-
-type IndexOptions struct {
-    Force        bool `json:"force"`         // Re-index even if unchanged
-    ChunkSize    int  `json:"chunk_size"`    // Override default
-    ChunkOverlap int  `json:"chunk_overlap"` // Override default
+// Document is defined in index package
+type Document struct {
+    Path     string   `json:"path"`
+    Content  string   `json:"content"`
+    Language string   `json:"language,omitempty"`
+    Hash     string   `json:"hash,omitempty"` // Optional content hash
 }
 ```
 
-### IndexResponse
+### IndexResult
 
 ```go
-type IndexResponse struct {
-    Store         string `json:"store"`
-    Indexed       int    `json:"indexed"`        // Files indexed
-    Skipped       int    `json:"skipped"`        // Files skipped (unchanged)
-    Errors        int    `json:"errors"`         // Files with errors
-    ChunksCreated int    `json:"chunks_created"` // Total chunks created
-    LatencyMS     int64  `json:"latency_ms"`
+type IndexResult struct {
+    Store        string        `json:"store"`
+    Indexed      int           `json:"indexed"`      // Files successfully indexed
+    Skipped      int           `json:"skipped"`      // Files skipped (unchanged)
+    Failed       int           `json:"failed"`       // Files that failed
+    ChunksTotal  int           `json:"chunks_total"` // Total chunks created
+    Duration     time.Duration `json:"duration"`
+    Errors       []IndexError  `json:"errors,omitempty"`
+    DocumentInfo []DocInfo     `json:"document_info,omitempty"`
+}
+
+type IndexError struct {
+    Path    string `json:"path"`
+    Message string `json:"message"`
+}
+
+type DocInfo struct {
+    Path       string `json:"path"`
+    Hash       string `json:"hash"`
+    ChunkCount int    `json:"chunk_count"`
+    Status     string `json:"status"` // indexed, skipped, failed
 }
 ```
 

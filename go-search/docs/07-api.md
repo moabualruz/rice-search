@@ -10,13 +10,16 @@ Base URL: `http://localhost:8080`
 
 ## Authentication
 
-| Mode | Description |
-|------|-------------|
-| `none` (default) | No authentication |
-| `api-key` | API key in header |
-| `jwt` | JWT bearer token |
+> ⚠️ **NOT IMPLEMENTED**: Authentication is not yet implemented. All endpoints are currently open. For production, use a reverse proxy for authentication.
+
+| Mode | Description | Status |
+|------|-------------|--------|
+| `none` (default) | No authentication | ✅ Current |
+| `api-key` | API key in header | ❌ Not implemented |
+| `jwt` | JWT bearer token | ❌ Not implemented |
 
 ```bash
+# FUTURE - Not yet supported
 # API key mode
 AUTH_MODE=api-key
 API_KEYS=key1,key2,key3
@@ -26,7 +29,7 @@ AUTH_MODE=jwt
 JWT_SECRET=your-secret
 ```
 
-### Headers
+### Headers (Future)
 
 ```http
 # API key
@@ -40,7 +43,19 @@ Authorization: Bearer eyJhbG...
 
 ## Common Response Format
 
-### Success
+> **Note**: Current implementation returns responses directly without wrappers. The `data`/`meta` wrapper pattern shown below is a design goal but NOT YET IMPLEMENTED.
+
+### Success (Current - Direct Response)
+
+```json
+{
+    "query": "authentication handler",
+    "store": "default",
+    "results": [...]
+}
+```
+
+### Success (Future - With Wrapper)
 
 ```json
 {
@@ -60,9 +75,6 @@ Authorization: Bearer eyJhbG...
         "code": "STORE_NOT_FOUND",
         "message": "Store 'foo' does not exist",
         "details": { ... }
-    },
-    "meta": {
-        "request_id": "req_abc123"
     }
 }
 ```
@@ -128,6 +140,7 @@ Full search with all options.
 {
     "data": {
         "query": "authentication handler",
+        "store": "default",
         "results": [
             {
                 "doc_id": "chunk_abc123",
@@ -143,11 +156,25 @@ Full search with all options.
             }
         ],
         "total": 156,
-        "stages": {
-            "sparse_ms": 15,
-            "dense_ms": 25,
-            "fusion_ms": 5,
-            "rerank_ms": 20
+        "metadata": {
+            "search_time_ms": 65,
+            "embed_time_ms": 20,
+            "retrieval_time_ms": 30,
+            "rerank_time_ms": 15,
+            "candidates_reranked": 30,
+            "reranking_applied": true
+        },
+        "parsed_query": {
+            "original": "authentication handler",
+            "normalized": "authentication handler",
+            "keywords": ["authentication", "handler"],
+            "code_terms": ["handler"],
+            "action_intent": "find",
+            "target_type": "function",
+            "expanded": ["auth", "authenticate", "login"],
+            "search_query": "authentication handler auth authenticate login",
+            "confidence": 0.92,
+            "used_model": true
         }
     },
     "meta": {
@@ -280,18 +307,20 @@ Sync index with filesystem (remove deleted files).
 
 ---
 
-## ML Endpoints
+### POST /v1/stores/{store}/index/reindex
 
-### POST /v1/ml/embed
-
-Generate dense embeddings.
+Clear and rebuild entire index for a store.
 
 **Request:**
 
 ```json
 {
-    "texts": ["func Authenticate()", "class UserService"],
-    "normalize": true
+    "documents": [
+        {
+            "path": "src/main.go",
+            "content": "package main\n\nfunc main() {\n    ...\n}"
+        }
+    ]
 }
 ```
 
@@ -300,16 +329,118 @@ Generate dense embeddings.
 ```json
 {
     "data": {
-        "embeddings": [
-            [0.12, 0.34, 0.56, ...],
-            [0.23, 0.45, 0.67, ...]
-        ],
-        "dimensions": 1536
+        "cleared": 150,
+        "indexed": 1,
+        "chunks_created": 5
     },
     "meta": {
         "request_id": "req_abc123",
-        "latency_ms": 45
+        "latency_ms": 2000
     }
+}
+```
+
+---
+
+### GET /v1/stores/{store}/index/stats
+
+Get indexing statistics for a store.
+
+**Response:**
+
+```json
+{
+    "data": {
+        "total_documents": 150,
+        "total_chunks": 890,
+        "total_size_bytes": 5242880,
+        "last_indexed": "2025-12-29T01:00:00Z",
+        "languages": {
+            "go": 80,
+            "typescript": 45,
+            "python": 25
+        }
+    },
+    "meta": {
+        "request_id": "req_abc123",
+        "latency_ms": 15
+    }
+}
+```
+
+---
+
+### GET /v1/stores/{store}/index/files
+
+List indexed files with pagination.
+
+**Query Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| page | int | 1 | Page number (1-indexed) |
+| page_size | int | 50 | Results per page |
+| path | string | - | Filter by path substring |
+| language | string | - | Filter by language |
+| sort_by | string | path | Sort field (path, size, indexed_at) |
+| sort_order | string | asc | Sort order (asc, desc) |
+
+**Response:**
+
+```json
+{
+    "data": {
+        "files": [
+            {
+                "path": "src/auth.go",
+                "language": "go",
+                "size": 2048,
+                "hash": "a1b2c3d4e5f6",
+                "indexed_at": "2025-12-29T01:00:00Z",
+                "chunk_count": 5
+            }
+        ],
+        "total": 150,
+        "page": 1,
+        "page_size": 50,
+        "total_pages": 3
+    },
+    "meta": {
+        "request_id": "req_abc123",
+        "latency_ms": 25
+    }
+}
+```
+
+---
+
+## ML Endpoints
+
+ML operations are available as HTTP endpoints for direct invocation and debugging.
+
+### POST /v1/ml/embed
+
+Generate dense embeddings for texts.
+
+**Request:**
+
+```json
+{
+    "texts": ["function authenticate(user)", "class UserService"]
+}
+```
+
+**Response:**
+
+```json
+{
+    "embeddings": [
+        [0.123, 0.456, ...],
+        [0.789, 0.012, ...]
+    ],
+    "model": "jina-embeddings-v3",
+    "dimensions": 1536,
+    "latency_ms": 45
 }
 ```
 
@@ -317,13 +448,13 @@ Generate dense embeddings.
 
 ### POST /v1/ml/sparse
 
-Generate sparse (SPLADE) vectors.
+Generate sparse (SPLADE) vectors for texts.
 
 **Request:**
 
 ```json
 {
-    "texts": ["authentication handler", "user login"]
+    "texts": ["authentication handler", "user login function"]
 }
 ```
 
@@ -331,16 +462,12 @@ Generate sparse (SPLADE) vectors.
 
 ```json
 {
-    "data": {
-        "vectors": [
-            {"indices": [102, 3547, 8923], "values": [0.8, 0.6, 0.4]},
-            {"indices": [205, 1122, 9001], "values": [0.9, 0.3, 0.5]}
-        ]
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 30
-    }
+    "vectors": [
+        {"indices": [123, 456, 789], "values": [1.2, 0.8, 0.5]},
+        {"indices": [234, 567], "values": [1.5, 0.9]}
+    ],
+    "model": "splade-pp-en-v1",
+    "latency_ms": 30
 }
 ```
 
@@ -348,7 +475,7 @@ Generate sparse (SPLADE) vectors.
 
 ### POST /v1/ml/rerank
 
-Rerank documents.
+Rerank documents by relevance to query.
 
 **Request:**
 
@@ -356,9 +483,9 @@ Rerank documents.
 {
     "query": "authentication handler",
     "documents": [
-        {"id": "doc1", "content": "func Authenticate() {...}"},
-        {"id": "doc2", "content": "func Login() {...}"},
-        {"id": "doc3", "content": "func Logout() {...}"}
+        "func Authenticate(ctx context.Context) error",
+        "func HandleLogin(user string) bool",
+        "type Config struct { Port int }"
     ],
     "top_k": 2
 }
@@ -368,18 +495,18 @@ Rerank documents.
 
 ```json
 {
-    "data": {
-        "results": [
-            {"id": "doc1", "score": 0.95, "rank": 1},
-            {"id": "doc2", "score": 0.72, "rank": 2}
-        ]
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 80
-    }
+    "results": [
+        {"index": 0, "score": 0.95, "document": "func Authenticate..."},
+        {"index": 1, "score": 0.82, "document": "func HandleLogin..."}
+    ],
+    "model": "jina-reranker-v2",
+    "latency_ms": 25
 }
 ```
+
+---
+
+> **Note**: For high-throughput scenarios, ML operations are also available via the internal event bus. The search and index services use the event bus for better batching and resource management.
 
 ---
 
@@ -595,14 +722,16 @@ rice_search_latency_seconds_bucket{le="0.5"} 950
 
 ## Rate Limiting
 
-| Endpoint | Limit |
-|----------|-------|
-| Search | 100 req/min |
-| Index | 20 req/min |
-| ML endpoints | 200 req/min |
-| Other | 300 req/min |
+> ⚠️ **NOT IMPLEMENTED**: Rate limiting is not yet implemented. For production, use a reverse proxy for rate limiting.
 
-Headers:
+| Endpoint | Planned Limit | Status |
+|----------|---------------|--------|
+| Search | 100 req/min | ❌ Not implemented |
+| Index | 20 req/min | ❌ Not implemented |
+| ML endpoints | 200 req/min | ❌ Not implemented |
+| Other | 300 req/min | ❌ Not implemented |
+
+Headers (Future):
 
 ```http
 X-RateLimit-Limit: 100

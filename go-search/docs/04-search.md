@@ -21,7 +21,7 @@ Hybrid search combining sparse (SPLADE) and dense (semantic) retrieval with RRF 
 │                                    ▼                                        │
 │  1b. QUERY UNDERSTANDING (CodeBERT)                                         │
 │     ┌─────────────────────────────────────────────────────────────────┐    │
-│     │  Intent: navigational                                            │    │
+│     │  Intent: find                                                    │    │
 │     │  Keywords: [authentication, handler, golang, go]                 │    │
 │     │  Expanded: [auth, authenticate, login, http.Handler]             │    │
 │     │  Confidence: 0.92                                                │    │
@@ -421,14 +421,14 @@ User Query: "find authentication handler in golang"
                         ▼
               ┌─────────────────┐
               │    CodeBERT     │
-              │   (125M params) │
+              │   (438MB model) │
               └────────┬────────┘
                        │
                        ▼
               ┌─────────────────────────────────────────┐
               │ ParsedQuery:                            │
               │   Original: "find authentication..."    │
-              │   Intent: navigational                  │
+              │   Intent: find                          │
               │   Keywords: [authentication, handler]   │
               │   CodeTerms: [golang, go, handler]      │
               │   Expanded: [auth, login, http.Handler] │
@@ -441,10 +441,12 @@ User Query: "find authentication handler in golang"
 
 | Intent | Description | Example Query |
 |--------|-------------|---------------|
-| `navigational` | Find specific code location | "where is the auth handler" |
-| `factual` | Answer about code | "what does ParseQuery do" |
-| `exploratory` | Discover related code | "how does authentication work" |
-| `analytical` | Understand patterns | "why does login call validate" |
+| `find` | Find specific code location | "where is the auth handler" |
+| `explain` | Answer about code | "what does ParseQuery do" |
+| `list` | Enumerate related items | "list all authentication methods" |
+| `fix` | Debug or fix issues | "why does login fail" |
+| `compare` | Compare implementations | "compare UserService vs AdminService" |
+| `unknown` | Intent cannot be determined | (fallback) |
 
 ### Keyword Expansion
 
@@ -481,7 +483,7 @@ Query understanding results are included in search response:
 {
   "parsed_query": {
     "original": "find authentication handler",
-    "intent": "navigational",
+    "intent": "find",
     "keywords": ["authentication", "handler"],
     "code_terms": ["handler"],
     "expanded": ["auth", "authenticate", "login"],

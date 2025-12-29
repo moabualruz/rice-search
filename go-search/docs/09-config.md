@@ -12,11 +12,10 @@ Configuration via environment variables, CLI flags, or config file. Priority: CL
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `PORT` | `--port` | `8080` | HTTP port |
-| `HOST` | `--host` | `0.0.0.0` | Bind address |
-| `READ_TIMEOUT` | - | `30s` | HTTP read timeout |
-| `WRITE_TIMEOUT` | - | `30s` | HTTP write timeout |
-| `SHUTDOWN_TIMEOUT` | - | `10s` | Graceful shutdown timeout |
+| `RICE_PORT` | `--port` | `8080` | HTTP port |
+| `RICE_HOST` | `--host` | `0.0.0.0` | Bind address |
+| `RICE_ENABLE_WEB` | - | `true` | Enable Web UI |
+| `RICE_ENABLE_ML` | - | `true` | Enable ML services |
 
 ### Qdrant
 
@@ -31,11 +30,17 @@ Configuration via environment variables, CLI flags, or config file. Priority: CL
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `MODELS_DIR` | `--models-dir` | `./models` | Models directory |
-| `EMBED_MODEL` | - | `jinaai/jina-code-embeddings-1.5b` | Embedding model |
-| `SPARSE_MODEL` | - | `splade-v3` | Sparse model |
-| `RERANK_MODEL` | - | `jinaai/jina-reranker-v2-base-multilingual` | Reranker model |
-| `QUERY_MODEL` | - | `microsoft/codebert-base` | Query understanding model |
+| `RICE_MODELS_DIR` | `--models-dir` | `./models` | Models directory |
+| `RICE_EMBED_MODEL` | - | `jinaai/jina-code-embeddings-1.5b` | Embedding model |
+| `RICE_SPARSE_MODEL` | - | `splade-v3` | Sparse model |
+| `RICE_RERANK_MODEL` | - | `jinaai/jina-reranker-v2-base-multilingual` | Reranker model |
+| `RICE_QUERY_MODEL` | - | `microsoft/codebert-base` | Query understanding model |
+| `RICE_EMBED_DIM` | - | `1536` | Embedding dimensions |
+| `RICE_EMBED_BATCH_SIZE` | - | `32` | Embedding batch size |
+| `RICE_SPARSE_BATCH_SIZE` | - | `32` | Sparse batch size |
+| `RICE_RERANK_BATCH_SIZE` | - | `32` | Rerank batch size |
+| `RICE_MAX_SEQ_LENGTH` | - | `8192` | Maximum sequence length |
+| `RICE_ML_URL` | - | - | External ML service URL (distributed mode) |
 
 ### Query Understanding
 
@@ -64,12 +69,8 @@ All models default to GPU for maximum performance.
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `DEVICE` | `--device` | `cuda` | Device (cpu, cuda, tensorrt) |
-| `CUDA_VISIBLE_DEVICES` | - | `0` | GPU index |
-| `GPU_LOAD_MODE` | `--load-mode` | `all` | Model loading (all, ondemand, lru) |
-| `GPU_UNLOAD_TIMEOUT` | - | `60s` | Unload timeout (ondemand mode) |
-| `GPU_LRU_SIZE` | - | `2` | Models to keep (lru mode) |
-| `ONNX_PROVIDER` | - | `cuda` | ONNX provider (cpu, cuda, tensorrt) |
+| `RICE_ML_DEVICE` | `--device` | `cuda` | Device (cpu, cuda, tensorrt) |
+| `RICE_ML_CUDA_DEVICE` | - | `0` | GPU index |
 | `RICE_EMBED_GPU` | - | `true` | Embedding model on GPU |
 | `RICE_RERANK_GPU` | - | `true` | Reranking model on GPU |
 | `RICE_QUERY_GPU` | - | `true` | Query understanding on GPU |
@@ -87,78 +88,96 @@ All models default to GPU for maximum performance.
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `DEFAULT_TOP_K` | - | `20` | Default results |
-| `MAX_TOP_K` | - | `100` | Maximum results |
-| `SPARSE_WEIGHT` | - | `0.5` | Default sparse weight |
-| `DENSE_WEIGHT` | - | `0.5` | Default dense weight |
-| `RRF_K` | - | `60` | RRF smoothing constant |
-| `ENABLE_RERANKING` | - | `true` | Enable reranking by default |
-| `RERANK_TOP_K` | - | `30` | Default rerank candidates |
+| `RICE_DEFAULT_TOP_K` | - | `20` | Default results |
+| `RICE_DEFAULT_SPARSE_WEIGHT` | - | `0.5` | Default sparse weight |
+| `RICE_DEFAULT_DENSE_WEIGHT` | - | `0.5` | Default dense weight |
+| `RICE_ENABLE_RERANKING` | - | `true` | Enable reranking by default |
+| `RICE_RERANK_CANDIDATES` | - | `30` | Default rerank candidates |
+| `RICE_ENABLE_DEDUP` | - | `true` | Enable deduplication |
+| `RICE_DEDUP_THRESHOLD` | - | `0.85` | Dedup similarity threshold |
+| `RICE_ENABLE_DIVERSITY` | - | `true` | Enable MMR diversity |
+| `RICE_DIVERSITY_LAMBDA` | - | `0.7` | Diversity lambda (0=diverse, 1=relevant) |
+| `RICE_GROUP_BY_FILE` | - | `false` | Group results by file |
+| `RICE_MAX_CHUNKS_PER_FILE` | - | `3` | Max chunks per file when grouping |
 
 ### Indexing
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `CHUNK_SIZE` | - | `512` | Target chunk size (tokens) |
-| `CHUNK_OVERLAP` | - | `64` | Chunk overlap (tokens) |
-| `MAX_FILE_SIZE` | - | `10485760` | Max file size (10MB) |
-| `EMBED_BATCH_SIZE` | - | `32` | Embedding batch size |
-| `EMBED_PARALLEL` | - | `4` | Parallel embedding batches |
-| `INDEX_TIMEOUT` | - | `30m` | Full reindex timeout |
+| `RICE_CHUNK_SIZE` | - | `512` | Target chunk size (tokens) |
+| `RICE_CHUNK_OVERLAP` | - | `64` | Chunk overlap (tokens) |
+| `RICE_INDEX_WORKERS` | - | `4` | Parallel indexing workers |
 
 ### Caching
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `EMBED_CACHE_SIZE` | - | `100000` | Max cached embeddings |
-| `SPARSE_CACHE_SIZE` | - | `100000` | Max cached sparse vectors |
-| `CACHE_BACKEND` | - | `memory` | Cache backend (memory, redis) |
-| `REDIS_URL` | - | - | Redis URL for distributed cache |
+| `RICE_CACHE_TYPE` | - | `memory` | Cache backend (memory, redis) |
+| `RICE_CACHE_SIZE` | - | `100000` | Max cache entries |
+| `RICE_CACHE_TTL` | - | `0` | Cache TTL in seconds (0 = no expiry) |
+| `RICE_REDIS_URL` | - | - | Redis URL for distributed cache |
 
 ### Event Bus
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `EVENT_BUS` | `--bus` | `memory` | Bus type (memory, kafka, nats, redis) |
-| `KAFKA_BROKERS` | - | `localhost:9092` | Kafka brokers |
-| `KAFKA_GROUP` | - | `rice-search` | Kafka consumer group |
-| `NATS_URL` | - | `nats://localhost:4222` | NATS URL |
-| `REDIS_STREAM_URL` | - | - | Redis streams URL |
+| `RICE_BUS_TYPE` | `--bus` | `memory` | Bus type (memory, kafka, nats, redis) |
+| `RICE_KAFKA_BROKERS` | - | `localhost:9092` | Kafka brokers |
+| `RICE_KAFKA_GROUP` | - | `rice-search` | Kafka consumer group |
+| `RICE_NATS_URL` | - | `nats://localhost:4222` | NATS URL |
+| `RICE_REDIS_STREAM_URL` | - | - | Redis streams URL |
+| `RICE_EVENT_LOG_ENABLED` | - | `false` | Enable event logging to file |
+| `RICE_EVENT_LOG_PATH` | - | `./logs/events.log` | Event log file path |
 
-### Auth
-
-| Env Var | CLI Flag | Default | Description |
-|---------|----------|---------|-------------|
-| `AUTH_MODE` | - | `none` | Auth mode (none, api-key, jwt) |
-| `API_KEYS` | - | - | Comma-separated API keys |
-| `JWT_SECRET` | - | - | JWT signing secret |
-| `JWT_ISSUER` | - | `rice-search` | JWT issuer |
-
-### Rate Limiting
+### Security
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `RATE_LIMIT_ENABLED` | - | `false` | Enable rate limiting |
-| `RATE_LIMIT_SEARCH` | - | `100` | Search requests/min |
-| `RATE_LIMIT_INDEX` | - | `20` | Index requests/min |
-| `RATE_LIMIT_ML` | - | `200` | ML requests/min |
+| `RICE_API_KEY` | - | - | API key for authentication (if set, enables auth) |
+| `RICE_RATE_LIMIT` | - | `0` | Rate limit per minute (0 = disabled) |
+| `RICE_CORS_ORIGINS` | - | `*` | Allowed CORS origins |
 
 ### Logging
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `LOG_LEVEL` | `--log-level` | `info` | Level (debug, info, warn, error) |
-| `LOG_FORMAT` | `--log-format` | `text` | Format (text, json) |
+| `RICE_LOG_LEVEL` | `--log-level` | `info` | Level (debug, info, warn, error) |
+| `RICE_LOG_FORMAT` | `--log-format` | `text` | Format (text, json) |
+| `RICE_LOG_FILE` | - | - | Log file path (if set, logs to file) |
 
 ### Observability
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `METRICS_ENABLED` | - | `true` | Enable Prometheus metrics |
-| `METRICS_PATH` | - | `/metrics` | Metrics endpoint |
-| `TRACING_ENABLED` | - | `false` | Enable tracing |
-| `TRACING_ENDPOINT` | - | - | OTLP endpoint |
-| `TRACING_SAMPLE_RATE` | - | `0.1` | Trace sample rate |
+| `RICE_METRICS_ENABLED` | - | `true` | Enable Prometheus metrics |
+| `RICE_METRICS_PATH` | - | `/metrics` | Metrics endpoint |
+| `RICE_METRICS_PERSISTENCE` | - | `memory` | Metrics storage (memory, redis) |
+| `RICE_METRICS_REDIS_URL` | - | - | Redis URL for metrics persistence |
+| `RICE_TRACING_ENABLED` | - | `false` | Enable tracing |
+| `RICE_TRACING_ENDPOINT` | - | - | OTLP endpoint |
+
+### Connection Tracking
+
+| Env Var | CLI Flag | Default | Description |
+|---------|----------|---------|-------------|
+| `RICE_CONNECTIONS_ENABLED` | - | `true` | Enable connection tracking |
+| `RICE_CONNECTIONS_PATH` | - | `./data/connections` | Connection storage path |
+| `RICE_CONNECTIONS_MAX_INACTIVE` | - | `30` | Days before marking connection inactive |
+
+### Model Registry
+
+| Env Var | CLI Flag | Default | Description |
+|---------|----------|---------|-------------|
+| `RICE_MODELS_REGISTRY` | - | `./models/registry.json` | Model registry file path |
+| `RICE_MODELS_MAPPERS` | - | `./models/mappers` | Model mappers directory |
+| `RICE_MODELS_AUTO_DOWNLOAD` | - | `false` | Auto-download missing models |
+
+### Settings System
+
+| Env Var | CLI Flag | Default | Description |
+|---------|----------|---------|-------------|
+| `RICE_SETTINGS_AUDIT_ENABLED` | - | `true` | Enable settings change audit |
+| `RICE_SETTINGS_AUDIT_PATH` | - | `./data/settings-audit.log` | Settings audit log path |
 
 ---
 
@@ -168,96 +187,100 @@ All models default to GPU for maximum performance.
 # rice-search.yaml
 
 server:
-  port: 8080
   host: 0.0.0.0
-  read_timeout: 30s
-  write_timeout: 30s
-  shutdown_timeout: 10s
+  port: 8080
+  enable_web: true
+  enable_ml: true
 
 qdrant:
   url: http://localhost:6333
   api_key: ""
-  timeout: 30s
-  collection_prefix: rice
-
-models:
-  dir: ./models
-  embed: jinaai/jina-code-embeddings-1.5b
-  sparse: splade-v3
-  rerank: jinaai/jina-reranker-v2-base-multilingual
-  query: microsoft/codebert-base  # Query understanding model
-
-device:
-  type: cuda  # cpu, cuda, tensorrt (GPU-first default)
-  cuda_device: 0
-  load_mode: all  # all, ondemand, lru
-  unload_timeout: 60s
-  lru_size: 2
 
 ml:
-  embed_gpu: true      # GPU for embeddings
-  rerank_gpu: true     # GPU for reranking
-  query_gpu: true      # GPU for query understanding
-  query_enabled: true  # Enable CodeBERT query understanding
+  device: cuda  # cpu, cuda, tensorrt (GPU-first default)
+  cuda_device: 0
+  embed_model: jinaai/jina-code-embeddings-1.5b
+  sparse_model: splade-v3
+  rerank_model: jinaai/jina-reranker-v2-base-multilingual
+  query_model: microsoft/codebert-base
+  embed_dim: 1536
+  embed_batch_size: 32
+  sparse_batch_size: 32
+  rerank_batch_size: 32
+  max_seq_length: 8192
+  models_dir: ./models
+  external_url: ""  # For distributed mode
+  embed_gpu: true   # GPU for embeddings
+  rerank_gpu: true  # GPU for reranking
+  query_gpu: true   # GPU for query understanding
+  query_model_enabled: true  # Enable model-based query understanding
+
+connection:
+  enabled: true
+  storage_path: ./data/connections
+  max_inactive: 30  # Days
+
+model_registry:
+  registry_path: ./models/registry.json
+  mappers_path: ./models/mappers
+  auto_download: false
+
+cache:
+  type: memory  # memory, redis
+  size: 100000
+  ttl: 0  # 0 = no expiry
+  redis_url: ""
+
+bus:
+  type: memory  # memory, kafka, nats, redis
+  kafka_brokers: localhost:9092
+  kafka_group: rice-search
+  nats_url: nats://localhost:4222
+  redis_url: ""
+  event_log_enabled: false
+  event_log_path: ./logs/events.log
+
+index:
+  chunk_size: 512
+  chunk_overlap: 64
+  workers: 4
 
 search:
   default_top_k: 20
-  max_top_k: 100
-  sparse_weight: 0.5
-  dense_weight: 0.5
-  rrf_k: 60
+  default_sparse_weight: 0.5
+  default_dense_weight: 0.5
   enable_reranking: true
-  rerank_top_k: 30
+  rerank_candidates: 30
+  enable_dedup: true
+  dedup_threshold: 0.85
+  enable_diversity: true
+  diversity_lambda: 0.7
+  group_by_file: false
+  max_chunks_per_file: 3
 
-indexing:
-  chunk_size: 512
-  chunk_overlap: 64
-  max_file_size: 10485760
-  embed_batch_size: 32
-  embed_parallel: 4
-  timeout: 30m
-
-cache:
-  embed_size: 100000
-  sparse_size: 100000
-  backend: memory  # memory, redis
-  redis_url: ""
-
-event_bus:
-  type: memory  # memory, kafka, nats, redis
-  kafka:
-    brokers: [localhost:9092]
-    group: rice-search
-  nats:
-    url: nats://localhost:4222
-  redis:
-    url: ""
-
-auth:
-  mode: none  # none, api-key, jwt
-  api_keys: []
-  jwt:
-    secret: ""
-    issuer: rice-search
-
-rate_limit:
-  enabled: false
-  search: 100
-  index: 20
-  ml: 200
-
-logging:
+log:
   level: info
   format: text  # text, json
+  file: ""
+
+security:
+  api_key: ""
+  rate_limit: 0  # 0 = disabled
+  cors_origins: "*"
 
 observability:
-  metrics:
-    enabled: true
-    path: /metrics
-  tracing:
-    enabled: false
-    endpoint: ""
-    sample_rate: 0.1
+  metrics_enabled: true
+  metrics_path: /metrics
+  tracing_enabled: false
+  tracing_endpoint: ""
+
+metrics:
+  persistence: memory  # memory, redis
+  redis_url: ""
+
+settings:
+  audit_enabled: true
+  audit_path: ./data/settings-audit.log
 ```
 
 ---
@@ -271,9 +294,8 @@ qdrant:
   url: ${QDRANT_URL:-http://localhost:6333}
   api_key: ${QDRANT_API_KEY}
 
-auth:
-  jwt:
-    secret: ${JWT_SECRET}
+security:
+  api_key: ${RICE_API_KEY}
 ```
 
 ---

@@ -2,9 +2,18 @@
 
 ## Overview
 
-Single binary with subcommands for different modes.
+Two binaries are provided:
+
+| Binary | Purpose | Location |
+|--------|---------|----------|
+| `rice-search` | CLI client for indexing/searching | `cmd/rice-search/` |
+| `rice-search-server` | HTTP server with Web UI | `cmd/rice-search-server/` |
 
 ```bash
+# Server (start the HTTP server + Web UI)
+rice-search-server [flags]
+
+# CLI client (connects to running server)
 rice-search [command] [flags]
 ```
 

@@ -94,6 +94,7 @@ func (c *Chunker) chunkByBraces(store string, doc *Document, lines []string) []*
 	var chunks []*Chunk
 	var currentChunk strings.Builder
 	var currentSymbols []string
+	var previousOverlap string
 	startLine := 1
 	braceDepth := 0
 	charOffset := 0
@@ -117,8 +118,11 @@ func (c *Chunker) chunkByBraces(store string, doc *Document, lines []string) []*
 		if (atBoundary && tokens >= c.config.MinSize) || exceedsMax || isLastLine {
 			content := currentChunk.String()
 			if strings.TrimSpace(content) != "" {
+				// Add overlap from previous chunk
+				finalContent := previousOverlap + content
+
 				// Extract symbols from this chunk
-				chunkSymbols := ExtractSymbols(content, doc.Language)
+				chunkSymbols := ExtractSymbols(finalContent, doc.Language)
 				if len(chunkSymbols) > MaxSymbolsPerChunk {
 					chunkSymbols = chunkSymbols[:MaxSymbolsPerChunk]
 				}
@@ -131,20 +135,23 @@ func (c *Chunker) chunkByBraces(store string, doc *Document, lines []string) []*
 					Store:        store,
 					Path:         doc.Path,
 					Language:     doc.Language,
-					Content:      content,
+					Content:      finalContent,
 					Symbols:      currentSymbols,
 					StartLine:    startLine,
 					EndLine:      lineNum,
 					StartChar:    charOffset,
 					EndChar:      endChar,
-					TokenCount:   tokens,
-					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
+					TokenCount:   c.estimateTokens(finalContent),
+					Hash:         ComputeChunkHash(store, doc.Path, finalContent, startLine, lineNum),
 					IndexedAt:    time.Now(),
 					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
 
-				// Reset for next chunk with overlap
+				// Extract overlap for next chunk
+				previousOverlap = c.extractOverlap(content)
+
+				// Reset for next chunk
 				charOffset = endChar
 				startLine = lineNum + 1
 				currentChunk.Reset()
@@ -164,6 +171,7 @@ func (c *Chunker) chunkByBraces(store string, doc *Document, lines []string) []*
 func (c *Chunker) chunkByIndentation(store string, doc *Document, lines []string) []*Chunk {
 	var chunks []*Chunk
 	var currentChunk strings.Builder
+	var previousOverlap string
 	startLine := 1
 	charOffset := 0
 
@@ -191,7 +199,10 @@ func (c *Chunker) chunkByIndentation(store string, doc *Document, lines []string
 		if (atBoundary && tokens >= c.config.MinSize) || exceedsMax || isLastLine {
 			content := currentChunk.String()
 			if strings.TrimSpace(content) != "" {
-				symbols := ExtractSymbols(content, doc.Language)
+				// Add overlap from previous chunk
+				finalContent := previousOverlap + content
+
+				symbols := ExtractSymbols(finalContent, doc.Language)
 				if len(symbols) > MaxSymbolsPerChunk {
 					symbols = symbols[:MaxSymbolsPerChunk]
 				}
@@ -203,18 +214,21 @@ func (c *Chunker) chunkByIndentation(store string, doc *Document, lines []string
 					Store:        store,
 					Path:         doc.Path,
 					Language:     doc.Language,
-					Content:      content,
+					Content:      finalContent,
 					Symbols:      symbols,
 					StartLine:    startLine,
 					EndLine:      lineNum,
 					StartChar:    charOffset,
 					EndChar:      endChar,
-					TokenCount:   tokens,
-					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
+					TokenCount:   c.estimateTokens(finalContent),
+					Hash:         ComputeChunkHash(store, doc.Path, finalContent, startLine, lineNum),
 					IndexedAt:    time.Now(),
 					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
+
+				// Extract overlap for next chunk
+				previousOverlap = c.extractOverlap(content)
 
 				charOffset = endChar
 				startLine = lineNum + 1
@@ -234,6 +248,7 @@ func (c *Chunker) chunkByIndentation(store string, doc *Document, lines []string
 func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) []*Chunk {
 	var chunks []*Chunk
 	var currentChunk strings.Builder
+	var previousOverlap string
 	startLine := 1
 	charOffset := 0
 
@@ -247,6 +262,9 @@ func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) [
 		if isHeading && tokens >= c.config.MinSize {
 			content := currentChunk.String()
 			if strings.TrimSpace(content) != "" {
+				// Add overlap from previous chunk
+				finalContent := previousOverlap + content
+
 				endChar := charOffset + len(content)
 				chunk := &Chunk{
 					ID:           ComputeChunkID(store, doc.Path, startLine, lineNum-1),
@@ -254,17 +272,20 @@ func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) [
 					Store:        store,
 					Path:         doc.Path,
 					Language:     doc.Language,
-					Content:      content,
+					Content:      finalContent,
 					StartLine:    startLine,
 					EndLine:      lineNum - 1,
 					StartChar:    charOffset,
 					EndChar:      endChar,
-					TokenCount:   tokens,
-					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum-1),
+					TokenCount:   c.estimateTokens(finalContent),
+					Hash:         ComputeChunkHash(store, doc.Path, finalContent, startLine, lineNum-1),
 					IndexedAt:    time.Now(),
 					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
+
+				// Extract overlap for next chunk
+				previousOverlap = c.extractOverlap(content)
 
 				charOffset = endChar
 				startLine = lineNum
@@ -281,6 +302,9 @@ func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) [
 	// Final chunk
 	content := currentChunk.String()
 	if strings.TrimSpace(content) != "" {
+		// Add overlap from previous chunk
+		finalContent := previousOverlap + content
+
 		endChar := charOffset + len(content)
 		chunk := &Chunk{
 			ID:           ComputeChunkID(store, doc.Path, startLine, len(lines)),
@@ -288,13 +312,13 @@ func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) [
 			Store:        store,
 			Path:         doc.Path,
 			Language:     doc.Language,
-			Content:      content,
+			Content:      finalContent,
 			StartLine:    startLine,
 			EndLine:      len(lines),
 			StartChar:    charOffset,
 			EndChar:      endChar,
-			TokenCount:   c.estimateTokens(content),
-			Hash:         ComputeChunkHash(store, doc.Path, content, startLine, len(lines)),
+			TokenCount:   c.estimateTokens(finalContent),
+			Hash:         ComputeChunkHash(store, doc.Path, finalContent, startLine, len(lines)),
 			IndexedAt:    time.Now(),
 			ConnectionID: doc.ConnectionID,
 		}
@@ -312,6 +336,7 @@ func (c *Chunker) chunkByHeadings(store string, doc *Document, lines []string) [
 func (c *Chunker) chunkByLines(store string, doc *Document, lines []string) []*Chunk {
 	var chunks []*Chunk
 	var currentChunk strings.Builder
+	var previousOverlap string
 	startLine := 1
 	charOffset := 0
 
@@ -328,7 +353,10 @@ func (c *Chunker) chunkByLines(store string, doc *Document, lines []string) []*C
 		if tokens >= c.config.TargetSize || isLastLine {
 			content := currentChunk.String()
 			if strings.TrimSpace(content) != "" {
-				symbols := ExtractSymbols(content, doc.Language)
+				// Add overlap from previous chunk
+				finalContent := previousOverlap + content
+
+				symbols := ExtractSymbols(finalContent, doc.Language)
 				if len(symbols) > MaxSymbolsPerChunk {
 					symbols = symbols[:MaxSymbolsPerChunk]
 				}
@@ -340,18 +368,21 @@ func (c *Chunker) chunkByLines(store string, doc *Document, lines []string) []*C
 					Store:        store,
 					Path:         doc.Path,
 					Language:     doc.Language,
-					Content:      content,
+					Content:      finalContent,
 					Symbols:      symbols,
 					StartLine:    startLine,
 					EndLine:      lineNum,
 					StartChar:    charOffset,
 					EndChar:      endChar,
-					TokenCount:   tokens,
-					Hash:         ComputeChunkHash(store, doc.Path, content, startLine, lineNum),
+					TokenCount:   c.estimateTokens(finalContent),
+					Hash:         ComputeChunkHash(store, doc.Path, finalContent, startLine, lineNum),
 					IndexedAt:    time.Now(),
 					ConnectionID: doc.ConnectionID,
 				}
 				chunks = append(chunks, chunk)
+
+				// Extract overlap for next chunk
+				previousOverlap = c.extractOverlap(content)
 
 				charOffset = endChar
 				startLine = lineNum + 1
@@ -372,4 +403,42 @@ func (c *Chunker) chunkByLines(store string, doc *Document, lines []string) []*C
 func (c *Chunker) estimateTokens(text string) int {
 	runeCount := utf8.RuneCountInString(text)
 	return (runeCount + 3) / 4 // Round up
+}
+
+// extractOverlap extracts the last N tokens from content for overlap with next chunk.
+// Returns a string containing approximately Overlap tokens from the end of content.
+func (c *Chunker) extractOverlap(content string) string {
+	if c.config.Overlap == 0 || content == "" {
+		return ""
+	}
+
+	// Calculate approximate character count for desired overlap
+	// Using the same heuristic: 4 characters per token
+	overlapChars := c.config.Overlap * 4
+
+	// Don't extract more than half the content
+	if overlapChars > len(content)/2 {
+		overlapChars = len(content) / 2
+	}
+
+	// Find a good boundary (newline or space) near the overlap point
+	startPos := len(content) - overlapChars
+	if startPos <= 0 {
+		return content
+	}
+
+	// Try to find a newline boundary
+	newlinePos := strings.LastIndex(content[:startPos+overlapChars/2], "\n")
+	if newlinePos > startPos-overlapChars/4 && newlinePos < len(content) {
+		return content[newlinePos+1:]
+	}
+
+	// Fallback: find a space boundary
+	spacePos := strings.LastIndex(content[:startPos+overlapChars/2], " ")
+	if spacePos > startPos-overlapChars/4 && spacePos < len(content) {
+		return content[spacePos+1:]
+	}
+
+	// If no good boundary found, use approximate position
+	return content[startPos:]
 }

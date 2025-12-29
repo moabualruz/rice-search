@@ -85,6 +85,7 @@ type MLConfig struct {
 
 	// Per-model GPU settings
 	EmbedGPU  bool `envconfig:"RICE_EMBED_GPU" yaml:"embed_gpu"`   // GPU for embeddings
+	SparseGPU bool `envconfig:"RICE_SPARSE_GPU" yaml:"sparse_gpu"` // GPU for sparse encoding
 	RerankGPU bool `envconfig:"RICE_RERANK_GPU" yaml:"rerank_gpu"` // GPU for reranking
 	QueryGPU  bool `envconfig:"RICE_QUERY_GPU" yaml:"query_gpu"`   // GPU for query understanding
 
@@ -250,6 +251,7 @@ func setDefaults(cfg *Config) {
 		MaxSeqLength:      8192,
 		ModelsDir:         "./models",
 		EmbedGPU:          true, // GPU-first: all models use GPU by default
+		SparseGPU:         true, // GPU-first: all models use GPU by default
 		RerankGPU:         true, // GPU-first: all models use GPU by default
 		QueryGPU:          true, // GPU-first: all models use GPU by default
 		QueryModelEnabled: true, // Model enabled - better query understanding than keyword extraction

@@ -151,6 +151,12 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 	}
 	s.ml = mlSvc
 
+	// Inject metrics into ML service
+	if mlImpl, ok := s.ml.(*ml.ServiceImpl); ok {
+		mlImpl.SetMLMetrics(s.metrics)    // For ML operation metrics
+		mlImpl.SetCacheMetrics(s.metrics) // For embedding cache metrics
+	}
+
 	// Initialize store service
 	storeCfg := store.ServiceConfig{
 		StoragePath:   "./data/stores",
@@ -168,7 +174,7 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 
 	// Initialize search service (query understanding and events disabled in deprecated server)
 	searchCfg := search.DefaultConfig()
-	s.search = search.NewService(s.ml, s.qdrant, log, searchCfg, nil, nil)
+	s.search = search.NewService(s.ml, s.qdrant, log, searchCfg, nil, nil, nil)
 
 	// Initialize connection service
 	if appCfg.Connection.Enabled {

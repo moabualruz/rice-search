@@ -184,9 +184,10 @@ func (h *HealthHandler) HandleReady(w http.ResponseWriter, r *http.Request) {
 // HandleVersion handles GET /v1/version.
 func (h *HealthHandler) HandleVersion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
-		"version": h.version,
-		"uptime":  time.Since(h.startTime).Round(time.Second).String(),
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"version":    h.version,
+		"uptime":     time.Since(h.startTime).Round(time.Second).String(),
+		"go_version": "go1.21+",
 	})
 }
 

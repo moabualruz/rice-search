@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ricesearch/rice-search/internal/bus"
+	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/ml"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/qdrant"
@@ -26,6 +27,7 @@ type Service struct {
 	log         *logger.Logger
 	cfg         Config
 	postrank    *postrank.Pipeline
+	metrics     *metrics.Metrics
 	mu          sync.RWMutex
 	monitorSvc  MonitoringService
 	monitorOnce sync.Once
@@ -85,8 +87,8 @@ func DefaultConfig() Config {
 }
 
 // NewService creates a new search service.
-// querySvc and eventBus are optional - if nil, features are disabled.
-func NewService(mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, cfg Config, querySvc *query.Service, eventBus bus.Bus) *Service {
+// querySvc, eventBus, and metrics are optional - if nil, features are disabled.
+func NewService(mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, cfg Config, querySvc *query.Service, eventBus bus.Bus, metrics *metrics.Metrics) *Service {
 	if cfg.DefaultTopK == 0 {
 		cfg = DefaultConfig()
 	}
@@ -110,6 +112,7 @@ func NewService(mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, cfg Con
 		log:      log,
 		cfg:      cfg,
 		postrank: postrankPipeline,
+		metrics:  metrics,
 	}
 }
 
@@ -385,6 +388,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 
 	var results []Result
 	var retrievalTime time.Duration
+	var sparseTime, denseTime, fusionTime time.Duration
 
 	if fusionCfg.IsBalanced() {
 		// Use Qdrant's native RRF (faster, equal weights)
@@ -394,6 +398,13 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 			return nil, fmt.Errorf("search failed: %w", err)
 		}
 		retrievalTime = time.Since(retrievalStart)
+
+		// For native RRF, we can't separate sparse/dense/fusion times
+		// Record retrieval time as fusion since it combines both
+		fusionTime = retrievalTime
+		if s.metrics != nil {
+			s.metrics.RecordSearchStage(req.Store, "fusion", fusionTime.Milliseconds())
+		}
 
 		// Convert to results (no rank/score breakdown)
 		results = make([]Result, len(qdrantResults))
@@ -418,23 +429,37 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		)
 	} else {
 		// Use manual RRF fusion with custom weights
-		retrievalStart := time.Now()
 
 		// Execute sparse and dense searches separately
+		sparseStart := time.Now()
 		sparseResults, err := s.qdrant.SparseSearch(ctx, req.Store, searchReq)
 		if err != nil {
 			return nil, fmt.Errorf("sparse search failed: %w", err)
 		}
+		sparseTime = time.Since(sparseStart)
+		if s.metrics != nil {
+			s.metrics.RecordSearchStage(req.Store, "sparse", sparseTime.Milliseconds())
+		}
 
+		denseStart := time.Now()
 		denseResults, err := s.qdrant.DenseSearch(ctx, req.Store, searchReq)
 		if err != nil {
 			return nil, fmt.Errorf("dense search failed: %w", err)
 		}
+		denseTime = time.Since(denseStart)
+		if s.metrics != nil {
+			s.metrics.RecordSearchStage(req.Store, "dense", denseTime.Milliseconds())
+		}
 
-		retrievalTime = time.Since(retrievalStart)
+		retrievalTime = sparseTime + denseTime
 
 		// Fuse results with custom weights
+		fusionStart := time.Now()
 		fusedResults := fusion.Fuse(sparseResults, denseResults, fusionCfg)
+		fusionTime = time.Since(fusionStart)
+		if s.metrics != nil {
+			s.metrics.RecordSearchStage(req.Store, "fusion", fusionTime.Milliseconds())
+		}
 
 		// Convert to Result type with rank/score breakdown
 		results = make([]Result, len(fusedResults))
@@ -495,9 +520,15 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 			}
 			results = rerankedResults
 
-			metadata.RerankTimeMs = time.Since(rerankStart).Milliseconds()
+			rerankTime := time.Since(rerankStart)
+			metadata.RerankTimeMs = rerankTime.Milliseconds()
 			metadata.CandidatesReranked = len(documents)
 			metadata.RerankingApplied = true
+
+			// Record reranking stage metric
+			if s.metrics != nil {
+				s.metrics.RecordSearchStage(req.Store, "rerank", rerankTime.Milliseconds())
+			}
 		}
 	}
 

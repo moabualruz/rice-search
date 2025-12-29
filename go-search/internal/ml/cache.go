@@ -6,15 +6,25 @@ import (
 	"github.com/ricesearch/rice-search/internal/pkg/hash"
 )
 
+// CacheMetrics is the interface for recording cache metrics.
+// This allows the cache to be decoupled from the metrics package.
+type CacheMetrics interface {
+	RecordCacheHit(cacheType string)
+	RecordCacheMiss(cacheType string)
+	UpdateCacheSize(cacheType string, size int)
+}
+
 // EmbeddingCache caches embeddings by text hash.
 type EmbeddingCache struct {
 	mu      sync.RWMutex
 	cache   map[string][]float32
 	maxSize int
 	order   []string // LRU order
+	metrics CacheMetrics
 }
 
 // NewEmbeddingCache creates a new embedding cache.
+// metrics is optional and can be nil.
 func NewEmbeddingCache(maxSize int) *EmbeddingCache {
 	if maxSize <= 0 {
 		maxSize = 10000
@@ -24,7 +34,16 @@ func NewEmbeddingCache(maxSize int) *EmbeddingCache {
 		cache:   make(map[string][]float32),
 		maxSize: maxSize,
 		order:   make([]string, 0, maxSize),
+		metrics: nil,
 	}
+}
+
+// SetMetrics sets the metrics recorder for this cache.
+// This allows metrics to be injected after creation.
+func (c *EmbeddingCache) SetMetrics(metrics CacheMetrics) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.metrics = metrics
 }
 
 // Get retrieves an embedding from cache.
@@ -36,6 +55,11 @@ func (c *EmbeddingCache) Get(text string) ([]float32, bool) {
 	c.mu.RUnlock()
 
 	if ok {
+		// Record cache hit
+		if c.metrics != nil {
+			c.metrics.RecordCacheHit("embed")
+		}
+
 		// Move to end of LRU (most recently used)
 		c.mu.Lock()
 		c.moveToEnd(key)
@@ -45,6 +69,11 @@ func (c *EmbeddingCache) Get(text string) ([]float32, bool) {
 		embCopy := make([]float32, len(emb))
 		copy(embCopy, emb)
 		return embCopy, true
+	}
+
+	// Record cache miss
+	if c.metrics != nil {
+		c.metrics.RecordCacheMiss("embed")
 	}
 
 	return nil, false
@@ -78,6 +107,11 @@ func (c *EmbeddingCache) Set(text string, embedding []float32) {
 	// Add new entry
 	c.cache[key] = embCopy
 	c.order = append(c.order, key)
+
+	// Update cache size metric
+	if c.metrics != nil {
+		c.metrics.UpdateCacheSize("embed", len(c.cache))
+	}
 }
 
 // moveToEnd moves a key to the end of the LRU order (must hold lock).
@@ -104,6 +138,11 @@ func (c *EmbeddingCache) Clear() {
 	defer c.mu.Unlock()
 	c.cache = make(map[string][]float32)
 	c.order = make([]string, 0, c.maxSize)
+
+	// Update cache size metric
+	if c.metrics != nil {
+		c.metrics.UpdateCacheSize("embed", 0)
+	}
 }
 
 // Stats returns cache statistics.

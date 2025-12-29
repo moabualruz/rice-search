@@ -4,6 +4,7 @@ package ml
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/ricesearch/rice-search/internal/config"
 	"github.com/ricesearch/rice-search/internal/onnx"
@@ -59,6 +60,13 @@ type HealthStatus struct {
 	Error          string          `json:"error,omitempty"`
 }
 
+// MLMetrics is the interface for ML-specific metrics recording.
+type MLMetrics interface {
+	RecordEmbed(batchSize int, latencyMs int64)
+	RecordRerank(candidateCount int, latencyMs int64)
+	RecordSparseEncode(batchSize int, latencyMs int64)
+}
+
 // ServiceImpl implements the ML Service.
 type ServiceImpl struct {
 	mu       sync.RWMutex
@@ -69,6 +77,7 @@ type ServiceImpl struct {
 	sparse   *SparseEncoder
 	reranker *Reranker
 	cache    *EmbeddingCache
+	metrics  MLMetrics
 }
 
 // NewService creates a new ML service.
@@ -140,6 +149,8 @@ func (s *ServiceImpl) LoadModels() error {
 
 // Embed generates dense embeddings.
 func (s *ServiceImpl) Embed(ctx context.Context, texts []string) ([][]float32, error) {
+	start := time.Now()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -175,11 +186,19 @@ func (s *ServiceImpl) Embed(ctx context.Context, texts []string) ([][]float32, e
 		}
 	}
 
+	// Record metrics (only if we had uncached texts to embed)
+	if s.metrics != nil && len(uncachedTexts) > 0 {
+		latencyMs := time.Since(start).Milliseconds()
+		s.metrics.RecordEmbed(len(uncachedTexts), latencyMs)
+	}
+
 	return results, nil
 }
 
 // SparseEncode generates sparse vectors.
 func (s *ServiceImpl) SparseEncode(ctx context.Context, texts []string) ([]SparseVector, error) {
+	start := time.Now()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -187,11 +206,21 @@ func (s *ServiceImpl) SparseEncode(ctx context.Context, texts []string) ([]Spars
 		return nil, errors.New(errors.CodeMLError, "sparse encoder not loaded")
 	}
 
-	return s.sparse.Encode(ctx, texts)
+	result, err := s.sparse.Encode(ctx, texts)
+
+	// Record metrics
+	if s.metrics != nil && err == nil {
+		latencyMs := time.Since(start).Milliseconds()
+		s.metrics.RecordSparseEncode(len(texts), latencyMs)
+	}
+
+	return result, err
 }
 
 // Rerank reranks documents.
 func (s *ServiceImpl) Rerank(ctx context.Context, query string, documents []string, topK int) ([]RankedResult, error) {
+	start := time.Now()
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -199,7 +228,15 @@ func (s *ServiceImpl) Rerank(ctx context.Context, query string, documents []stri
 		return nil, errors.New(errors.CodeMLError, "reranker not loaded")
 	}
 
-	return s.reranker.Rerank(ctx, query, documents, topK)
+	result, err := s.reranker.Rerank(ctx, query, documents, topK)
+
+	// Record metrics
+	if s.metrics != nil && err == nil {
+		latencyMs := time.Since(start).Milliseconds()
+		s.metrics.RecordRerank(len(documents), latencyMs)
+	}
+
+	return result, err
 }
 
 // Health returns service health.
@@ -294,7 +331,17 @@ func (s *ServiceImpl) ReloadModelsWithConfig(newCfg config.MLConfig) error {
 	}
 
 	// Clear embedding cache (models changed, old embeddings may be incompatible)
+	// Preserve metrics from old cache
+	var oldMetrics CacheMetrics
+	if s.cache != nil {
+		s.cache.mu.RLock()
+		oldMetrics = s.cache.metrics
+		s.cache.mu.RUnlock()
+	}
 	s.cache = NewEmbeddingCache(10000)
+	if oldMetrics != nil {
+		s.cache.SetMetrics(oldMetrics)
+	}
 
 	// Reload models with new config
 	var lastErr error
@@ -328,6 +375,22 @@ func (s *ServiceImpl) ReloadModelsWithConfig(newCfg config.MLConfig) error {
 
 	s.log.Info("ML model reload complete")
 	return lastErr
+}
+
+// SetMLMetrics sets the metrics recorder for ML operations.
+// This allows metrics to be injected after service creation.
+func (s *ServiceImpl) SetMLMetrics(metrics MLMetrics) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.metrics = metrics
+}
+
+// SetCacheMetrics sets the metrics recorder for the embedding cache.
+// This allows cache metrics to be injected after service creation.
+func (s *ServiceImpl) SetCacheMetrics(metrics CacheMetrics) {
+	if s.cache != nil {
+		s.cache.SetMetrics(metrics)
+	}
 }
 
 // Close releases resources.

@@ -25,8 +25,21 @@ func NewSparseEncoder(runtime *onnx.Runtime, cfg config.MLConfig, log *logger.Lo
 	modelDir := filepath.Join(cfg.ModelsDir, cfg.SparseModel)
 	modelPath := filepath.Join(modelDir, "model.onnx")
 
-	// Load session
-	session, err := runtime.LoadSession("sparse", modelPath)
+	// Determine device for sparse encoder based on config
+	device := onnx.DeviceCPU
+	if cfg.SparseGPU && (cfg.Device == "cuda" || cfg.Device == "tensorrt") {
+		if cfg.Device == "tensorrt" {
+			device = onnx.DeviceTensorRT
+		} else {
+			device = onnx.DeviceCUDA
+		}
+		log.Info("Loading sparse encoder on GPU", "device", device)
+	} else {
+		log.Info("Loading sparse encoder on CPU")
+	}
+
+	// Load session with device-specific setting
+	session, err := runtime.LoadSessionWithDevice("sparse", modelPath, device)
 	if err != nil {
 		return nil, errors.Wrap(errors.CodeMLError, "failed to load sparse model", err)
 	}

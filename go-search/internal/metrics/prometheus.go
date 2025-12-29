@@ -16,6 +16,7 @@ func (m *Metrics) PrometheusFormat() string {
 	writeHistogram(&sb, m.SearchLatency)
 	writeHistogram(&sb, m.SearchResults)
 	writeCounterVec(&sb, m.SearchErrors)
+	writeHistogramVec(&sb, m.SearchStageDuration)
 
 	// Index metrics
 	writeCounter(&sb, m.IndexedDocuments)
@@ -48,6 +49,11 @@ func (m *Metrics) PrometheusFormat() string {
 	writeGauge(&sb, m.GoroutineCount)
 	writeGauge(&sb, m.MemoryUsage)
 	writeCounter(&sb, m.Uptime)
+
+	// Bus metrics
+	writeCounterVec(&sb, m.BusEventsPublished)
+	writeHistogramVec(&sb, m.BusEventLatency)
+	writeCounterVec(&sb, m.BusErrors)
 
 	return sb.String()
 }
@@ -104,32 +110,50 @@ func writeHistogram(sb *strings.Builder, h *Histogram) {
 
 	buckets := h.Buckets()
 	counts := h.BucketCounts()
+	labels := h.Labels()
 
 	// Write bucket counts
 	for i, bucket := range buckets {
 		sb.WriteString(h.Name())
-		sb.WriteString("_bucket{le=\"")
-		sb.WriteString(fmt.Sprintf("%.1f", bucket))
-		sb.WriteString("\"} ")
+		sb.WriteString("_bucket")
+		// Merge labels with le bucket label
+		bucketLabels := make(map[string]string, len(labels)+1)
+		for k, v := range labels {
+			bucketLabels[k] = v
+		}
+		bucketLabels["le"] = fmt.Sprintf("%.3f", bucket)
+		writeLabels(sb, bucketLabels)
+		sb.WriteString(" ")
 		sb.WriteString(fmt.Sprintf("%d", counts[i]))
 		sb.WriteString("\n")
 	}
 
 	// Write +Inf bucket
 	sb.WriteString(h.Name())
-	sb.WriteString("_bucket{le=\"+Inf\"} ")
+	sb.WriteString("_bucket")
+	infLabels := make(map[string]string, len(labels)+1)
+	for k, v := range labels {
+		infLabels[k] = v
+	}
+	infLabels["le"] = "+Inf"
+	writeLabels(sb, infLabels)
+	sb.WriteString(" ")
 	sb.WriteString(fmt.Sprintf("%d", counts[len(counts)-1]))
 	sb.WriteString("\n")
 
 	// Write sum
 	sb.WriteString(h.Name())
-	sb.WriteString("_sum ")
-	sb.WriteString(fmt.Sprintf("%.2f", h.Sum()))
+	sb.WriteString("_sum")
+	writeLabels(sb, labels)
+	sb.WriteString(" ")
+	sb.WriteString(fmt.Sprintf("%.6f", h.Sum()))
 	sb.WriteString("\n")
 
 	// Write count
 	sb.WriteString(h.Name())
-	sb.WriteString("_count ")
+	sb.WriteString("_count")
+	writeLabels(sb, labels)
+	sb.WriteString(" ")
 	sb.WriteString(fmt.Sprintf("%d", h.Count()))
 	sb.WriteString("\n")
 }
@@ -182,6 +206,75 @@ func writeGaugeVec(sb *strings.Builder, gv *GaugeVec) {
 		writeLabels(sb, g.Labels())
 		sb.WriteString(" ")
 		sb.WriteString(fmt.Sprintf("%.0f", g.Value()))
+		sb.WriteString("\n")
+	}
+}
+
+// writeHistogramVec writes a histogram vector in Prometheus format.
+func writeHistogramVec(sb *strings.Builder, hv *HistogramVec) {
+	histograms := hv.GetAll()
+	if len(histograms) == 0 {
+		return
+	}
+
+	sb.WriteString("# HELP ")
+	sb.WriteString(hv.Name())
+	sb.WriteString(" ")
+	sb.WriteString(hv.Help())
+	sb.WriteString("\n")
+
+	sb.WriteString("# TYPE ")
+	sb.WriteString(hv.Name())
+	sb.WriteString(" histogram\n")
+
+	for _, h := range histograms {
+		buckets := h.Buckets()
+		counts := h.BucketCounts()
+		labels := h.Labels()
+
+		// Write bucket counts
+		for i, bucket := range buckets {
+			sb.WriteString(h.Name())
+			sb.WriteString("_bucket")
+			// Merge labels with le bucket label
+			bucketLabels := make(map[string]string, len(labels)+1)
+			for k, v := range labels {
+				bucketLabels[k] = v
+			}
+			bucketLabels["le"] = fmt.Sprintf("%.3f", bucket)
+			writeLabels(sb, bucketLabels)
+			sb.WriteString(" ")
+			sb.WriteString(fmt.Sprintf("%d", counts[i]))
+			sb.WriteString("\n")
+		}
+
+		// Write +Inf bucket
+		sb.WriteString(h.Name())
+		sb.WriteString("_bucket")
+		infLabels := make(map[string]string, len(labels)+1)
+		for k, v := range labels {
+			infLabels[k] = v
+		}
+		infLabels["le"] = "+Inf"
+		writeLabels(sb, infLabels)
+		sb.WriteString(" ")
+		sb.WriteString(fmt.Sprintf("%d", counts[len(counts)-1]))
+		sb.WriteString("\n")
+
+		// Write sum
+		sb.WriteString(h.Name())
+		sb.WriteString("_sum")
+		writeLabels(sb, labels)
+		sb.WriteString(" ")
+		sb.WriteString(fmt.Sprintf("%.6f", h.Sum()))
+		sb.WriteString("\n")
+
+		// Write count
+		sb.WriteString(h.Name())
+		sb.WriteString("_count")
+		writeLabels(sb, labels)
+		sb.WriteString(" ")
+		sb.WriteString(fmt.Sprintf("%d", h.Count()))
 		sb.WriteString("\n")
 	}
 }

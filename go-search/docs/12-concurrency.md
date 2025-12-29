@@ -204,7 +204,10 @@ if errors.Is(err, context.DeadlineExceeded) {
 
 ### Circuit Breaker
 
+> ⚠️ **NOT IMPLEMENTED**: Circuit breaker pattern is documented for future implementation. Currently, failed operations are retried without circuit breaking.
+
 ```go
+// DESIGN - Not yet implemented
 type CircuitBreaker struct {
     state            State // closed, open, half-open
     failures         int

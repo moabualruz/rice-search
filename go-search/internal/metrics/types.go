@@ -149,6 +149,7 @@ type Histogram struct {
 	counts  []int64
 	sum     int64 // Using int64 for atomic ops
 	count   int64
+	labels  map[string]string
 	mu      sync.RWMutex
 }
 
@@ -229,6 +230,20 @@ func (h *Histogram) Name() string {
 // Help returns the metric help text.
 func (h *Histogram) Help() string {
 	return h.help
+}
+
+// Labels returns the metric labels.
+func (h *Histogram) Labels() map[string]string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	if h.labels == nil {
+		return make(map[string]string)
+	}
+	result := make(map[string]string, len(h.labels))
+	for k, v := range h.labels {
+		result[k] = v
+	}
+	return result
 }
 
 // GaugeVec represents a gauge with labels.
@@ -385,6 +400,91 @@ func (cv *CounterVec) Name() string {
 // Help returns the metric help text.
 func (cv *CounterVec) Help() string {
 	return cv.help
+}
+
+// HistogramVec represents a histogram with labels.
+type HistogramVec struct {
+	name       string
+	help       string
+	labelNames []string
+	buckets    []float64
+	histograms map[string]*Histogram
+	mu         sync.RWMutex
+}
+
+// NewHistogramVec creates a new histogram vector.
+func NewHistogramVec(name, help string, labelNames []string, buckets []float64) *HistogramVec {
+	return &HistogramVec{
+		name:       name,
+		help:       help,
+		labelNames: labelNames,
+		buckets:    buckets,
+		histograms: make(map[string]*Histogram),
+	}
+}
+
+// WithLabels returns a histogram with the given label values.
+func (hv *HistogramVec) WithLabels(labelValues ...string) *Histogram {
+	if len(labelValues) != len(hv.labelNames) {
+		panic(fmt.Sprintf("expected %d label values, got %d", len(hv.labelNames), len(labelValues)))
+	}
+
+	// Create label map
+	labels := make(map[string]string, len(hv.labelNames))
+	for i, name := range hv.labelNames {
+		labels[name] = labelValues[i]
+	}
+
+	// Create stable key from sorted labels
+	key := labelsToKey(labels)
+
+	hv.mu.RLock()
+	histogram, exists := hv.histograms[key]
+	hv.mu.RUnlock()
+
+	if exists {
+		return histogram
+	}
+
+	// Create new histogram
+	hv.mu.Lock()
+	defer hv.mu.Unlock()
+
+	// Double-check after acquiring write lock
+	if histogram, exists := hv.histograms[key]; exists {
+		return histogram
+	}
+
+	histogram = NewHistogram(hv.name, hv.help, hv.buckets)
+	// Store labels for Prometheus export
+	histogram.mu.Lock()
+	histogram.labels = labels
+	histogram.mu.Unlock()
+
+	hv.histograms[key] = histogram
+	return histogram
+}
+
+// GetAll returns all histograms in the vector.
+func (hv *HistogramVec) GetAll() []*Histogram {
+	hv.mu.RLock()
+	defer hv.mu.RUnlock()
+
+	result := make([]*Histogram, 0, len(hv.histograms))
+	for _, h := range hv.histograms {
+		result = append(result, h)
+	}
+	return result
+}
+
+// Name returns the metric name.
+func (hv *HistogramVec) Name() string {
+	return hv.name
+}
+
+// Help returns the metric help text.
+func (hv *HistogramVec) Help() string {
+	return hv.help
 }
 
 // labelsToKey creates a stable key from label map.

@@ -1,5 +1,19 @@
 # Security
 
+> ⚠️ **IMPLEMENTATION STATUS**: The security features documented below are **NOT YET IMPLEMENTED**. Current deployment is suitable for development and internal/trusted networks only.
+>
+> | Feature | Status |
+> |---------|--------|
+> | Authentication (API Key, JWT) | ❌ Not implemented |
+> | Authorization (store-level, role-based) | ❌ Not implemented |
+> | Rate Limiting | ❌ Not implemented |
+> | TLS/HTTPS | ❌ Not implemented (use reverse proxy) |
+> | Security Headers | ❌ Not implemented |
+> | Audit Logging | ❌ Not implemented |
+> | Input Validation | ✅ Basic validation implemented |
+>
+> For production deployments, use a reverse proxy (nginx, Traefik) for TLS and authentication.
+
 ## Overview
 
 Security features for authentication, authorization, and input validation.

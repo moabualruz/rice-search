@@ -30,21 +30,25 @@ Examples:
 
 ### HTTP Metrics
 
+**Status**: Basic HTTP metrics are **planned**. Currently implementing custom metrics for search/index/ML.
+
+**Planned (not yet implemented)**:
+
 ```prometheus
-# Request counter
+# Request counter (planned)
 rice_http_requests_total{method="POST", path="/v1/search", status="200"} 1234
 
-# Latency histogram
+# Latency histogram (planned)
 rice_http_request_duration_seconds_bucket{method="POST", path="/v1/search", le="0.1"} 500
 rice_http_request_duration_seconds_bucket{method="POST", path="/v1/search", le="0.5"} 950
 rice_http_request_duration_seconds_bucket{method="POST", path="/v1/search", le="1.0"} 1000
 rice_http_request_duration_seconds_sum{method="POST", path="/v1/search"} 125.5
 rice_http_request_duration_seconds_count{method="POST", path="/v1/search"} 1000
 
-# In-flight requests
+# In-flight requests (planned)
 rice_http_requests_in_flight{method="POST", path="/v1/search"} 5
 
-# Request size
+# Request size (planned)
 rice_http_request_size_bytes_bucket{path="/v1/index", le="1024"} 100
 rice_http_request_size_bytes_bucket{path="/v1/index", le="10240"} 500
 ```
@@ -53,51 +57,73 @@ rice_http_request_size_bytes_bucket{path="/v1/index", le="10240"} 500
 
 ### Search Metrics
 
+**Implemented**:
+
 ```prometheus
-# Search requests by store
-rice_search_requests_total{store="default", reranking="true"} 5000
+# Search requests (implemented)
+rice_search_requests_total 5000
 
-# Search latency by stage
-rice_search_stage_duration_seconds{store="default", stage="sparse"} 
-rice_search_stage_duration_seconds{store="default", stage="dense"}
-rice_search_stage_duration_seconds{store="default", stage="fusion"}
-rice_search_stage_duration_seconds{store="default", stage="rerank"}
+# Search latency histogram (implemented)
+rice_search_latency_ms_bucket{le="10"} 1000
+rice_search_latency_ms_bucket{le="50"} 4000
+rice_search_latency_ms_sum 50000
+rice_search_latency_ms_count 5000
 
-# Results count
-rice_search_results_total{store="default"} 125000
-rice_search_results_per_query_bucket{store="default", le="10"} 2000
-rice_search_results_per_query_bucket{store="default", le="20"} 4500
+# Results count histogram (implemented)
+rice_search_results_bucket{le="10"} 2000
+rice_search_results_bucket{le="20"} 4500
+
+# Search errors (implemented)
+rice_search_errors_total{error_type="generic"} 25
+```
+
+**Planned (not yet implemented)**:
+
+```prometheus
+# Per-store breakdowns (planned)
+rice_search_requests_by_store{store="default"} 3000
+rice_search_requests_by_store{store="custom"} 2000
+
+# Search stage durations (planned)
+rice_search_stage_duration_ms{stage="embed"} 15
+rice_search_stage_duration_ms{stage="retrieval"} 30
+rice_search_stage_duration_ms{stage="rerank"} 80
 ```
 
 ---
 
 ### ML Metrics
 
+**Implemented**:
+
 ```prometheus
-# Embedding requests
-rice_ml_embed_requests_total 10000
-rice_ml_embed_texts_total 50000
-rice_ml_embed_latency_seconds_bucket{le="0.1"} 8000
+# Embedding requests (implemented)
+rice_embed_requests_total 10000
+rice_embed_latency_ms_bucket{le="50"} 8000
+rice_embed_batch_size_bucket{le="32"} 8000
 
-# Sparse encoding
-rice_ml_sparse_requests_total 10000
-rice_ml_sparse_latency_seconds_bucket{le="0.05"} 9000
+# Sparse encoding (implemented)
+rice_sparse_encode_requests_total 10000
+rice_sparse_encode_latency_ms_bucket{le="25"} 9000
 
-# Reranking
-rice_ml_rerank_requests_total 5000
-rice_ml_rerank_documents_total 150000
-rice_ml_rerank_latency_seconds_bucket{le="0.1"} 4500
+# Reranking (implemented)
+rice_rerank_requests_total 5000
+rice_rerank_latency_ms_bucket{le="100"} 4500
 
-# Batch sizes
-rice_ml_embed_batch_size_bucket{le="8"} 1000
-rice_ml_embed_batch_size_bucket{le="32"} 8000
+# Query understanding (implemented)
+rice_query_understand_requests_total 5000
+rice_query_understand_latency_ms_bucket{le="50"} 4800
+```
 
-# Cache
+**Planned (not yet implemented)**:
+
+```prometheus
+# ML cache metrics (planned)
 rice_ml_cache_hits_total{type="embed"} 25000
 rice_ml_cache_misses_total{type="embed"} 10000
 rice_ml_cache_size{type="embed"} 50000
 
-# GPU (if available)
+# GPU metrics (planned)
 rice_ml_gpu_memory_used_bytes 2147483648
 rice_ml_gpu_utilization_percent 75
 ```
@@ -125,20 +151,26 @@ rice_index_errors_total{store="default", reason="too_large"} 5
 
 ### Event Bus Metrics
 
+**Implemented**:
+
 ```prometheus
-# Events published
+# Events published (implemented)
 rice_bus_events_published_total{topic="ml.embed.request"} 10000
-rice_bus_events_published_total{topic="search.query.request"} 5000
+rice_bus_events_published_total{topic="search.request"} 5000
 
-# Event latency (publish to handle)
-rice_bus_event_latency_seconds{topic="ml.embed.request"} 
+# Event latency (implemented)
+rice_bus_event_latency_seconds{topic="ml.embed.request"} 0.015
 
-# Buffer utilization
+# Errors (implemented)
+rice_bus_errors_total{topic="ml.embed.request"} 5
+```
+
+**Planned (not yet implemented)**:
+
+```prometheus
+# Buffer utilization (planned)
 rice_bus_buffer_size{topic="ml.embed.request"} 1000
 rice_bus_buffer_used{topic="ml.embed.request"} 50
-
-# Errors
-rice_bus_errors_total{topic="ml.embed.request", error="timeout"} 5
 ```
 
 ---

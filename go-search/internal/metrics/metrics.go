@@ -9,10 +9,11 @@ import (
 // Metrics holds all application metrics.
 type Metrics struct {
 	// Search metrics
-	SearchRequests *Counter
-	SearchLatency  *Histogram
-	SearchResults  *Histogram
-	SearchErrors   *CounterVec // labels: error_type
+	SearchRequests      *Counter
+	SearchLatency       *Histogram
+	SearchResults       *Histogram
+	SearchErrors        *CounterVec   // labels: error_type
+	SearchStageDuration *HistogramVec // labels: store, stage
 
 	// Index metrics
 	IndexedDocuments *Counter
@@ -45,6 +46,22 @@ type Metrics struct {
 	GoroutineCount *Gauge
 	MemoryUsage    *Gauge // in bytes
 	Uptime         *Counter
+
+	// Cache metrics
+	CacheHits   *CounterVec // labels: type (embed)
+	CacheMisses *CounterVec // labels: type (embed)
+	CacheSize   *GaugeVec   // labels: type (embed)
+
+	// Bus metrics
+	BusEventsPublished *CounterVec   // labels: topic
+	BusEventLatency    *HistogramVec // labels: topic
+	BusErrors          *CounterVec   // labels: topic
+
+	// HTTP metrics
+	HTTPRequests         *CounterVec   // labels: method, path, status
+	HTTPDuration         *HistogramVec // labels: method, path
+	HTTPRequestsInFlight *Gauge
+	HTTPRequestSize      *HistogramVec // labels: method, path
 
 	// Time-series data for charts
 	TimeSeries *TimeSeriesData
@@ -115,6 +132,12 @@ func NewWithConfig(persistence, redisURL string) *Metrics {
 			"rice_search_errors_total",
 			"Total number of search errors",
 			[]string{"error_type"},
+		),
+		SearchStageDuration: NewHistogramVec(
+			"rice_search_stage_duration_ms",
+			"Search stage duration in milliseconds",
+			[]string{"store", "stage"},
+			[]float64{1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500},
 		),
 
 		// Index metrics
@@ -237,6 +260,65 @@ func NewWithConfig(persistence, redisURL string) *Metrics {
 			nil,
 		),
 
+		// Cache metrics
+		CacheHits: NewCounterVec(
+			"rice_ml_cache_hits_total",
+			"Total number of ML cache hits",
+			[]string{"type"},
+		),
+		CacheMisses: NewCounterVec(
+			"rice_ml_cache_misses_total",
+			"Total number of ML cache misses",
+			[]string{"type"},
+		),
+		CacheSize: NewGaugeVec(
+			"rice_ml_cache_size",
+			"Current ML cache size",
+			[]string{"type"},
+		),
+
+		// Bus metrics
+		BusEventsPublished: NewCounterVec(
+			"rice_bus_events_published_total",
+			"Total number of events published to the bus",
+			[]string{"topic"},
+		),
+		BusEventLatency: NewHistogramVec(
+			"rice_bus_event_latency_seconds",
+			"Event bus latency in seconds",
+			[]string{"topic"},
+			[]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0},
+		),
+		BusErrors: NewCounterVec(
+			"rice_bus_errors_total",
+			"Total number of event bus errors",
+			[]string{"topic"},
+		),
+
+		// HTTP metrics
+		HTTPRequests: NewCounterVec(
+			"rice_http_requests_total",
+			"Total number of HTTP requests",
+			[]string{"method", "path", "status"},
+		),
+		HTTPDuration: NewHistogramVec(
+			"rice_http_request_duration_seconds",
+			"HTTP request duration in seconds",
+			[]string{"method", "path"},
+			[]float64{0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0},
+		),
+		HTTPRequestsInFlight: NewGauge(
+			"rice_http_requests_in_flight",
+			"Number of HTTP requests currently being processed",
+			nil,
+		),
+		HTTPRequestSize: NewHistogramVec(
+			"rice_http_request_size_bytes",
+			"HTTP request size in bytes",
+			[]string{"method", "path"},
+			[]float64{100, 1000, 10000, 100000, 1000000, 10000000},
+		),
+
 		// Time-series data for charts
 		TimeSeries: timeSeries,
 
@@ -285,6 +367,12 @@ func (m *Metrics) RecordSearch(latencyMs int64, resultCount int, err error) {
 	if err != nil {
 		m.SearchErrors.WithLabels(errorType(err)).Inc()
 	}
+}
+
+// RecordSearchStage records the duration of a specific search stage.
+// stage should be one of: "sparse", "dense", "fusion", "rerank", "postrank"
+func (m *Metrics) RecordSearchStage(store, stage string, latencyMs int64) {
+	m.SearchStageDuration.WithLabels(store, stage).Observe(float64(latencyMs))
 }
 
 // RecordIndex records indexing metrics.
@@ -353,6 +441,52 @@ func (m *Metrics) DecrementConnection() {
 // RecordConnectionError records a connection error.
 func (m *Metrics) RecordConnectionError(err error) {
 	m.ConnectionErrors.WithLabels(errorType(err)).Inc()
+}
+
+// RecordBusPublish records event bus publish metrics.
+func (m *Metrics) RecordBusPublish(topic string, latencyMs int64, err error) {
+	m.BusEventsPublished.WithLabels(topic).Inc()
+
+	// Convert milliseconds to seconds for Prometheus convention
+	latencySeconds := float64(latencyMs) / 1000.0
+	m.BusEventLatency.WithLabels(topic).Observe(latencySeconds)
+
+	if err != nil {
+		m.BusErrors.WithLabels(topic).Inc()
+	}
+}
+
+// RecordCacheHit records a cache hit.
+func (m *Metrics) RecordCacheHit(cacheType string) {
+	m.CacheHits.WithLabels(cacheType).Inc()
+}
+
+// RecordCacheMiss records a cache miss.
+func (m *Metrics) RecordCacheMiss(cacheType string) {
+	m.CacheMisses.WithLabels(cacheType).Inc()
+}
+
+// UpdateCacheSize updates the cache size.
+func (m *Metrics) UpdateCacheSize(cacheType string, size int) {
+	m.CacheSize.WithLabels(cacheType).Set(float64(size))
+}
+
+// RecordHTTP records HTTP request metrics.
+// This is called by the HTTP middleware.
+func (m *Metrics) RecordHTTP(method, path string, status int, durationSeconds float64, sizeBytes int64) {
+	// Normalize path to reduce cardinality
+	normalizedPath := normalizePath(path)
+
+	// Record request count with labels
+	m.HTTPRequests.WithLabels(method, normalizedPath, statusCode(status)).Inc()
+
+	// Record duration
+	m.HTTPDuration.WithLabels(method, normalizedPath).Observe(durationSeconds)
+
+	// Record request size
+	if sizeBytes > 0 {
+		m.HTTPRequestSize.WithLabels(method, normalizedPath).Observe(float64(sizeBytes))
+	}
 }
 
 // errorType extracts error type from error.
