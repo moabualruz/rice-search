@@ -13,6 +13,8 @@ import (
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/qdrant"
 	"github.com/ricesearch/rice-search/internal/query"
+	"github.com/ricesearch/rice-search/internal/search/fusion"
+	"github.com/ricesearch/rice-search/internal/search/postrank"
 )
 
 // Service provides search capabilities.
@@ -23,6 +25,7 @@ type Service struct {
 	bus         bus.Bus
 	log         *logger.Logger
 	cfg         Config
+	postrank    *postrank.Pipeline
 	mu          sync.RWMutex
 	monitorSvc  MonitoringService
 	monitorOnce sync.Once
@@ -53,6 +56,14 @@ type Config struct {
 
 	// DenseWeight is the weight for dense (semantic) results in fusion.
 	DenseWeight float32
+
+	// Post-ranking configuration
+	EnableDedup      bool
+	DedupThreshold   float32
+	EnableDiversity  bool
+	DiversityLambda  float32
+	GroupByFile      bool
+	MaxChunksPerFile int
 }
 
 // DefaultConfig returns sensible search defaults.
@@ -64,6 +75,12 @@ func DefaultConfig() Config {
 		RerankTopK:         50,
 		SparseWeight:       0.5,
 		DenseWeight:        0.5,
+		EnableDedup:        true,
+		DedupThreshold:     0.85,
+		EnableDiversity:    true,
+		DiversityLambda:    0.7,
+		GroupByFile:        false,
+		MaxChunksPerFile:   3,
 	}
 }
 
@@ -73,6 +90,18 @@ func NewService(mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, cfg Con
 	if cfg.DefaultTopK == 0 {
 		cfg = DefaultConfig()
 	}
+
+	// Create post-ranking pipeline
+	postrankCfg := postrank.Config{
+		EnableDedup:      cfg.EnableDedup,
+		DedupThreshold:   cfg.DedupThreshold,
+		EnableDiversity:  cfg.EnableDiversity,
+		DiversityLambda:  cfg.DiversityLambda,
+		GroupByFile:      cfg.GroupByFile,
+		MaxChunksPerFile: cfg.MaxChunksPerFile,
+	}
+	postrankPipeline := postrank.NewPipeline(postrankCfg, log)
+
 	return &Service{
 		ml:       mlSvc,
 		qdrant:   qc,
@@ -80,6 +109,7 @@ func NewService(mlSvc ml.Service, qc *qdrant.Client, log *logger.Logger, cfg Con
 		bus:      eventBus,
 		log:      log,
 		cfg:      cfg,
+		postrank: postrankPipeline,
 	}
 }
 
@@ -154,7 +184,7 @@ type Result struct {
 	// Symbols are the extracted symbols.
 	Symbols []string `json:"symbols,omitempty"`
 
-	// Score is the relevance score.
+	// Score is the relevance score (fused or single retriever).
 	Score float32 `json:"score"`
 
 	// RerankScore is the reranker score (if reranking was applied).
@@ -162,6 +192,21 @@ type Result struct {
 
 	// ConnectionID is the connection that indexed this chunk.
 	ConnectionID string `json:"connection_id,omitempty"`
+
+	// SparseRank is the rank in sparse-only results (1-based, 0 if manual fusion not used).
+	SparseRank int `json:"sparse_rank,omitempty"`
+
+	// DenseRank is the rank in dense-only results (1-based, 0 if manual fusion not used).
+	DenseRank int `json:"dense_rank,omitempty"`
+
+	// SparseScore is the original sparse score (0 if manual fusion not used).
+	SparseScore float32 `json:"sparse_score,omitempty"`
+
+	// DenseScore is the original dense score (0 if manual fusion not used).
+	DenseScore float32 `json:"dense_score,omitempty"`
+
+	// FusedScore is the combined RRF score (only when manual fusion is used).
+	FusedScore float32 `json:"fused_score,omitempty"`
 }
 
 // ConnectionGroup represents results grouped by connection.
@@ -249,6 +294,16 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		rerankTopK = req.RerankTopK
 	}
 
+	// Get fusion weights (from request or config)
+	sparseWeight := cfg.SparseWeight
+	if req.SparseWeight != nil {
+		sparseWeight = *req.SparseWeight
+	}
+	denseWeight := cfg.DenseWeight
+	if req.DenseWeight != nil {
+		denseWeight = *req.DenseWeight
+	}
+
 	// Validate
 	if req.Query == "" {
 		return nil, fmt.Errorf("query is required")
@@ -321,30 +376,95 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		}
 	}
 
-	// Execute hybrid search
-	retrievalStart := time.Now()
-	qdrantResults, err := s.qdrant.HybridSearch(ctx, req.Store, searchReq)
-	if err != nil {
-		return nil, fmt.Errorf("search failed: %w", err)
+	// Decide whether to use Qdrant's native RRF or manual fusion
+	fusionCfg := fusion.RRFConfig{
+		K:            fusion.DefaultK,
+		SparseWeight: float32(sparseWeight),
+		DenseWeight:  float32(denseWeight),
 	}
-	retrievalTime := time.Since(retrievalStart)
 
-	// Convert to results
-	results := make([]Result, len(qdrantResults))
-	for i, qr := range qdrantResults {
-		results[i] = Result{
-			ID:           qr.ID,
-			Path:         qr.Payload.Path,
-			Language:     qr.Payload.Language,
-			StartLine:    qr.Payload.StartLine,
-			EndLine:      qr.Payload.EndLine,
-			Symbols:      qr.Payload.Symbols,
-			Score:        qr.Score,
-			ConnectionID: qr.Payload.ConnectionID,
+	var results []Result
+	var retrievalTime time.Duration
+
+	if fusionCfg.IsBalanced() {
+		// Use Qdrant's native RRF (faster, equal weights)
+		retrievalStart := time.Now()
+		qdrantResults, err := s.qdrant.HybridSearch(ctx, req.Store, searchReq)
+		if err != nil {
+			return nil, fmt.Errorf("search failed: %w", err)
 		}
-		if req.IncludeContent {
-			results[i].Content = qr.Payload.Content
+		retrievalTime = time.Since(retrievalStart)
+
+		// Convert to results (no rank/score breakdown)
+		results = make([]Result, len(qdrantResults))
+		for i, qr := range qdrantResults {
+			results[i] = Result{
+				ID:           qr.ID,
+				Path:         qr.Payload.Path,
+				Language:     qr.Payload.Language,
+				StartLine:    qr.Payload.StartLine,
+				EndLine:      qr.Payload.EndLine,
+				Symbols:      qr.Payload.Symbols,
+				Score:        qr.Score,
+				ConnectionID: qr.Payload.ConnectionID,
+			}
+			if req.IncludeContent {
+				results[i].Content = qr.Payload.Content
+			}
 		}
+		s.log.Debug("Used Qdrant native RRF fusion",
+			"sparse_weight", sparseWeight,
+			"dense_weight", denseWeight,
+		)
+	} else {
+		// Use manual RRF fusion with custom weights
+		retrievalStart := time.Now()
+
+		// Execute sparse and dense searches separately
+		sparseResults, err := s.qdrant.SparseSearch(ctx, req.Store, searchReq)
+		if err != nil {
+			return nil, fmt.Errorf("sparse search failed: %w", err)
+		}
+
+		denseResults, err := s.qdrant.DenseSearch(ctx, req.Store, searchReq)
+		if err != nil {
+			return nil, fmt.Errorf("dense search failed: %w", err)
+		}
+
+		retrievalTime = time.Since(retrievalStart)
+
+		// Fuse results with custom weights
+		fusedResults := fusion.Fuse(sparseResults, denseResults, fusionCfg)
+
+		// Convert to Result type with rank/score breakdown
+		results = make([]Result, len(fusedResults))
+		for i, fr := range fusedResults {
+			results[i] = Result{
+				ID:           fr.Result.ID,
+				Path:         fr.Result.Payload.Path,
+				Language:     fr.Result.Payload.Language,
+				StartLine:    fr.Result.Payload.StartLine,
+				EndLine:      fr.Result.Payload.EndLine,
+				Symbols:      fr.Result.Payload.Symbols,
+				Score:        fr.FusedScore, // Use fused score as primary score
+				ConnectionID: fr.Result.Payload.ConnectionID,
+				SparseRank:   fr.SparseRank,
+				DenseRank:    fr.DenseRank,
+				SparseScore:  fr.SparseScore,
+				DenseScore:   fr.DenseScore,
+				FusedScore:   fr.FusedScore,
+			}
+			if req.IncludeContent {
+				results[i].Content = fr.Result.Payload.Content
+			}
+		}
+		s.log.Debug("Used manual RRF fusion",
+			"sparse_weight", sparseWeight,
+			"dense_weight", denseWeight,
+			"sparse_results", len(sparseResults),
+			"dense_results", len(denseResults),
+			"fused_results", len(fusedResults),
+		)
 	}
 
 	metadata := SearchMetadata{
@@ -357,9 +477,9 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		rerankStart := time.Now()
 
 		// Get contents for reranking
-		documents := make([]string, len(qdrantResults))
-		for i, qr := range qdrantResults {
-			documents[i] = qr.Payload.Content
+		documents := make([]string, len(results))
+		for i := range results {
+			documents[i] = results[i].Content
 		}
 
 		// Rerank via event bus
@@ -391,6 +511,9 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		connectionGroups = groupByConnection(results, maxPerConnection, s)
 	}
 
+	// Total is the count before topK limiting (but after reranking filtering)
+	totalBeforeLimit := len(results)
+
 	// Limit to topK
 	if len(results) > topK {
 		results = results[:topK]
@@ -402,7 +525,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 		Query:            req.Query,
 		Store:            req.Store,
 		Results:          results,
-		Total:            len(qdrantResults),
+		Total:            totalBeforeLimit,
 		Metadata:         metadata,
 		ParsedQuery:      parsedQuery,
 		ConnectionGroups: connectionGroups,

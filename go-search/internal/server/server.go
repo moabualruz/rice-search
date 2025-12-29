@@ -108,8 +108,15 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 		log:    log,
 	}
 
-	// Initialize event bus (in-memory for monolith)
-	s.bus = bus.NewMemoryBus()
+	// Initialize event bus (factory pattern with fallback)
+	eventBus, err := bus.NewBus(appCfg.Bus)
+	if err != nil {
+		log.Warn("Failed to initialize configured bus, falling back to memory bus", "error", err, "type", appCfg.Bus.Type)
+		eventBus = bus.NewMemoryBus()
+	} else {
+		log.Info("Initialized event bus", "type", appCfg.Bus.Type)
+	}
+	s.bus = eventBus
 
 	// Initialize metrics
 	s.metrics = metrics.New()
@@ -207,6 +214,8 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 	settingsCfg := settings.ServiceConfig{
 		StoragePath:  "./data/settings",
 		LoadDefaults: true,
+		AuditLogPath: appCfg.Settings.AuditPath,
+		AuditEnabled: appCfg.Settings.AuditEnabled,
 	}
 	settingsSvc, err := settings.NewService(settingsCfg, s.bus, log)
 	if err != nil {
@@ -239,6 +248,7 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 			s.settingsSvc,
 			s.metrics,
 			appCfg.Qdrant.URL,
+			nil, // eventLogger - optional, for debugging only
 		)
 		log.Info("Initialized web UI handler")
 	}

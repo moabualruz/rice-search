@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	pb "github.com/ricesearch/rice-search/api/proto/ricesearchpb"
+	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/config"
 	"github.com/ricesearch/rice-search/internal/connection"
 	"github.com/ricesearch/rice-search/internal/metrics"
@@ -49,6 +50,7 @@ type Handler struct {
 	metrics     *metrics.Metrics
 	startTime   time.Time
 	qdrantURL   string
+	eventLogger *bus.EventLogger
 }
 
 // NewHandler creates a new web handler.
@@ -62,6 +64,7 @@ func NewHandler(
 	settingsSvc *settings.Service,
 	metricsInstance *metrics.Metrics,
 	qdrantURL string,
+	eventLogger *bus.EventLogger,
 ) *Handler {
 	return &Handler{
 		grpc:        grpc,
@@ -74,6 +77,7 @@ func NewHandler(
 		metrics:     metricsInstance,
 		startTime:   time.Now(),
 		qdrantURL:   qdrantURL,
+		eventLogger: eventLogger,
 	}
 }
 
@@ -136,6 +140,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Settings REST API (JSON)
 	mux.HandleFunc("GET /api/v1/settings", h.handleAPIGetSettings)
 	mux.HandleFunc("PUT /api/v1/settings", h.handleAPIPutSettings)
+	mux.HandleFunc("GET /api/v1/settings/history", h.handleAPIGetSettingsHistory)
+	mux.HandleFunc("GET /api/v1/settings/audit", h.handleAPIGetSettingsAudit)
+	mux.HandleFunc("POST /api/v1/settings/rollback/{version}", h.handleAPIRollbackSettings)
 
 	// Stats JSON API (for Grafana/monitoring)
 	mux.HandleFunc("GET /api/v1/stats/overview", h.handleAPIStatsOverview)
@@ -145,6 +152,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/v1/stats/stores", h.handleAPIStatsStores)
 	mux.HandleFunc("GET /api/v1/stats/languages", h.handleAPIStatsLanguages)
 	mux.HandleFunc("GET /api/v1/stats/connections", h.handleAPIStatsConnections)
+
+	// Event Logging API (for debugging)
+	mux.HandleFunc("GET /api/v1/events", h.handleAPIGetEvents)
 
 	// Stats API (HTMX)
 	mux.HandleFunc("GET /stats/refresh", h.handleStatsRefresh)
@@ -2198,6 +2208,110 @@ func (h *Handler) handleAPIPutSettings(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(updatedCfg)
 }
 
+// handleAPIGetSettingsHistory returns the settings version history as JSON.
+// GET /api/v1/settings/history
+func (h *Handler) handleAPIGetSettingsHistory(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	if h.settingsSvc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "settings service not available"})
+		return
+	}
+
+	// Parse limit from query param (default: 10)
+	limit := 10
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	history, err := h.settingsSvc.GetHistory(ctx, limit)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to get history: " + err.Error()})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"history": history,
+		"count":   len(history),
+	})
+}
+
+// handleAPIGetSettingsAudit returns the settings audit log as JSON.
+// GET /api/v1/settings/audit?limit=50
+func (h *Handler) handleAPIGetSettingsAudit(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	if h.settingsSvc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "settings service not available"})
+		return
+	}
+
+	// Parse limit from query param (default: 50)
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+		}
+	}
+
+	entries, err := h.settingsSvc.GetAuditLog(ctx, limit)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "failed to get audit log: " + err.Error()})
+		return
+	}
+
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"entries": entries,
+		"count":   len(entries),
+	})
+}
+
+// handleAPIRollbackSettings rolls back settings to a specific version.
+// POST /api/v1/settings/rollback/{version}
+func (h *Handler) handleAPIRollbackSettings(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	w.Header().Set("Content-Type", "application/json")
+
+	if h.settingsSvc == nil {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{"error": "settings service not available"})
+		return
+	}
+
+	// Parse version from path parameter
+	versionStr := r.PathValue("version")
+	version, err := strconv.Atoi(versionStr)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid version number"})
+		return
+	}
+
+	// Perform rollback
+	if err := h.settingsSvc.Rollback(ctx, version, "api-rollback"); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": "rollback failed: " + err.Error()})
+		return
+	}
+
+	// Return new current settings
+	currentCfg := h.settingsSvc.Get(ctx)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":          "rollback successful",
+		"rolled_back_to":   version,
+		"new_version":      currentCfg.Version,
+		"current_settings": currentCfg,
+	})
+}
+
 // parseIntOr parses an integer or returns a default value.
 func parseIntOr(s string, defaultVal int) int {
 	if s == "" {
@@ -3017,4 +3131,67 @@ func (h *Handler) getLanguageBreakdown(ctx context.Context, storeFilter string, 
 	})
 
 	return metrics
+}
+
+// =============================================================================
+// Event Logging API (for debugging)
+// =============================================================================
+
+// handleAPIGetEvents returns logged events as JSON.
+// GET /api/v1/events?since=2025-12-29T10:00:00Z&limit=50
+func (h *Handler) handleAPIGetEvents(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
+	if h.eventLogger == nil || !h.eventLogger.IsEnabled() {
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "event logging is disabled",
+		})
+		return
+	}
+
+	// Parse 'since' timestamp (default: 1 hour ago)
+	sinceStr := r.URL.Query().Get("since")
+	since := time.Now().Add(-1 * time.Hour)
+	if sinceStr != "" {
+		if t, err := time.Parse(time.RFC3339, sinceStr); err == nil {
+			since = t
+		}
+	}
+
+	// Parse limit (default: 50, max: 1000)
+	limit := 50
+	if limitStr := r.URL.Query().Get("limit"); limitStr != "" {
+		if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+			limit = l
+			if limit > 1000 {
+				limit = 1000
+			}
+		}
+	}
+
+	// Get events from logger
+	events, err := h.eventLogger.GetEvents(since, limit)
+	if err != nil {
+		h.log.Error("Failed to get events", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{
+			"error": "failed to retrieve events: " + err.Error(),
+		})
+		return
+	}
+
+	response := map[string]interface{}{
+		"events": events,
+		"count":  len(events),
+		"meta": map[string]interface{}{
+			"since":        since.Format(time.RFC3339),
+			"limit":        limit,
+			"generated_at": time.Now().Format(time.RFC3339),
+		},
+	}
+
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.log.Error("Failed to encode events response", "error", err)
+	}
 }

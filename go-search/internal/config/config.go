@@ -55,6 +55,9 @@ type Config struct {
 
 	// Metrics configuration
 	Metrics MetricsConfig `yaml:"metrics"`
+
+	// Settings configuration
+	Settings SettingsConfig `yaml:"settings"`
 }
 
 // QdrantConfig holds Qdrant connection settings.
@@ -115,8 +118,13 @@ type CacheConfig struct {
 type BusConfig struct {
 	Type         string `envconfig:"RICE_BUS_TYPE" yaml:"type"`
 	KafkaBrokers string `envconfig:"RICE_KAFKA_BROKERS" yaml:"kafka_brokers"`
+	KafkaGroup   string `envconfig:"RICE_KAFKA_GROUP" yaml:"kafka_group"`
 	NatsURL      string `envconfig:"RICE_NATS_URL" yaml:"nats_url"`
 	RedisURL     string `envconfig:"RICE_REDIS_STREAM_URL" yaml:"redis_url"`
+
+	// Event logging (for debugging)
+	EventLogEnabled bool   `envconfig:"RICE_EVENT_LOG_ENABLED" yaml:"event_log_enabled"`
+	EventLogPath    string `envconfig:"RICE_EVENT_LOG_PATH" yaml:"event_log_path"`
 }
 
 // IndexConfig holds indexing settings.
@@ -133,6 +141,14 @@ type SearchConfig struct {
 	DefaultDenseWeight  float64 `envconfig:"RICE_DEFAULT_DENSE_WEIGHT" yaml:"default_dense_weight"`
 	EnableReranking     bool    `envconfig:"RICE_ENABLE_RERANKING" yaml:"enable_reranking"`
 	RerankCandidates    int     `envconfig:"RICE_RERANK_CANDIDATES" yaml:"rerank_candidates"`
+
+	// Post-ranking configuration
+	EnableDedup      bool    `envconfig:"RICE_ENABLE_DEDUP" yaml:"enable_dedup"`
+	DedupThreshold   float64 `envconfig:"RICE_DEDUP_THRESHOLD" yaml:"dedup_threshold"`
+	EnableDiversity  bool    `envconfig:"RICE_ENABLE_DIVERSITY" yaml:"enable_diversity"`
+	DiversityLambda  float64 `envconfig:"RICE_DIVERSITY_LAMBDA" yaml:"diversity_lambda"`
+	GroupByFile      bool    `envconfig:"RICE_GROUP_BY_FILE" yaml:"group_by_file"`
+	MaxChunksPerFile int     `envconfig:"RICE_MAX_CHUNKS_PER_FILE" yaml:"max_chunks_per_file"`
 }
 
 // LogConfig holds logging settings.
@@ -161,6 +177,12 @@ type ObservabilityConfig struct {
 type MetricsConfig struct {
 	Persistence string `envconfig:"RICE_METRICS_PERSISTENCE" yaml:"persistence"` // "memory" or "redis"
 	RedisURL    string `envconfig:"RICE_METRICS_REDIS_URL" yaml:"redis_url"`     // Redis URL for persistence
+}
+
+// SettingsConfig holds settings service configuration.
+type SettingsConfig struct {
+	AuditEnabled bool   `envconfig:"RICE_SETTINGS_AUDIT_ENABLED" yaml:"audit_enabled"`
+	AuditPath    string `envconfig:"RICE_SETTINGS_AUDIT_PATH" yaml:"audit_path"`
 }
 
 // Load loads configuration from environment variables and optional config file.
@@ -253,7 +275,9 @@ func setDefaults(cfg *Config) {
 	}
 
 	cfg.Bus = BusConfig{
-		Type: "memory",
+		Type:            "memory",
+		EventLogEnabled: false,
+		EventLogPath:    "./data/events/events.log",
 	}
 
 	cfg.Index = IndexConfig{
@@ -268,6 +292,12 @@ func setDefaults(cfg *Config) {
 		DefaultDenseWeight:  0.5,
 		EnableReranking:     true,
 		RerankCandidates:    30,
+		EnableDedup:         true,
+		DedupThreshold:      0.85,
+		EnableDiversity:     true,
+		DiversityLambda:     0.7,
+		GroupByFile:         false,
+		MaxChunksPerFile:    3,
 	}
 
 	cfg.Log = LogConfig{
@@ -289,6 +319,11 @@ func setDefaults(cfg *Config) {
 	cfg.Metrics = MetricsConfig{
 		Persistence: "memory",
 		RedisURL:    "redis://localhost:6379/0",
+	}
+
+	cfg.Settings = SettingsConfig{
+		AuditEnabled: true,
+		AuditPath:    "./data/audit/settings.log",
 	}
 }
 

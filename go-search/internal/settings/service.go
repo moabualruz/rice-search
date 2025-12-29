@@ -7,6 +7,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -160,6 +163,7 @@ type Service struct {
 	storagePath string
 	eventBus    bus.Bus
 	log         *logger.Logger
+	auditLogger *AuditLogger
 }
 
 // ServiceConfig configures the settings service.
@@ -169,6 +173,12 @@ type ServiceConfig struct {
 
 	// LoadDefaults determines whether to populate with defaults if no file exists.
 	LoadDefaults bool
+
+	// AuditLogPath is the path to the audit log file.
+	AuditLogPath string
+
+	// AuditEnabled determines whether audit logging is enabled.
+	AuditEnabled bool
 }
 
 // NewService creates a new settings service.
@@ -182,6 +192,20 @@ func NewService(cfg ServiceConfig, eventBus bus.Bus, log *logger.Logger) (*Servi
 	// Ensure storage directory exists
 	if err := os.MkdirAll(cfg.StoragePath, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create settings directory: %w", err)
+	}
+
+	// Initialize audit logger if enabled
+	if cfg.AuditEnabled {
+		auditLogger, err := NewAuditLogger(AuditLoggerConfig{
+			LogPath: cfg.AuditLogPath,
+			Enabled: cfg.AuditEnabled,
+		})
+		if err != nil {
+			log.Warn("Failed to initialize audit logger", "error", err)
+		} else {
+			s.auditLogger = auditLogger
+			log.Info("Audit logging enabled", "path", cfg.AuditLogPath)
+		}
 	}
 
 	// Load existing settings or use defaults
@@ -225,6 +249,31 @@ func (s *Service) Update(ctx context.Context, cfg RuntimeConfig, changedBy strin
 	}
 
 	s.config = cfg
+
+	// Log audit entry
+	if s.auditLogger != nil {
+		changes := Diff(oldConfig, cfg)
+		if len(changes) > 0 {
+			auditEntry := AuditEntry{
+				Timestamp: cfg.UpdatedAt,
+				Version:   cfg.Version,
+				ChangedBy: changedBy,
+				Changes:   changes,
+			}
+
+			// Extract IP and User-Agent from context if available
+			if ipAddr, ok := ctx.Value("ip_address").(string); ok {
+				auditEntry.IPAddress = ipAddr
+			}
+			if userAgent, ok := ctx.Value("user_agent").(string); ok {
+				auditEntry.UserAgent = userAgent
+			}
+
+			if err := s.auditLogger.Log(auditEntry); err != nil {
+				s.log.Warn("Failed to log audit entry", "error", err)
+			}
+		}
+	}
 
 	// Publish event
 	if s.eventBus != nil {
@@ -293,6 +342,11 @@ func (s *Service) settingsFile() string {
 	return filepath.Join(s.storagePath, "settings.yaml")
 }
 
+// versionedSettingsFile returns the path to a versioned settings file.
+func (s *Service) versionedSettingsFile(version int) string {
+	return filepath.Join(s.storagePath, fmt.Sprintf("settings.v%d.yaml", version))
+}
+
 // load loads settings from disk.
 func (s *Service) load() error {
 	data, err := os.ReadFile(s.settingsFile())
@@ -324,7 +378,99 @@ func (s *Service) saveUnlocked(cfg RuntimeConfig) error {
 		return fmt.Errorf("failed to marshal settings: %w", err)
 	}
 
-	return os.WriteFile(s.settingsFile(), data, 0644)
+	// Save current settings
+	if err := os.WriteFile(s.settingsFile(), data, 0644); err != nil {
+		return err
+	}
+
+	// Save versioned copy
+	if err := s.saveVersioned(cfg); err != nil {
+		s.log.Warn("Failed to save versioned settings", "error", err)
+		// Don't fail the entire operation if versioned save fails
+	}
+
+	return nil
+}
+
+// saveVersioned saves a versioned copy of the settings.
+func (s *Service) saveVersioned(cfg RuntimeConfig) error {
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal settings: %w", err)
+	}
+
+	versionedPath := s.versionedSettingsFile(cfg.Version)
+	if err := os.WriteFile(versionedPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write versioned settings: %w", err)
+	}
+
+	// Cleanup old versions (keep last 10)
+	if err := s.cleanupOldVersions(10); err != nil {
+		s.log.Warn("Failed to cleanup old versions", "error", err)
+	}
+
+	return nil
+}
+
+// cleanupOldVersions removes old versioned settings files, keeping only the last N versions.
+func (s *Service) cleanupOldVersions(keep int) error {
+	entries, err := os.ReadDir(s.storagePath)
+	if err != nil {
+		return fmt.Errorf("failed to read storage directory: %w", err)
+	}
+
+	// Find all versioned files
+	type versionedFile struct {
+		path    string
+		version int
+	}
+	var versionedFiles []versionedFile
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// Match pattern: settings.v{number}.yaml
+		if strings.HasPrefix(name, "settings.v") && strings.HasSuffix(name, ".yaml") {
+			versionStr := strings.TrimPrefix(name, "settings.v")
+			versionStr = strings.TrimSuffix(versionStr, ".yaml")
+			if version, err := strconv.Atoi(versionStr); err == nil {
+				versionedFiles = append(versionedFiles, versionedFile{
+					path:    filepath.Join(s.storagePath, name),
+					version: version,
+				})
+			}
+		}
+	}
+
+	// If we have more than 'keep' versions, remove the oldest
+	if len(versionedFiles) <= keep {
+		return nil
+	}
+
+	// Sort by version (ascending)
+	sort.Slice(versionedFiles, func(i, j int) bool {
+		return versionedFiles[i].version < versionedFiles[j].version
+	})
+
+	// Remove oldest versions
+	toRemove := len(versionedFiles) - keep
+	for i := 0; i < toRemove; i++ {
+		if err := os.Remove(versionedFiles[i].path); err != nil {
+			s.log.Warn("Failed to remove old version file",
+				"path", versionedFiles[i].path,
+				"error", err,
+			)
+		} else {
+			s.log.Debug("Removed old version file",
+				"path", versionedFiles[i].path,
+				"version", versionedFiles[i].version,
+			)
+		}
+	}
+
+	return nil
 }
 
 // GetVersion returns the current settings version.
@@ -812,4 +958,123 @@ func (s *Service) UpdateFeatures(ctx context.Context, features FeatureFlags, cha
 
 	cfg.Features = features
 	return s.Update(ctx, cfg, changedBy)
+}
+
+// HistoryEntry represents a settings version in the history.
+type HistoryEntry struct {
+	Config    RuntimeConfig `json:"config"`
+	Version   int           `json:"version"`
+	UpdatedAt time.Time     `json:"updated_at"`
+}
+
+// GetHistory returns the last N versions of settings.
+func (s *Service) GetHistory(ctx context.Context, limit int) ([]HistoryEntry, error) {
+	entries, err := os.ReadDir(s.storagePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read storage directory: %w", err)
+	}
+
+	// Find all versioned files
+	type versionedFile struct {
+		path    string
+		version int
+	}
+	var versionedFiles []versionedFile
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		// Match pattern: settings.v{number}.yaml
+		if strings.HasPrefix(name, "settings.v") && strings.HasSuffix(name, ".yaml") {
+			versionStr := strings.TrimPrefix(name, "settings.v")
+			versionStr = strings.TrimSuffix(versionStr, ".yaml")
+			if version, err := strconv.Atoi(versionStr); err == nil {
+				versionedFiles = append(versionedFiles, versionedFile{
+					path:    filepath.Join(s.storagePath, name),
+					version: version,
+				})
+			}
+		}
+	}
+
+	// Sort by version (descending - newest first)
+	sort.Slice(versionedFiles, func(i, j int) bool {
+		return versionedFiles[i].version > versionedFiles[j].version
+	})
+
+	// Limit results
+	if limit > 0 && len(versionedFiles) > limit {
+		versionedFiles = versionedFiles[:limit]
+	}
+
+	// Load each version
+	var history []HistoryEntry
+	for _, vf := range versionedFiles {
+		data, err := os.ReadFile(vf.path)
+		if err != nil {
+			s.log.Warn("Failed to read versioned file", "path", vf.path, "error", err)
+			continue
+		}
+
+		var cfg RuntimeConfig
+		if err := yaml.Unmarshal(data, &cfg); err != nil {
+			s.log.Warn("Failed to unmarshal versioned file", "path", vf.path, "error", err)
+			continue
+		}
+
+		history = append(history, HistoryEntry{
+			Config:    cfg,
+			Version:   cfg.Version,
+			UpdatedAt: cfg.UpdatedAt,
+		})
+	}
+
+	return history, nil
+}
+
+// Rollback restores settings to a specific version.
+func (s *Service) Rollback(ctx context.Context, toVersion int, changedBy string) error {
+	// Load the target version
+	versionedPath := s.versionedSettingsFile(toVersion)
+	data, err := os.ReadFile(versionedPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("version %d not found", toVersion)
+		}
+		return fmt.Errorf("failed to read version %d: %w", toVersion, err)
+	}
+
+	var cfg RuntimeConfig
+	if err := yaml.Unmarshal(data, &cfg); err != nil {
+		return fmt.Errorf("failed to unmarshal version %d: %w", toVersion, err)
+	}
+
+	s.log.Info("Rolling back settings",
+		"from_version", s.config.Version,
+		"to_version", toVersion,
+		"changed_by", changedBy,
+	)
+
+	// Update with the rolled-back config
+	// This will increment the version and create a new versioned file
+	return s.Update(ctx, cfg, changedBy)
+}
+
+// GetAuditLog returns the last N audit entries from the audit log.
+func (s *Service) GetAuditLog(ctx context.Context, limit int) ([]AuditEntry, error) {
+	if s.auditLogger == nil {
+		return []AuditEntry{}, nil
+	}
+
+	return s.auditLogger.GetEntries(limit)
+}
+
+// Close closes the settings service and releases resources.
+func (s *Service) Close() error {
+	if s.auditLogger != nil {
+		return s.auditLogger.Close()
+	}
+	return nil
 }

@@ -124,8 +124,25 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Initialize event bus
-	eventBus := bus.NewMemoryBus()
-	defer func() { _ = eventBus.Close() }()
+	innerBus := bus.NewMemoryBus()
+	defer func() { _ = innerBus.Close() }()
+
+	// Initialize event logger (wraps event bus)
+	eventLogger, err := bus.NewEventLogger(appCfg.Bus.EventLogPath, appCfg.Bus.EventLogEnabled)
+	if err != nil {
+		return fmt.Errorf("failed to create event logger: %w", err)
+	}
+	defer func() { _ = eventLogger.Close() }()
+
+	// Wrap bus with logging if enabled
+	var eventBus bus.Bus
+	if appCfg.Bus.EventLogEnabled {
+		eventBus = bus.NewLoggedBus(innerBus, eventLogger)
+		log.Info("Event logging enabled", "path", appCfg.Bus.EventLogPath)
+	} else {
+		eventBus = innerBus
+		log.Info("Event logging disabled")
+	}
 
 	// Initialize Qdrant client
 	qdrantCfg := qdrant.DefaultClientConfig()
@@ -315,6 +332,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		settingsSvc,       // Settings service
 		metricsSvc,        // Metrics
 		appCfg.Qdrant.URL, // qdrantURL
+		eventLogger,       // Event logger
 	)
 	webHandler.RegisterRoutes(mux)
 

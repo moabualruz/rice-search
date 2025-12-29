@@ -3,6 +3,7 @@ package query
 import (
 	"context"
 
+	"github.com/ricesearch/rice-search/internal/ml"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 )
 
@@ -23,6 +24,23 @@ func NewService(log *logger.Logger) *Service {
 		useModel:         false, // Disabled by default
 		log:              log,
 	}
+}
+
+// InitializeWithMLService initializes model-based understanding with ML service.
+// This should be called after the ML service is ready.
+func (s *Service) InitializeWithMLService(ctx context.Context, mlService ml.Service) error {
+	if s.modelBased == nil {
+		s.log.Warn("Model-based understanding not available")
+		return nil
+	}
+
+	if err := s.modelBased.Initialize(ctx, mlService); err != nil {
+		s.log.Warn("Failed to initialize model-based understanding", "error", err)
+		return err
+	}
+
+	s.log.Info("Query understanding service initialized with ML model")
+	return nil
 }
 
 // Parse analyzes a query and returns structured understanding.
