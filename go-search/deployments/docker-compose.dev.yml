@@ -1,35 +1,11 @@
 # Rice Search - Go Edition
-# Development Docker Compose - Data resets on down
+# Development Docker Compose - Only Qdrant (run server from code locally)
+# Data resets on `docker-compose down`
 
 services:
   # ===========================================================================
-  # Rice Search Application (Dev Mode)
-  # ===========================================================================
-  rice-search:
-    build:
-      context: ../..
-      dockerfile: deployments/docker/Dockerfile
-    container_name: rice-search-dev
-    ports:
-      - "8080:8080"
-    environment:
-      - RICE_HOST=0.0.0.0
-      - RICE_PORT=8080
-      - RICE_LOG_LEVEL=debug
-      - RICE_LOG_FORMAT=text
-      - QDRANT_URL=http://qdrant:6333
-      - RICE_ML_DEVICE=cpu
-      - RICE_CACHE_TYPE=memory
-      - RICE_BUS_TYPE=memory
-    depends_on:
-      qdrant:
-        condition: service_healthy
-    profiles:
-      - app
-
-  # ===========================================================================
   # Qdrant Vector Database (Ephemeral - no persistence)
-  # Dashboard available at http://localhost:6333/dashboard
+  # Dashboard: http://localhost:6333/dashboard
   # ===========================================================================
   qdrant:
     image: qdrant/qdrant:v1.12.4

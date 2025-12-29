@@ -17,8 +17,14 @@ type StoreInfo struct {
 	CreatedAt     time.Time
 }
 
+// IsDefaultStore returns true if this is the default store
+func (s *StoreInfo) IsDefaultStore() bool {
+	return s.Name == "default"
+}
+
 // AdminPageData holds data for the admin page
 type AdminPageData struct {
+	Layout  LayoutData
 	Stores  []StoreInfo
 	Error   string
 	Success string
@@ -26,7 +32,7 @@ type AdminPageData struct {
 
 // AdminPage renders the store management page
 templ AdminPage(data AdminPageData) {
-	@Layout("Stores") {
+	@Layout(data.Layout) {
 		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
 			<div class="sm:flex sm:items-center">
 				<div class="sm:flex-auto">

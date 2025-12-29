@@ -4,17 +4,24 @@ package client
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
+	"runtime"
+	"strings"
 	"time"
 )
 
 // Client is an HTTP client for the Rice Search API.
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
+	baseURL      string
+	httpClient   *http.Client
+	connectionID string
 }
 
 // Config configures the client.
@@ -24,6 +31,10 @@ type Config struct {
 
 	// Timeout is the request timeout.
 	Timeout time.Duration
+
+	// ConnectionID is an optional explicit connection ID.
+	// If empty, one will be auto-generated from hostname/MAC.
+	ConnectionID string
 }
 
 // DefaultConfig returns sensible defaults.
@@ -32,6 +43,79 @@ func DefaultConfig() Config {
 		BaseURL: "http://localhost:8080",
 		Timeout: 30 * time.Second,
 	}
+}
+
+// GenerateConnectionID creates a stable, unique connection ID for this machine.
+// It uses hostname + MAC address + OS/Arch to create a deterministic identifier.
+func GenerateConnectionID() string {
+	var parts []string
+
+	// Hostname
+	if hostname, err := os.Hostname(); err == nil {
+		parts = append(parts, hostname)
+	}
+
+	// Primary MAC address
+	if mac := getPrimaryMAC(); mac != "" {
+		parts = append(parts, mac)
+	}
+
+	// OS and architecture for disambiguation
+	parts = append(parts, runtime.GOOS, runtime.GOARCH)
+
+	// Create a stable hash
+	data := strings.Join(parts, "|")
+	hash := sha256.Sum256([]byte(data))
+
+	// Return first 16 characters of hex-encoded hash
+	return hex.EncodeToString(hash[:8])
+}
+
+// getPrimaryMAC returns the MAC address of the first non-loopback interface.
+func getPrimaryMAC() string {
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return ""
+	}
+
+	for _, iface := range interfaces {
+		// Skip loopback and interfaces without MAC
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if len(iface.HardwareAddr) == 0 {
+			continue
+		}
+		// Skip virtual interfaces (common patterns)
+		name := strings.ToLower(iface.Name)
+		if strings.HasPrefix(name, "docker") ||
+			strings.HasPrefix(name, "veth") ||
+			strings.HasPrefix(name, "br-") ||
+			strings.HasPrefix(name, "virbr") {
+			continue
+		}
+		return iface.HardwareAddr.String()
+	}
+
+	return ""
+}
+
+// GetConnectionInfo returns detailed info about this connection for debugging.
+func GetConnectionInfo() map[string]string {
+	info := make(map[string]string)
+
+	if hostname, err := os.Hostname(); err == nil {
+		info["hostname"] = hostname
+	}
+	info["os"] = runtime.GOOS
+	info["arch"] = runtime.GOARCH
+	info["connection_id"] = GenerateConnectionID()
+
+	if mac := getPrimaryMAC(); mac != "" {
+		info["mac"] = mac
+	}
+
+	return info
 }
 
 // New creates a new API client.
@@ -43,12 +127,24 @@ func New(cfg Config) *Client {
 		cfg.Timeout = 30 * time.Second
 	}
 
+	// Auto-generate connection ID if not provided
+	connectionID := cfg.ConnectionID
+	if connectionID == "" {
+		connectionID = GenerateConnectionID()
+	}
+
 	return &Client{
-		baseURL: cfg.BaseURL,
+		baseURL:      cfg.BaseURL,
+		connectionID: connectionID,
 		httpClient: &http.Client{
 			Timeout: cfg.Timeout,
 		},
 	}
+}
+
+// ConnectionID returns the client's connection ID.
+func (c *Client) ConnectionID() string {
+	return c.connectionID
 }
 
 // Store represents a store.
@@ -272,6 +368,11 @@ func (c *Client) delete(ctx context.Context, path string) error {
 
 // do executes a request.
 func (c *Client) do(req *http.Request, result interface{}) error {
+	// Add connection ID header to all requests
+	if c.connectionID != "" {
+		req.Header.Set("X-Connection-ID", c.connectionID)
+	}
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("request failed: %w", err)

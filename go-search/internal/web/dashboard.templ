@@ -1,0 +1,324 @@
+package web
+
+import (
+	"fmt"
+	"time"
+)
+
+// QuickStats holds quick statistics for the dashboard.
+type QuickStats struct {
+	TotalStores       int
+	TotalFiles        int64
+	TotalChunks       int64
+	ActiveConnections int
+}
+
+// RecentSearch represents a recent search query.
+type RecentSearch struct {
+	Query     string
+	Store     string
+	Results   int
+	Timestamp time.Time
+}
+
+// RecentFile represents a recently indexed file.
+type RecentFile struct {
+	Path      string
+	Language  string
+	Chunks    int
+	IndexedAt time.Time
+}
+
+// SystemInfo holds system resource information.
+type SystemInfo struct {
+	MemoryUsedMB  int64
+	MemoryTotalMB int64
+	Goroutines    int
+	Uptime        string
+}
+
+// HealthSummary holds health status for all components.
+type HealthSummary struct {
+	Overall    string // healthy, degraded, unhealthy
+	ML         HealthStatus
+	Qdrant     HealthStatus
+	System     HealthStatus
+}
+
+// DashboardData holds all data for the dashboard page.
+type DashboardData struct {
+	Layout         LayoutData
+	Health         HealthSummary
+	QuickStats     QuickStats
+	RecentSearches []RecentSearch
+	RecentFiles    []RecentFile
+	System         SystemInfo
+}
+
+// DashboardPage renders the main dashboard.
+templ DashboardPage(data DashboardData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Page Header -->
+			<div class="mb-8">
+				<h1 class="text-3xl font-bold text-gray-900">Dashboard</h1>
+				<p class="mt-2 text-sm text-gray-600">
+					Overview of your code search platform
+				</p>
+			</div>
+
+			<!-- Quick Search -->
+			<div class="mb-8">
+				<div class="bg-white shadow rounded-lg p-6">
+					<h2 class="text-lg font-medium text-gray-900 mb-4">Quick Search</h2>
+					<form action="/search" method="GET" class="flex gap-4">
+						<div class="flex-1">
+							<input
+								type="text"
+								name="query"
+								placeholder="Search your code..."
+								class="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-3 px-4 border"
+								autofocus
+							/>
+						</div>
+						<button
+							type="submit"
+							class="inline-flex items-center px-6 py-3 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+						>
+							<svg class="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+							</svg>
+							Search
+						</button>
+					</form>
+				</div>
+			</div>
+
+			<!-- Health Status Cards -->
+			<div class="mb-8">
+				<h2 class="text-lg font-medium text-gray-900 mb-4">System Health</h2>
+				<div class="grid grid-cols-1 gap-5 sm:grid-cols-3">
+					@HealthCard("ML Models", data.Health.ML)
+					@HealthCard("Qdrant", data.Health.Qdrant)
+					@HealthCard("System", data.Health.System)
+				</div>
+			</div>
+
+			<!-- Quick Stats -->
+			<div class="mb-8">
+				<h2 class="text-lg font-medium text-gray-900 mb-4">Quick Stats</h2>
+				<div class="grid grid-cols-1 gap-5 sm:grid-cols-4">
+					@StatCard("Stores", fmt.Sprint(data.QuickStats.TotalStores), "Search indexes", "")
+					@StatCard("Files", formatNumber(data.QuickStats.TotalFiles), "Indexed files", "")
+					@StatCard("Chunks", formatNumber(data.QuickStats.TotalChunks), "Code chunks", "")
+					@StatCard("Connections", fmt.Sprint(data.QuickStats.ActiveConnections), "Active devices", "")
+				</div>
+			</div>
+
+			<!-- Two Column Layout for Recent Activity and System Info -->
+			<div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+				<!-- Recent Activity -->
+				<div>
+					<h2 class="text-lg font-medium text-gray-900 mb-4">Recent Activity</h2>
+					
+					<!-- Recent Searches -->
+					<div class="bg-white shadow rounded-lg mb-6">
+						<div class="px-4 py-5 sm:p-6">
+							<h3 class="text-base font-medium text-gray-900 mb-4">Recent Searches</h3>
+							if len(data.RecentSearches) == 0 {
+								<p class="text-sm text-gray-500">No recent searches</p>
+							} else {
+								<div class="space-y-3">
+									for _, search := range data.RecentSearches {
+										@RecentSearchItem(search)
+									}
+								</div>
+							}
+						</div>
+					</div>
+
+					<!-- Recent Files -->
+					<div class="bg-white shadow rounded-lg">
+						<div class="px-4 py-5 sm:p-6">
+							<h3 class="text-base font-medium text-gray-900 mb-4">Recently Indexed</h3>
+							if len(data.RecentFiles) == 0 {
+								<p class="text-sm text-gray-500">No recent indexing</p>
+							} else {
+								<div class="space-y-3">
+									for _, file := range data.RecentFiles {
+										@RecentFileItem(file)
+									}
+								</div>
+							}
+						</div>
+					</div>
+				</div>
+
+				<!-- System Resources -->
+				<div>
+					<h2 class="text-lg font-medium text-gray-900 mb-4">System Resources</h2>
+					<div class="bg-white shadow rounded-lg">
+						<div class="px-4 py-5 sm:p-6">
+							<dl class="space-y-4">
+								<!-- Memory -->
+								<div>
+									<dt class="text-sm font-medium text-gray-500">Memory Usage</dt>
+									<dd class="mt-1">
+										<div class="flex items-center justify-between text-sm">
+											<span class="text-gray-900 font-semibold">
+												{ fmt.Sprintf("%d MB / %d MB", data.System.MemoryUsedMB, data.System.MemoryTotalMB) }
+											</span>
+											<span class="text-gray-500">
+												{ fmt.Sprintf("%.1f%%", float64(data.System.MemoryUsedMB)/float64(data.System.MemoryTotalMB)*100) }
+											</span>
+										</div>
+										<div class="mt-2 w-full bg-gray-200 rounded-full h-2">
+											<div 
+												class="bg-blue-600 h-2 rounded-full" 
+												style={ fmt.Sprintf("width: %.1f%%", float64(data.System.MemoryUsedMB)/float64(data.System.MemoryTotalMB)*100) }
+											></div>
+										</div>
+									</dd>
+								</div>
+
+								<!-- Goroutines -->
+								<div>
+									<dt class="text-sm font-medium text-gray-500">Goroutines</dt>
+									<dd class="mt-1 text-2xl font-semibold text-gray-900">{ fmt.Sprint(data.System.Goroutines) }</dd>
+								</div>
+
+								<!-- Uptime -->
+								<div>
+									<dt class="text-sm font-medium text-gray-500">Uptime</dt>
+									<dd class="mt-1 text-2xl font-semibold text-gray-900">{ data.System.Uptime }</dd>
+								</div>
+							</dl>
+						</div>
+					</div>
+
+					<!-- Quick Links -->
+					<div class="mt-6 bg-white shadow rounded-lg">
+						<div class="px-4 py-5 sm:p-6">
+							<h3 class="text-base font-medium text-gray-900 mb-4">Quick Links</h3>
+							<div class="space-y-2">
+								<a href="/search" class="block text-sm text-blue-600 hover:text-blue-800">
+									→ Search Code
+								</a>
+								<a href="/stores" class="block text-sm text-blue-600 hover:text-blue-800">
+									→ Manage Stores
+								</a>
+								<a href="/files" class="block text-sm text-blue-600 hover:text-blue-800">
+									→ Browse Files
+								</a>
+								<a href="/stats" class="block text-sm text-blue-600 hover:text-blue-800">
+									→ View Statistics
+								</a>
+								if data.Layout.QdrantURL != "" {
+									<a href={ templ.URL(data.Layout.QdrantURL + "/dashboard") } target="_blank" rel="noopener noreferrer" class="block text-sm text-blue-600 hover:text-blue-800">
+										→ Qdrant Dashboard ↗
+									</a>
+								}
+							</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+// HealthCard renders a health status card.
+templ HealthCard(title string, health HealthStatus) {
+	<div class="bg-white overflow-hidden shadow rounded-lg">
+		<div class="px-4 py-5 sm:p-6">
+			<div class="flex items-center justify-between">
+				<div class="flex items-center">
+					@HealthDot(health.Status)
+					<span class="ml-3 text-sm font-medium text-gray-900">{ title }</span>
+				</div>
+				if health.Latency > 0 {
+					<span class="text-xs text-gray-500">{ fmt.Sprint(health.Latency) }ms</span>
+				}
+			</div>
+			if health.Message != "" {
+				<p class="mt-2 text-sm text-gray-500">{ health.Message }</p>
+			}
+		</div>
+	</div>
+}
+
+// RecentSearchItem renders a recent search item.
+templ RecentSearchItem(search RecentSearch) {
+	<div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+		<div class="flex-1 min-w-0">
+			<p class="text-sm font-medium text-gray-900 truncate">{ search.Query }</p>
+			<div class="flex items-center gap-2 mt-1">
+				@Badge(search.Store, "blue")
+				<span class="text-xs text-gray-500">{ fmt.Sprint(search.Results) } results</span>
+			</div>
+		</div>
+		<span class="text-xs text-gray-400 ml-4">{ formatTimeAgo(search.Timestamp) }</span>
+	</div>
+}
+
+// RecentFileItem renders a recently indexed file item.
+templ RecentFileItem(file RecentFile) {
+	<div class="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
+		<div class="flex-1 min-w-0">
+			<p class="text-sm font-medium text-gray-900 truncate">{ file.Path }</p>
+			<div class="flex items-center gap-2 mt-1">
+				@Badge(file.Language, "green")
+				<span class="text-xs text-gray-500">{ fmt.Sprint(file.Chunks) } chunks</span>
+			</div>
+		</div>
+		<span class="text-xs text-gray-400 ml-4">{ formatTimeAgo(file.IndexedAt) }</span>
+	</div>
+}
+
+// Helper functions
+
+func formatNumber(n int64) string {
+	if n < 1000 {
+		return fmt.Sprint(n)
+	}
+	if n < 1000000 {
+		return fmt.Sprintf("%.1fK", float64(n)/1000)
+	}
+	return fmt.Sprintf("%.1fM", float64(n)/1000000)
+}
+
+func formatTimeAgo(t time.Time) string {
+	if t.IsZero() {
+		return "Never"
+	}
+	
+	dur := time.Since(t)
+	
+	if dur < time.Minute {
+		return "Just now"
+	}
+	if dur < time.Hour {
+		mins := int(dur.Minutes())
+		if mins == 1 {
+			return "1 min ago"
+		}
+		return fmt.Sprintf("%d mins ago", mins)
+	}
+	if dur < 24*time.Hour {
+		hours := int(dur.Hours())
+		if hours == 1 {
+			return "1 hour ago"
+		}
+		return fmt.Sprintf("%d hours ago", hours)
+	}
+	
+	days := int(dur.Hours() / 24)
+	if days == 1 {
+		return "1 day ago"
+	}
+	if days < 7 {
+		return fmt.Sprintf("%d days ago", days)
+	}
+	
+	return t.Format("Jan 2")
+}

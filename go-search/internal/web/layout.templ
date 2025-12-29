@@ -1,13 +1,22 @@
 package web
 
+// LayoutData holds common layout data.
+type LayoutData struct {
+	Title        string
+	CurrentPath  string
+	HealthStatus string // healthy, degraded, unhealthy
+	Version      string
+	QdrantURL    string
+}
+
 // Layout is the base HTML layout for all pages.
-templ Layout(title string) {
+templ Layout(data LayoutData) {
 	<!DOCTYPE html>
 	<html lang="en" class="h-full bg-gray-50">
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-			<title>{ title } - Rice Search</title>
+			<title>{ data.Title } - Rice Search</title>
 			<!-- Tailwind CSS via CDN -->
 			<script src="https://cdn.tailwindcss.com"></script>
 			<!-- HTMX -->
@@ -41,34 +50,102 @@ templ Layout(title string) {
 					from { opacity: 0; transform: translateY(-4px); }
 					to { opacity: 1; transform: translateY(0); }
 				}
+				/* Dropdown animation */
+				.dropdown-content {
+					display: none;
+				}
+				.dropdown:hover .dropdown-content {
+					display: block;
+				}
 			</style>
 		</head>
 		<body class="h-full" hx-boost="true">
 			<div class="min-h-full">
 				<!-- Navigation -->
-				<nav class="bg-white border-b border-gray-200">
+				<nav class="bg-white border-b border-gray-200 shadow-sm">
 					<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 						<div class="flex h-16 justify-between">
 							<div class="flex">
-								<div class="flex flex-shrink-0 items-center">
-									<a href="/" class="text-xl font-bold text-gray-900">
-										Rice Search
+									<div class="flex flex-shrink-0 items-center">
+									<a href="/" class="text-xl font-bold text-gray-900 flex items-center gap-2">
+										<span class="text-2xl">🔍</span>
+										<span>Rice Search</span>
 									</a>
 								</div>
 								<div class="hidden sm:ml-8 sm:flex sm:space-x-8">
-									<a href="/" class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
-										Search
-									</a>
-									<a href="/admin" class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
-										Stores
-									</a>
-									<a href="/stats" class="inline-flex items-center border-b-2 border-transparent px-1 pt-1 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
-										Stats
-									</a>
+								<a 
+									href="/" 
+									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/") }
+								>
+									Dashboard
+								</a>
+								<a 
+									href="/search" 
+									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/search") }
+								>
+									Search
+								</a>
+								<a 
+									href="/stores" 
+									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/stores") }
+								>
+									Stores
+								</a>
+								<a 
+									href="/files" 
+									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/files") }
+								>
+									Files
+								</a>
+								<!-- Admin Dropdown -->
+								<div class="relative dropdown">
+									<button class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/admin") }>
+										Admin
+										<svg class="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+										</svg>
+									</button>
+									<div class="dropdown-content absolute left-0 mt-2 w-48 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+										<div class="py-1">
+											<a href="/admin/models" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Models</a>
+											<a href="/admin/mappers" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Mappers</a>
+											<a href="/admin/connections" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Connections</a>
+											<a href="/admin/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
+										</div>
+									</div>
 								</div>
+								<a 
+									href="/stats" 
+									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/stats") }
+								>
+									Stats
+								</a>
 							</div>
-							<div class="flex items-center">
-								<span class="text-sm text-gray-400">Go Edition</span>
+						</div>
+							<div class="flex items-center gap-4">
+								<!-- Health Indicator -->
+								<div class="flex items-center gap-2">
+									@HealthDot(data.HealthStatus)
+									<span class="text-sm text-gray-600">{ healthLabel(data.HealthStatus) }</span>
+								</div>
+								<!-- Version -->
+								if data.Version != "" {
+									<span class="text-sm text-gray-400">{ data.Version }</span>
+								}
+								<!-- Qdrant Link -->
+								if data.QdrantURL != "" {
+									<a 
+										href={ templ.URL(data.QdrantURL + "/dashboard") } 
+										target="_blank"
+										rel="noopener noreferrer"
+										class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+									>
+										Qdrant
+										<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
+										</svg>
+									</a>
+								}
 							</div>
 						</div>
 					</div>
@@ -81,6 +158,28 @@ templ Layout(title string) {
 			</div>
 		</body>
 	</html>
+}
+
+// navLinkClass returns the appropriate classes for navigation links.
+func navLinkClass(currentPath, linkPath string) string {
+	if currentPath == linkPath || (currentPath == "/" && linkPath == "/dashboard") {
+		return "border-blue-500 text-gray-900"
+	}
+	return "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+}
+
+// healthLabel returns a human-readable label for health status.
+func healthLabel(status string) string {
+	switch status {
+	case "healthy":
+		return "Healthy"
+	case "degraded":
+		return "Degraded"
+	case "unhealthy":
+		return "Unhealthy"
+	default:
+		return "Unknown"
+	}
 }
 
 // Loading indicator component

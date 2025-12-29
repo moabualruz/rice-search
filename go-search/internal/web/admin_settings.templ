@@ -1,0 +1,346 @@
+package web
+
+import "fmt"
+
+// SettingsPageData holds data for the admin settings page
+type SettingsPageData struct {
+	Layout  LayoutData
+	Config  RuntimeConfig
+	Error   string
+	Success string
+}
+
+// RuntimeConfig represents all configurable runtime settings
+type RuntimeConfig struct {
+	// Server settings
+	ServerHost string
+	ServerPort int
+	LogLevel   string
+	LogFormat  string
+
+	// ML Settings
+	EmbedModel    string
+	RerankModel   string
+	QueryModel    string
+	EmbedGPU      bool
+	RerankGPU     bool
+	QueryGPU      bool
+	QueryEnabled  bool
+	BatchSize     int
+	MaxConcurrent int
+
+	// Qdrant Settings
+	QdrantURL        string
+	QdrantCollection string
+	QdrantTimeout    int
+
+	// Search Settings
+	DefaultTopK         int
+	DefaultRerank       bool
+	DefaultDedup        bool
+	DefaultDiversity    bool
+	DedupThreshold      float32
+	DiversityLambda     float32
+	RerankCandidates    int
+	MaxChunksPerFile    int
+	SparseWeight        float32
+	DenseWeight         float32
+
+	// Index Settings
+	ChunkSize        int
+	ChunkOverlap     int
+	MaxFileSize      int64
+	ExcludePatterns  string
+	SupportedLangs   string
+
+	// Connection Settings
+	ConnectionEnabled  bool
+	MaxInactiveHours   int
+}
+
+// AdminSettingsPage renders the settings management page
+templ AdminSettingsPage(data SettingsPageData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Header -->
+			<div class="mb-8">
+				<h1 class="text-2xl font-semibold text-gray-900">Settings</h1>
+				<p class="mt-2 text-sm text-gray-700">
+					Configure runtime settings for Rice Search.
+				</p>
+			</div>
+
+			<!-- Messages -->
+			<div id="settings-messages" class="mb-6">
+				if data.Error != "" {
+					@ErrorMessage(data.Error)
+				}
+				if data.Success != "" {
+					@SuccessMessage(data.Success)
+				}
+			</div>
+
+			<form
+				hx-post="/admin/settings"
+				hx-target="#settings-messages"
+				hx-swap="innerHTML"
+				class="space-y-8"
+			>
+				<!-- Server Settings -->
+				@SettingsSection("Server", "server") {
+					<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+						@TextInput("Server Host", "server_host", data.Config.ServerHost, "0.0.0.0")
+						@NumberInput("Server Port", "server_port", data.Config.ServerPort, 8080)
+						@SelectInput("Log Level", "log_level", data.Config.LogLevel, []SelectOption{
+							{Value: "debug", Label: "Debug"},
+							{Value: "info", Label: "Info"},
+							{Value: "warn", Label: "Warning"},
+							{Value: "error", Label: "Error"},
+						})
+						@SelectInput("Log Format", "log_format", data.Config.LogFormat, []SelectOption{
+							{Value: "text", Label: "Text"},
+							{Value: "json", Label: "JSON"},
+						})
+					</div>
+				}
+
+				<!-- ML Settings -->
+				@SettingsSection("Machine Learning", "ml") {
+					<div class="space-y-6">
+						<!-- Model Selection -->
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+							@TextInput("Embed Model", "embed_model", data.Config.EmbedModel, "jinaai/jina-embeddings-v2-base-code")
+							@TextInput("Rerank Model", "rerank_model", data.Config.RerankModel, "jinaai/jina-reranker-v2-base-multilingual")
+							@TextInput("Query Model", "query_model", data.Config.QueryModel, "Salesforce/codet5p-110m-embedding")
+						</div>
+
+						<!-- GPU Toggles -->
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-4">
+							@ToggleInput("Embed GPU", "embed_gpu", data.Config.EmbedGPU)
+							@ToggleInput("Rerank GPU", "rerank_gpu", data.Config.RerankGPU)
+							@ToggleInput("Query GPU", "query_gpu", data.Config.QueryGPU)
+							@ToggleInput("Query Enabled", "query_enabled", data.Config.QueryEnabled)
+						</div>
+
+						<!-- Batch Settings -->
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+							@NumberInput("Batch Size", "batch_size", data.Config.BatchSize, 32)
+							@NumberInput("Max Concurrent", "max_concurrent", data.Config.MaxConcurrent, 4)
+						</div>
+					</div>
+				}
+
+				<!-- Qdrant Settings -->
+				@SettingsSection("Qdrant", "qdrant") {
+					<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+						@TextInput("Qdrant URL", "qdrant_url", data.Config.QdrantURL, "http://localhost:6333")
+						@TextInput("Collection", "qdrant_collection", data.Config.QdrantCollection, "rice_search")
+						@NumberInput("Timeout (ms)", "qdrant_timeout", data.Config.QdrantTimeout, 30000)
+					</div>
+				}
+
+				<!-- Search Settings -->
+				@SettingsSection("Search Defaults", "search") {
+					<div class="space-y-6">
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+							@NumberInput("Default Top K", "default_top_k", data.Config.DefaultTopK, 20)
+							@NumberInput("Rerank Candidates", "rerank_candidates", data.Config.RerankCandidates, 50)
+							@NumberInput("Max Chunks/File", "max_chunks_per_file", data.Config.MaxChunksPerFile, 5)
+						</div>
+
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-4">
+							@ToggleInput("Default Rerank", "default_rerank", data.Config.DefaultRerank)
+							@ToggleInput("Default Dedup", "default_dedup", data.Config.DefaultDedup)
+							@ToggleInput("Default Diversity", "default_diversity", data.Config.DefaultDiversity)
+						</div>
+
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-4">
+							@RangeInput("Sparse Weight", "sparse_weight", data.Config.SparseWeight, 0, 1, 0.1)
+							@RangeInput("Dense Weight", "dense_weight", data.Config.DenseWeight, 0, 1, 0.1)
+							@RangeInput("Dedup Threshold", "dedup_threshold", data.Config.DedupThreshold, 0, 1, 0.05)
+							@RangeInput("Diversity Lambda", "diversity_lambda", data.Config.DiversityLambda, 0, 1, 0.1)
+						</div>
+					</div>
+				}
+
+				<!-- Index Settings -->
+				@SettingsSection("Indexing", "index") {
+					<div class="space-y-6">
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+							@NumberInput("Chunk Size", "chunk_size", data.Config.ChunkSize, 512)
+							@NumberInput("Chunk Overlap", "chunk_overlap", data.Config.ChunkOverlap, 128)
+							@NumberInput("Max File Size (MB)", "max_file_size", int(data.Config.MaxFileSize/1024/1024), 10)
+						</div>
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+							@TextInput("Exclude Patterns", "exclude_patterns", data.Config.ExcludePatterns, "node_modules,vendor,.git")
+							@TextInput("Supported Languages", "supported_langs", data.Config.SupportedLangs, "go,python,javascript,typescript,rust")
+						</div>
+					</div>
+				}
+
+				<!-- Connection Settings -->
+				@SettingsSection("Connections", "connections") {
+					<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+						@ToggleInput("Enable Tracking", "connection_enabled", data.Config.ConnectionEnabled)
+						@NumberInput("Max Inactive (hours)", "max_inactive_hours", data.Config.MaxInactiveHours, 168)
+					</div>
+				}
+
+				<!-- Submit -->
+				<div class="flex justify-end gap-4 pt-6 border-t border-gray-200">
+					<button
+						type="button"
+						hx-get="/admin/settings"
+						hx-target="closest form"
+						hx-swap="outerHTML"
+						class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50"
+					>
+						Reset
+					</button>
+					<button
+						type="submit"
+						class="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+					>
+						Save Settings
+					</button>
+				</div>
+			</form>
+		</div>
+	}
+}
+
+// SelectOption represents an option for select inputs
+type SelectOption struct {
+	Value string
+	Label string
+}
+
+// SettingsSection renders a collapsible settings section
+templ SettingsSection(title, id string) {
+	<div class="bg-white shadow sm:rounded-lg overflow-hidden">
+		<div class="px-4 py-5 sm:p-6">
+			<h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">{ title }</h3>
+			{ children... }
+		</div>
+	</div>
+}
+
+// TextInput renders a text input field
+templ TextInput(label, name, value, placeholder string) {
+	<div>
+		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+		<input
+			type="text"
+			name={ name }
+			id={ name }
+			value={ value }
+			placeholder={ placeholder }
+			class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+		/>
+	</div>
+}
+
+// NumberInput renders a number input field
+templ NumberInput(label, name string, value, defaultVal int) {
+	<div>
+		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+		<input
+			type="number"
+			name={ name }
+			id={ name }
+			value={ intToStr(value, defaultVal) }
+			class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+		/>
+	</div>
+}
+
+// ToggleInput renders a toggle switch
+templ ToggleInput(label, name string, checked bool) {
+	<div class="flex items-center justify-between">
+		<span class="text-sm font-medium text-gray-700">{ label }</span>
+		<button
+			type="button"
+			role="switch"
+			aria-checked={ boolToStr(checked) }
+			onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); this.nextElementSibling.value = this.getAttribute('aria-checked');"
+			class={ "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2", toggleBgClass(checked) }
+		>
+			<span
+				class={ "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out", toggleKnobClass(checked) }
+			></span>
+		</button>
+		<input type="hidden" name={ name } value={ boolToStr(checked) }/>
+	</div>
+}
+
+// SelectInput renders a select dropdown
+templ SelectInput(label, name, value string, options []SelectOption) {
+	<div>
+		<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+		<select
+			name={ name }
+			id={ name }
+			class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+		>
+			for _, opt := range options {
+				<option value={ opt.Value } selected?={ value == opt.Value }>{ opt.Label }</option>
+			}
+		</select>
+	</div>
+}
+
+// RangeInput renders a range slider with value display
+templ RangeInput(label, name string, value float32, min, max, step float64) {
+	<div>
+		<div class="flex justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700">{ label }</label>
+			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+		</div>
+		<input
+			type="range"
+			name={ name }
+			id={ name }
+			value={ floatToStr(value) }
+			min={ floatToStr(float32(min)) }
+			max={ floatToStr(float32(max)) }
+			step={ floatToStr(float32(step)) }
+			oninput="document.getElementById(this.dataset.target).textContent = this.value"
+			data-target={ name + "_value" }
+			class="mt-1 block w-full"
+		/>
+	</div>
+}
+
+// Helper functions
+
+func intToStr(val, defaultVal int) string {
+	if val == 0 {
+		return fmt.Sprint(defaultVal)
+	}
+	return fmt.Sprint(val)
+}
+
+func boolToStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func floatToStr(f float32) string {
+	return fmt.Sprintf("%.2f", f)
+}
+
+func toggleBgClass(checked bool) string {
+	if checked {
+		return "bg-blue-600"
+	}
+	return "bg-gray-200"
+}
+
+func toggleKnobClass(checked bool) string {
+	if checked {
+		return "translate-x-5"
+	}
+	return "translate-x-0"
+}

@@ -1,0 +1,487 @@
+package web
+
+import (
+	"fmt"
+	"time"
+)
+
+// FilesPageData holds data for the files browser page
+type FilesPageData struct {
+	Layout      LayoutData
+	Store       string
+	Files       []IndexedFileInfo
+	Total       int
+	Page        int
+	PageSize    int
+	TotalPages  int
+	Filters     FileFilters
+	Error       string
+}
+
+// IndexedFileInfo represents an indexed file
+type IndexedFileInfo struct {
+	Path           string
+	Language       string
+	Size           int64
+	ChunkCount     int
+	ConnectionID   string
+	ConnectionName string
+	IndexedAt      time.Time
+	Status         string // indexed, pending, error
+	Hash           string
+}
+
+// FileFilters holds filter criteria for files
+type FileFilters struct {
+	Store        string
+	PathPrefix   string
+	Language     string
+	ConnectionID string
+	Status       string
+	SortBy       string
+	SortOrder    string
+}
+
+// FilesPage renders the files browser page
+templ FilesPage(data FilesPageData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Header -->
+			<div class="mb-8">
+				<nav class="flex mb-4" aria-label="Breadcrumb">
+					<ol class="flex items-center space-x-2 text-sm">
+						<li>
+							<a href="/stores" class="text-gray-500 hover:text-gray-700">Stores</a>
+						</li>
+						if data.Store != "" {
+							<li>
+								<svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+									<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+								</svg>
+							</li>
+							<li>
+								<a href={ templ.URL(fmt.Sprintf("/stores/%s", data.Store)) } class="text-gray-500 hover:text-gray-700">{ data.Store }</a>
+							</li>
+						}
+						<li>
+							<svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+								<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
+							</svg>
+						</li>
+						<li class="text-gray-900 font-medium">Files</li>
+					</ol>
+				</nav>
+				
+				<div class="sm:flex sm:items-center sm:justify-between">
+					<div>
+						<h1 class="text-3xl font-bold text-gray-900">Indexed Files</h1>
+						<p class="mt-2 text-gray-600">
+							Browse and manage files in 
+							if data.Store != "" {
+								<span class="font-medium">{ data.Store }</span>
+							} else {
+								<span>all stores</span>
+							}
+						</p>
+					</div>
+					<div class="mt-4 sm:mt-0 flex gap-2">
+						<button
+							onclick="document.getElementById('export-modal').classList.remove('hidden')"
+							class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+						>
+							<svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+							</svg>
+							Export
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Error message -->
+			if data.Error != "" {
+				<div class="mb-6">
+					@ErrorMessage(data.Error)
+				</div>
+			}
+
+			<!-- Filters -->
+			<div class="bg-white shadow rounded-lg mb-6">
+				<div class="px-6 py-4">
+					@FilesFilters(data.Filters)
+				</div>
+			</div>
+
+			<!-- Results header -->
+			<div class="mb-4 flex items-center justify-between">
+				<p class="text-sm text-gray-600">
+					Showing <span class="font-semibold">{ fmt.Sprint((data.Page-1)*data.PageSize + 1) }</span> to 
+					<span class="font-semibold">{ fmt.Sprint(min(data.Page*data.PageSize, data.Total)) }</span> of 
+					<span class="font-semibold">{ fmt.Sprint(data.Total) }</span> files
+				</p>
+				<div class="flex items-center gap-2">
+					<label for="page-size" class="text-sm text-gray-600">Per page:</label>
+					<select
+						id="page-size"
+						name="page_size"
+						hx-get={ getCurrentPath() }
+						hx-include="[name='path_prefix'], [name='language'], [name='connection_id'], [name='status'], [name='sort_by'], [name='sort_order']"
+						hx-target="#files-table-container"
+						class="rounded border-gray-300 text-sm py-1 px-2"
+					>
+						<option value="25" selected?={ data.PageSize == 25 }>25</option>
+						<option value="50" selected?={ data.PageSize == 50 }>50</option>
+						<option value="100" selected?={ data.PageSize == 100 }>100</option>
+					</select>
+				</div>
+			</div>
+
+			<!-- Files table -->
+			<div id="files-table-container">
+				@FilesTable(data)
+			</div>
+
+			<!-- Pagination -->
+			if data.TotalPages > 1 {
+				<div class="mt-6">
+					@FilesPagination(data.Page, data.TotalPages)
+				</div>
+			}
+
+			<!-- Export Modal -->
+			@ExportModal()
+		</div>
+	}
+}
+
+// FilesFilters renders the filter form
+templ FilesFilters(filters FileFilters) {
+	<form
+		hx-get={ getCurrentPath() }
+		hx-target="#files-table-container"
+		hx-trigger="change from:select, submit"
+		class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5"
+	>
+		<!-- Path prefix -->
+		<div>
+			<label for="path_prefix" class="block text-sm font-medium text-gray-700">Path</label>
+			<input
+				type="text"
+				id="path_prefix"
+				name="path_prefix"
+				value={ filters.PathPrefix }
+				placeholder="src/"
+				class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+			/>
+		</div>
+
+		<!-- Language -->
+		<div>
+			<label for="language" class="block text-sm font-medium text-gray-700">Language</label>
+			<select
+				id="language"
+				name="language"
+				class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+			>
+				<option value="">All Languages</option>
+				<option value="typescript" selected?={ filters.Language == "typescript" }>TypeScript</option>
+				<option value="javascript" selected?={ filters.Language == "javascript" }>JavaScript</option>
+				<option value="python" selected?={ filters.Language == "python" }>Python</option>
+				<option value="go" selected?={ filters.Language == "go" }>Go</option>
+				<option value="rust" selected?={ filters.Language == "rust" }>Rust</option>
+				<option value="java" selected?={ filters.Language == "java" }>Java</option>
+			</select>
+		</div>
+
+		<!-- Status -->
+		<div>
+			<label for="status" class="block text-sm font-medium text-gray-700">Status</label>
+			<select
+				id="status"
+				name="status"
+				class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+			>
+				<option value="">All Status</option>
+				<option value="indexed" selected?={ filters.Status == "indexed" }>Indexed</option>
+				<option value="pending" selected?={ filters.Status == "pending" }>Pending</option>
+				<option value="error" selected?={ filters.Status == "error" }>Error</option>
+			</select>
+		</div>
+
+		<!-- Sort by -->
+		<div>
+			<label for="sort_by" class="block text-sm font-medium text-gray-700">Sort by</label>
+			<select
+				id="sort_by"
+				name="sort_by"
+				class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+			>
+				<option value="path" selected?={ filters.SortBy == "path" }>Path</option>
+				<option value="size" selected?={ filters.SortBy == "size" }>Size</option>
+				<option value="indexed_at" selected?={ filters.SortBy == "indexed_at" }>Indexed At</option>
+			</select>
+		</div>
+
+		<!-- Sort order -->
+		<div>
+			<label for="sort_order" class="block text-sm font-medium text-gray-700">Order</label>
+			<select
+				id="sort_order"
+				name="sort_order"
+				class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm py-2 px-3 border"
+			>
+				<option value="asc" selected?={ filters.SortOrder == "asc" }>Ascending</option>
+				<option value="desc" selected?={ filters.SortOrder == "desc" }>Descending</option>
+			</select>
+		</div>
+
+		<!-- Hidden page size -->
+		<input type="hidden" name="page_size" value="50"/>
+	</form>
+}
+
+// FilesTable renders the files table
+templ FilesTable(data FilesPageData) {
+	<div class="bg-white shadow rounded-lg overflow-hidden">
+		if len(data.Files) == 0 {
+			<div class="px-6 py-12 text-center">
+				@EmptyState("No files found", "Try adjusting your filters")
+			</div>
+		} else {
+			<table class="min-w-full divide-y divide-gray-200">
+				<thead class="bg-gray-50">
+					<tr>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							<input type="checkbox" id="select-all" class="rounded border-gray-300 text-blue-600 focus:ring-blue-500"/>
+						</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							Path
+						</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							Language
+						</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							Size
+						</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							Chunks
+						</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							Connection
+						</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							Indexed
+						</th>
+						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+							Status
+						</th>
+						<th scope="col" class="relative px-6 py-3">
+							<span class="sr-only">Actions</span>
+						</th>
+					</tr>
+				</thead>
+				<tbody class="bg-white divide-y divide-gray-200">
+					for _, file := range data.Files {
+						@FileRow(file)
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+}
+
+// FileRow renders a single file row
+templ FileRow(file IndexedFileInfo) {
+	<tr class="hover:bg-gray-50">
+		<td class="px-6 py-4 whitespace-nowrap">
+			<input type="checkbox" class="file-checkbox rounded border-gray-300 text-blue-600 focus:ring-blue-500" value={ file.Path }/>
+		</td>
+		<td class="px-6 py-4">
+			<div class="text-sm font-medium text-gray-900 font-mono">{ file.Path }</div>
+			<div class="text-xs text-gray-500 font-mono">{ file.Hash[:16] }...</div>
+		</td>
+		<td class="px-6 py-4 whitespace-nowrap">
+			<span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800">
+				{ file.Language }
+			</span>
+		</td>
+		<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+			{ formatBytes(file.Size) }
+		</td>
+		<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+			{ fmt.Sprint(file.ChunkCount) }
+		</td>
+		<td class="px-6 py-4 whitespace-nowrap">
+			<div class="text-sm text-gray-900">{ file.ConnectionName }</div>
+			<div class="text-xs text-gray-500 font-mono">{ file.ConnectionID[:12] }...</div>
+		</td>
+		<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+			{ formatRelativeTime(file.IndexedAt) }
+		</td>
+		<td class="px-6 py-4 whitespace-nowrap">
+			if file.Status == "indexed" {
+				<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
+					Indexed
+				</span>
+			} else if file.Status == "pending" {
+				<span class="inline-flex items-center rounded-full bg-yellow-100 px-2.5 py-0.5 text-xs font-medium text-yellow-800">
+					Pending
+				</span>
+			} else if file.Status == "error" {
+				<span class="inline-flex items-center rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-medium text-red-800">
+					Error
+				</span>
+			}
+		</td>
+		<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+			<button
+				class="text-blue-600 hover:text-blue-900 mr-3"
+				title="View details"
+			>
+				View
+			</button>
+			<button
+				hx-delete={ fmt.Sprintf("/files/%s", file.Path) }
+				hx-confirm={ fmt.Sprintf("Delete %s? This cannot be undone.", file.Path) }
+				class="text-red-600 hover:text-red-900"
+				title="Delete file"
+			>
+				Delete
+			</button>
+		</td>
+	</tr>
+}
+
+// FilesPagination renders pagination controls for the files page
+templ FilesPagination(currentPage, totalPages int) {
+	<nav class="flex items-center justify-between border-t border-gray-200 bg-white px-4 py-3 sm:px-6 rounded-lg shadow">
+		<div class="flex flex-1 justify-between sm:hidden">
+			if currentPage > 1 {
+				<a
+					href={ templ.URL(fmt.Sprintf("?page=%d", currentPage-1)) }
+					class="relative inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+				>
+					Previous
+				</a>
+			}
+			if currentPage < totalPages {
+				<a
+					href={ templ.URL(fmt.Sprintf("?page=%d", currentPage+1)) }
+					class="relative ml-3 inline-flex items-center rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+				>
+					Next
+				</a>
+			}
+		</div>
+		<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+			<div>
+				<p class="text-sm text-gray-700">
+					Page <span class="font-medium">{ fmt.Sprint(currentPage) }</span> of <span class="font-medium">{ fmt.Sprint(totalPages) }</span>
+				</p>
+			</div>
+			<div>
+				<nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+					<!-- Previous button -->
+					if currentPage > 1 {
+						<a
+							href={ templ.URL(fmt.Sprintf("?page=%d", currentPage-1)) }
+							class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+						>
+							<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd"/>
+							</svg>
+						</a>
+					}
+
+					<!-- Page numbers -->
+					for i := 1; i <= totalPages; i++ {
+						if i == currentPage {
+							<span class="relative z-10 inline-flex items-center bg-blue-600 px-4 py-2 text-sm font-semibold text-white">
+								{ fmt.Sprint(i) }
+							</span>
+						} else if i == 1 || i == totalPages || (i >= currentPage-2 && i <= currentPage+2) {
+							<a
+								href={ templ.URL(fmt.Sprintf("?page=%d", i)) }
+								class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+							>
+								{ fmt.Sprint(i) }
+							</a>
+						} else if i == currentPage-3 || i == currentPage+3 {
+							<span class="relative inline-flex items-center px-4 py-2 text-sm font-semibold text-gray-700 ring-1 ring-inset ring-gray-300">
+								...
+							</span>
+						}
+					}
+
+					<!-- Next button -->
+					if currentPage < totalPages {
+						<a
+							href={ templ.URL(fmt.Sprintf("?page=%d", currentPage+1)) }
+							class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+						>
+							<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+								<path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd"/>
+							</svg>
+						</a>
+					}
+				</nav>
+			</div>
+		</div>
+	</nav>
+}
+
+// ExportModal renders the export modal
+templ ExportModal() {
+	<div id="export-modal" class="hidden relative z-10" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+		<div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+		<div class="fixed inset-0 z-10 overflow-y-auto">
+			<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+				<div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+					<div>
+						<h3 class="text-lg font-medium leading-6 text-gray-900" id="modal-title">Export Files</h3>
+						<div class="mt-4">
+							<p class="text-sm text-gray-500">Export the current file list to CSV format.</p>
+							<div class="mt-4 space-y-2">
+								<button
+									class="w-full inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
+								>
+									<svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+									</svg>
+									Export Current Page
+								</button>
+								<button
+									class="w-full inline-flex justify-center items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
+								>
+									Export All Files
+								</button>
+							</div>
+						</div>
+					</div>
+					<div class="mt-5">
+						<button
+							type="button"
+							onclick="document.getElementById('export-modal').classList.add('hidden')"
+							class="w-full inline-flex justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+						>
+							Cancel
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// Helper functions
+
+func getCurrentPath() string {
+	return "" // Will be replaced with actual path in handler
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

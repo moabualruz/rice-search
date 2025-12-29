@@ -62,6 +62,28 @@ service RiceSearch {
   
   // Version returns version information.
   rpc Version(VersionRequest) returns (VersionResponse);
+  
+  // Connection Management
+  rpc RegisterConnection(RegisterConnectionRequest) returns (Connection);
+  rpc ListConnections(ListConnectionsRequest) returns (ListConnectionsResponse);
+  rpc GetConnection(GetConnectionRequest) returns (Connection);
+  rpc DeleteConnection(DeleteConnectionRequest) returns (DeleteConnectionResponse);
+  
+  // Model Management
+  rpc ListModels(ListModelsRequest) returns (ListModelsResponse);
+  rpc DownloadModel(DownloadModelRequest) returns (DownloadModelResponse);
+  rpc SetDefaultModel(SetDefaultModelRequest) returns (ModelInfo);
+  rpc ToggleGPU(ToggleGPURequest) returns (ModelInfo);
+  
+  // Model Mapper Management
+  rpc ListMappers(ListMappersRequest) returns (ListMappersResponse);
+  rpc CreateMapper(CreateMapperRequest) returns (ModelMapper);
+  rpc UpdateMapper(UpdateMapperRequest) returns (ModelMapper);
+  rpc DeleteMapper(DeleteMapperRequest) returns (DeleteMapperResponse);
+  rpc GenerateMapper(GenerateMapperRequest) returns (ModelMapper);
+  
+  // File Browser
+  rpc ListFiles(ListFilesRequest) returns (ListFilesResponse);
 }
 
 // =============================================================================
@@ -95,6 +117,9 @@ message SearchRequest {
   
   // DenseWeight overrides the dense weight (0-1).
   optional float dense_weight = 9;
+  
+  // ConnectionID filters results by connection.
+  string connection_id = 10;
 }
 
 message SearchFilter {
@@ -184,6 +209,9 @@ message IndexRequest {
   
   // Force re-indexes even if unchanged.
   bool force = 3;
+  
+  // ConnectionID tracks the source connection.
+  string connection_id = 4;
 }
 
 message IndexBatchRequest {
@@ -454,4 +482,351 @@ message VersionResponse {
   
   // GoVersion is the Go version used.
   string go_version = 4;
+}
+
+// =============================================================================
+// Connection Management Messages
+// =============================================================================
+
+message Connection {
+  // ID is the unique connection identifier.
+  string id = 1;
+  
+  // Name is a user-friendly connection name.
+  string name = 2;
+  
+  // PCInfo contains PC information.
+  PCInfo pc_info = 3;
+  
+  // StoreAccess lists stores this connection can access.
+  repeated string store_access = 4;
+  
+  // CreatedAt is when the connection was created.
+  google.protobuf.Timestamp created_at = 5;
+  
+  // LastSeenAt is when the connection was last active.
+  google.protobuf.Timestamp last_seen_at = 6;
+  
+  // LastIP is the last IP address used.
+  string last_ip = 7;
+  
+  // IndexedFiles is the number of files indexed by this connection.
+  int64 indexed_files = 8;
+  
+  // SearchCount is the number of searches performed.
+  int64 search_count = 9;
+  
+  // IsActive indicates if the connection is currently active.
+  bool is_active = 10;
+}
+
+message PCInfo {
+  // Hostname is the computer name.
+  string hostname = 1;
+  
+  // OS is the operating system.
+  string os = 2;
+  
+  // Arch is the CPU architecture.
+  string arch = 3;
+  
+  // MACAddress is the MAC address (optional).
+  string mac_address = 4;
+  
+  // Username is the OS username (optional).
+  string username = 5;
+}
+
+message RegisterConnectionRequest {
+  // Name is a user-friendly connection name.
+  string name = 1;
+  
+  // PCInfo contains PC information.
+  PCInfo pc_info = 2;
+}
+
+message ListConnectionsRequest {
+  // StoreFilter filters by store access (optional).
+  string store_filter = 1;
+  
+  // ActiveOnly filters to only active connections.
+  bool active_only = 2;
+}
+
+message ListConnectionsResponse {
+  // Connections is the list of connections.
+  repeated Connection connections = 1;
+}
+
+message GetConnectionRequest {
+  // ID is the connection identifier.
+  string id = 1;
+}
+
+message DeleteConnectionRequest {
+  // ID is the connection identifier.
+  string id = 1;
+}
+
+message DeleteConnectionResponse {
+  // Success indicates if deletion was successful.
+  bool success = 1;
+}
+
+// =============================================================================
+// Model Management Messages
+// =============================================================================
+
+message ModelInfo {
+  // ID is the model identifier.
+  string id = 1;
+  
+  // Type is the model type (embed, rerank, query_understand).
+  string type = 2;
+  
+  // DisplayName is a human-friendly name.
+  string display_name = 3;
+  
+  // Description describes the model.
+  string description = 4;
+  
+  // OutputDim is the output dimension (for embeddings).
+  int32 output_dim = 5;
+  
+  // MaxTokens is the maximum token count.
+  int32 max_tokens = 6;
+  
+  // Downloaded indicates if the model is downloaded.
+  bool downloaded = 7;
+  
+  // IsDefault indicates if this is the default model for its type.
+  bool is_default = 8;
+  
+  // GPUEnabled indicates if GPU acceleration is enabled.
+  bool gpu_enabled = 9;
+  
+  // Size is the model size in bytes.
+  int64 size = 10;
+}
+
+message ListModelsRequest {
+  // TypeFilter filters by model type (optional).
+  string type_filter = 1;
+}
+
+message ListModelsResponse {
+  // Models is the list of available models.
+  repeated ModelInfo models = 1;
+}
+
+message DownloadModelRequest {
+  // ModelID is the model to download.
+  string model_id = 1;
+}
+
+message DownloadModelResponse {
+  // Success indicates if download was successful.
+  bool success = 1;
+  
+  // Message contains status or error message.
+  string message = 2;
+  
+  // Progress is the download progress (0-100).
+  int32 progress = 3;
+}
+
+message SetDefaultModelRequest {
+  // ModelType is the model type (embed, rerank, query_understand).
+  string model_type = 1;
+  
+  // ModelID is the model to set as default.
+  string model_id = 2;
+}
+
+message ToggleGPURequest {
+  // ModelID is the model to toggle GPU for.
+  string model_id = 1;
+  
+  // Enabled indicates if GPU should be enabled.
+  bool enabled = 2;
+}
+
+// =============================================================================
+// Model Mapper Messages
+// =============================================================================
+
+message ModelMapper {
+  // ID is the mapper identifier.
+  string id = 1;
+  
+  // Name is a human-friendly mapper name.
+  string name = 2;
+  
+  // ModelID is the target model.
+  string model_id = 3;
+  
+  // Type is the mapper type.
+  string type = 4;
+  
+  // PromptTemplate is the prompt template (optional).
+  string prompt_template = 5;
+  
+  // InputMapping maps input fields.
+  map<string, string> input_mapping = 6;
+  
+  // OutputMapping maps output fields.
+  map<string, string> output_mapping = 7;
+  
+  // CreatedAt is when the mapper was created.
+  google.protobuf.Timestamp created_at = 8;
+  
+  // UpdatedAt is when the mapper was last updated.
+  google.protobuf.Timestamp updated_at = 9;
+}
+
+message ListMappersRequest {}
+
+message ListMappersResponse {
+  // Mappers is the list of model mappers.
+  repeated ModelMapper mappers = 1;
+}
+
+message CreateMapperRequest {
+  // Mapper is the mapper to create.
+  ModelMapper mapper = 1;
+}
+
+message UpdateMapperRequest {
+  // Mapper is the mapper to update.
+  ModelMapper mapper = 1;
+}
+
+message DeleteMapperRequest {
+  // ID is the mapper identifier.
+  string id = 1;
+}
+
+message DeleteMapperResponse {
+  // Success indicates if deletion was successful.
+  bool success = 1;
+}
+
+message GenerateMapperRequest {
+  // ModelID is the model to generate mapper for.
+  string model_id = 1;
+  
+  // Type is the mapper type to generate.
+  string type = 2;
+}
+
+// =============================================================================
+// File Browser Messages
+// =============================================================================
+
+message IndexedFile {
+  // Path is the file path.
+  string path = 1;
+  
+  // Language is the programming language.
+  string language = 2;
+  
+  // Size is the file size in bytes.
+  int64 size = 3;
+  
+  // Hash is the content hash.
+  string hash = 4;
+  
+  // ChunkCount is the number of chunks.
+  int32 chunk_count = 5;
+  
+  // ConnectionID is the source connection.
+  string connection_id = 6;
+  
+  // IndexedAt is when the file was indexed.
+  google.protobuf.Timestamp indexed_at = 7;
+  
+  // Status is the indexing status (indexed, pending, error).
+  string status = 8;
+}
+
+message ListFilesRequest {
+  // Store is the target store.
+  string store = 1;
+  
+  // PathPrefix filters by path prefix (optional).
+  string path_prefix = 2;
+  
+  // Language filters by language (optional).
+  string language = 3;
+  
+  // ConnectionID filters by connection (optional).
+  string connection_id = 4;
+  
+  // Status filters by status (optional).
+  string status = 5;
+  
+  // Page is the page number (1-indexed).
+  int32 page = 6;
+  
+  // PageSize is the number of results per page.
+  int32 page_size = 7;
+  
+  // SortBy is the field to sort by (path, size, indexed_at).
+  string sort_by = 8;
+  
+  // SortOrder is the sort order (asc, desc).
+  string sort_order = 9;
+}
+
+message ListFilesResponse {
+  // Files is the list of indexed files.
+  repeated IndexedFile files = 1;
+  
+  // Total is the total number of files.
+  int32 total = 2;
+  
+  // Page is the current page number.
+  int32 page = 3;
+  
+  // PageSize is the page size.
+  int32 page_size = 4;
+  
+  // TotalPages is the total number of pages.
+  int32 total_pages = 5;
+}
+
+// =============================================================================
+// Query Understanding Messages
+// =============================================================================
+
+message ParsedQuery {
+  // Original is the original query text.
+  string original = 1;
+  
+  // Normalized is the normalized query.
+  string normalized = 2;
+  
+  // Keywords are extracted keywords.
+  repeated string keywords = 3;
+  
+  // CodeTerms are code-specific terms.
+  repeated string code_terms = 4;
+  
+  // ActionIntent is the detected action intent.
+  string action_intent = 5;
+  
+  // TargetType is the target code element type.
+  string target_type = 6;
+  
+  // Expanded contains query expansions.
+  repeated string expanded = 7;
+  
+  // SearchQuery is the final search query.
+  string search_query = 8;
+  
+  // Confidence is the parsing confidence (0-1).
+  float confidence = 9;
+  
+  // UsedModel indicates if a model was used.
+  bool used_model = 10;
 }

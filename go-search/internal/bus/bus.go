@@ -66,4 +66,7 @@ const (
 	// Store service topics.
 	TopicStoreCreated = "store.created"
 	TopicStoreDeleted = "store.deleted"
+
+	// Settings service topics.
+	TopicSettingsChanged = "settings.changed"
 )

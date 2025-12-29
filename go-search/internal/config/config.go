@@ -26,6 +26,12 @@ type Config struct {
 	// ML configuration
 	ML MLConfig `yaml:"ml"`
 
+	// Connection tracking configuration
+	Connection ConnectionConfig `yaml:"connection"`
+
+	// Model registry configuration
+	Models ModelsConfig `yaml:"models"`
+
 	// Cache configuration
 	Cache CacheConfig `yaml:"cache"`
 
@@ -62,6 +68,7 @@ type MLConfig struct {
 	EmbedModel      string `envconfig:"RICE_EMBED_MODEL" yaml:"embed_model"`
 	SparseModel     string `envconfig:"RICE_SPARSE_MODEL" yaml:"sparse_model"`
 	RerankModel     string `envconfig:"RICE_RERANK_MODEL" yaml:"rerank_model"`
+	QueryModel      string `envconfig:"RICE_QUERY_MODEL" yaml:"query_model"` // Query understanding model
 	EmbedDim        int    `envconfig:"RICE_EMBED_DIM" yaml:"embed_dim"`
 	EmbedBatchSize  int    `envconfig:"RICE_EMBED_BATCH_SIZE" yaml:"embed_batch_size"`
 	SparseBatchSize int    `envconfig:"RICE_SPARSE_BATCH_SIZE" yaml:"sparse_batch_size"`
@@ -69,6 +76,28 @@ type MLConfig struct {
 	MaxSeqLength    int    `envconfig:"RICE_MAX_SEQ_LENGTH" yaml:"max_seq_length"`
 	ModelsDir       string `envconfig:"RICE_MODELS_DIR" yaml:"models_dir"`
 	ExternalURL     string `envconfig:"RICE_ML_URL" yaml:"external_url"` // For distributed mode
+
+	// Per-model GPU settings
+	EmbedGPU  bool `envconfig:"RICE_EMBED_GPU" yaml:"embed_gpu"`   // GPU for embeddings
+	RerankGPU bool `envconfig:"RICE_RERANK_GPU" yaml:"rerank_gpu"` // GPU for reranking
+	QueryGPU  bool `envconfig:"RICE_QUERY_GPU" yaml:"query_gpu"`   // GPU for query understanding
+
+	// Query understanding fallback
+	QueryModelEnabled bool `envconfig:"RICE_QUERY_MODEL_ENABLED" yaml:"query_model_enabled"` // If false, use keyword extraction
+}
+
+// ConnectionConfig holds connection/PC tracking settings.
+type ConnectionConfig struct {
+	Enabled     bool   `envconfig:"RICE_CONNECTIONS_ENABLED" yaml:"enabled"`
+	StoragePath string `envconfig:"RICE_CONNECTIONS_PATH" yaml:"storage_path"`
+	MaxInactive int    `envconfig:"RICE_CONNECTIONS_MAX_INACTIVE" yaml:"max_inactive"` // Days before marking inactive
+}
+
+// ModelsConfig holds model registry settings.
+type ModelsConfig struct {
+	RegistryPath string `envconfig:"RICE_MODELS_REGISTRY" yaml:"registry_path"`
+	MappersPath  string `envconfig:"RICE_MODELS_MAPPERS" yaml:"mappers_path"`
+	AutoDownload bool   `envconfig:"RICE_MODELS_AUTO_DOWNLOAD" yaml:"auto_download"`
 }
 
 // CacheConfig holds cache settings.
@@ -178,16 +207,33 @@ func setDefaults(cfg *Config) {
 	}
 
 	cfg.ML = MLConfig{
-		Device:          "cpu",
-		EmbedModel:      "jina-embeddings-v3",
-		SparseModel:     "splade-v3",
-		RerankModel:     "jina-reranker-v2",
-		EmbedDim:        1536,
-		EmbedBatchSize:  32,
-		SparseBatchSize: 32,
-		RerankBatchSize: 16,
-		MaxSeqLength:    8192,
-		ModelsDir:       "./models",
+		Device:            "cuda", // GPU by default
+		EmbedModel:        "jinaai/jina-code-embeddings-1.5b",
+		SparseModel:       "splade-v3",
+		RerankModel:       "jinaai/jina-reranker-v2-base-multilingual",
+		QueryModel:        "Salesforce/codet5p-220m",
+		EmbedDim:          1536,
+		EmbedBatchSize:    32,
+		SparseBatchSize:   32,
+		RerankBatchSize:   16,
+		MaxSeqLength:      8192,
+		ModelsDir:         "./models",
+		EmbedGPU:          true,  // GPU enabled by default
+		RerankGPU:         true,  // GPU enabled by default
+		QueryGPU:          false, // Query model GPU off by default (use Option C)
+		QueryModelEnabled: false, // Use keyword extraction by default
+	}
+
+	cfg.Connection = ConnectionConfig{
+		Enabled:     true,
+		StoragePath: "./data/connections",
+		MaxInactive: 30, // 30 days
+	}
+
+	cfg.Models = ModelsConfig{
+		RegistryPath: "./data/models/registry.yaml",
+		MappersPath:  "./data/models/mappers",
+		AutoDownload: false,
 	}
 
 	cfg.Cache = CacheConfig{

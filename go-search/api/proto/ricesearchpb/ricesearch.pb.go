@@ -48,6 +48,7 @@ type SearchRequest struct {
 	IncludeContent  bool          `json:"include_content,omitempty"`
 	SparseWeight    *float32      `json:"sparse_weight,omitempty"`
 	DenseWeight     *float32      `json:"dense_weight,omitempty"`
+	ConnectionID    string        `json:"connection_id,omitempty"` // Filter by connection
 }
 
 // SearchFilter defines search filters.
@@ -94,16 +95,18 @@ type SearchMetadata struct {
 
 // IndexRequest represents a request to index a document.
 type IndexRequest struct {
-	Store    string    `json:"store"`
-	Document *Document `json:"document"`
-	Force    bool      `json:"force,omitempty"`
+	Store        string    `json:"store"`
+	Document     *Document `json:"document"`
+	Force        bool      `json:"force,omitempty"`
+	ConnectionID string    `json:"connection_id,omitempty"` // Track source connection
 }
 
 // IndexBatchRequest represents a request to index multiple documents.
 type IndexBatchRequest struct {
-	Store     string      `json:"store"`
-	Documents []*Document `json:"documents"`
-	Force     bool        `json:"force,omitempty"`
+	Store        string      `json:"store"`
+	Documents    []*Document `json:"documents"`
+	Force        bool        `json:"force,omitempty"`
+	ConnectionID string      `json:"connection_id,omitempty"` // Track source connection
 }
 
 // Document represents a source code file.
@@ -317,4 +320,262 @@ type VersionResponse struct {
 	Commit    string `json:"commit"`
 	BuildDate string `json:"build_date"`
 	GoVersion string `json:"go_version"`
+}
+
+// =============================================================================
+// Connection Management Messages
+// =============================================================================
+
+// Connection represents a client PC connection.
+type Connection struct {
+	ID           string                 `json:"id"`
+	Name         string                 `json:"name"`
+	PCInfo       *PCInfo                `json:"pc_info,omitempty"`
+	StoreAccess  []string               `json:"store_access,omitempty"`
+	CreatedAt    *timestamppb.Timestamp `json:"created_at,omitempty"`
+	LastSeenAt   *timestamppb.Timestamp `json:"last_seen_at,omitempty"`
+	LastIP       string                 `json:"last_ip,omitempty"`
+	IndexedFiles int64                  `json:"indexed_files"`
+	SearchCount  int64                  `json:"search_count"`
+	IsActive     bool                   `json:"is_active"`
+}
+
+// GetCreatedAt returns the creation time as time.Time.
+func (c *Connection) GetCreatedAt() time.Time {
+	if c.CreatedAt == nil {
+		return time.Time{}
+	}
+	return c.CreatedAt.AsTime()
+}
+
+// GetLastSeenAt returns the last seen time as time.Time.
+func (c *Connection) GetLastSeenAt() time.Time {
+	if c.LastSeenAt == nil {
+		return time.Time{}
+	}
+	return c.LastSeenAt.AsTime()
+}
+
+// PCInfo contains PC information.
+type PCInfo struct {
+	Hostname   string `json:"hostname"`
+	OS         string `json:"os"`
+	Arch       string `json:"arch"`
+	MACAddress string `json:"mac_address,omitempty"`
+	Username   string `json:"username,omitempty"`
+}
+
+// RegisterConnectionRequest is a request to register a connection.
+type RegisterConnectionRequest struct {
+	Name   string  `json:"name"`
+	PCInfo *PCInfo `json:"pc_info,omitempty"`
+}
+
+// ListConnectionsRequest is a request to list connections.
+type ListConnectionsRequest struct {
+	StoreFilter string `json:"store_filter,omitempty"`
+	ActiveOnly  bool   `json:"active_only"`
+}
+
+// ListConnectionsResponse contains a list of connections.
+type ListConnectionsResponse struct {
+	Connections []*Connection `json:"connections"`
+}
+
+// GetConnectionRequest is a request to get a connection.
+type GetConnectionRequest struct {
+	ID string `json:"id"`
+}
+
+// DeleteConnectionRequest is a request to delete a connection.
+type DeleteConnectionRequest struct {
+	ID string `json:"id"`
+}
+
+// DeleteConnectionResponse is the result of a connection deletion.
+type DeleteConnectionResponse struct {
+	Success bool `json:"success"`
+}
+
+// =============================================================================
+// Model Management Messages
+// =============================================================================
+
+// ModelInfo contains information about an ML model.
+type ModelInfo struct {
+	ID          string `json:"id"`
+	Type        string `json:"type"` // embed, rerank, query_understand
+	DisplayName string `json:"display_name"`
+	Description string `json:"description,omitempty"`
+	OutputDim   int32  `json:"output_dim,omitempty"`
+	MaxTokens   int32  `json:"max_tokens"`
+	Downloaded  bool   `json:"downloaded"`
+	IsDefault   bool   `json:"is_default"`
+	GPUEnabled  bool   `json:"gpu_enabled"`
+	Size        int64  `json:"size"`
+}
+
+// ListModelsRequest is a request to list models.
+type ListModelsRequest struct {
+	TypeFilter string `json:"type_filter,omitempty"`
+}
+
+// ListModelsResponse contains a list of models.
+type ListModelsResponse struct {
+	Models []*ModelInfo `json:"models"`
+}
+
+// DownloadModelRequest is a request to download a model.
+type DownloadModelRequest struct {
+	ModelID string `json:"model_id"`
+}
+
+// DownloadModelResponse is the result of a model download.
+type DownloadModelResponse struct {
+	Success  bool   `json:"success"`
+	Message  string `json:"message,omitempty"`
+	Progress int32  `json:"progress"` // 0-100
+}
+
+// SetDefaultModelRequest is a request to set a default model.
+type SetDefaultModelRequest struct {
+	ModelType string `json:"model_type"`
+	ModelID   string `json:"model_id"`
+}
+
+// ToggleGPURequest is a request to toggle GPU for a model.
+type ToggleGPURequest struct {
+	ModelID string `json:"model_id"`
+	Enabled bool   `json:"enabled"`
+}
+
+// =============================================================================
+// Model Mapper Messages
+// =============================================================================
+
+// ModelMapper defines how to use a model.
+type ModelMapper struct {
+	ID             string                 `json:"id"`
+	Name           string                 `json:"name"`
+	ModelID        string                 `json:"model_id"`
+	Type           string                 `json:"type"`
+	PromptTemplate string                 `json:"prompt_template,omitempty"`
+	InputMapping   map[string]string      `json:"input_mapping,omitempty"`
+	OutputMapping  map[string]string      `json:"output_mapping,omitempty"`
+	CreatedAt      *timestamppb.Timestamp `json:"created_at,omitempty"`
+	UpdatedAt      *timestamppb.Timestamp `json:"updated_at,omitempty"`
+}
+
+// GetCreatedAt returns the creation time as time.Time.
+func (m *ModelMapper) GetCreatedAt() time.Time {
+	if m.CreatedAt == nil {
+		return time.Time{}
+	}
+	return m.CreatedAt.AsTime()
+}
+
+// GetUpdatedAt returns the update time as time.Time.
+func (m *ModelMapper) GetUpdatedAt() time.Time {
+	if m.UpdatedAt == nil {
+		return time.Time{}
+	}
+	return m.UpdatedAt.AsTime()
+}
+
+// ListMappersRequest is a request to list mappers.
+type ListMappersRequest struct{}
+
+// ListMappersResponse contains a list of mappers.
+type ListMappersResponse struct {
+	Mappers []*ModelMapper `json:"mappers"`
+}
+
+// CreateMapperRequest is a request to create a mapper.
+type CreateMapperRequest struct {
+	Mapper *ModelMapper `json:"mapper"`
+}
+
+// UpdateMapperRequest is a request to update a mapper.
+type UpdateMapperRequest struct {
+	Mapper *ModelMapper `json:"mapper"`
+}
+
+// DeleteMapperRequest is a request to delete a mapper.
+type DeleteMapperRequest struct {
+	ID string `json:"id"`
+}
+
+// DeleteMapperResponse is the result of a mapper deletion.
+type DeleteMapperResponse struct {
+	Success bool `json:"success"`
+}
+
+// GenerateMapperRequest is a request to auto-generate a mapper.
+type GenerateMapperRequest struct {
+	ModelID string `json:"model_id"`
+	Type    string `json:"type"`
+}
+
+// =============================================================================
+// File Browser Messages
+// =============================================================================
+
+// IndexedFile represents an indexed file.
+type IndexedFile struct {
+	Path         string                 `json:"path"`
+	Language     string                 `json:"language"`
+	Size         int64                  `json:"size"`
+	Hash         string                 `json:"hash"`
+	ChunkCount   int32                  `json:"chunk_count"`
+	ConnectionID string                 `json:"connection_id,omitempty"`
+	IndexedAt    *timestamppb.Timestamp `json:"indexed_at,omitempty"`
+	Status       string                 `json:"status"` // indexed, pending, error
+}
+
+// GetIndexedAt returns the indexed time as time.Time.
+func (f *IndexedFile) GetIndexedAt() time.Time {
+	if f.IndexedAt == nil {
+		return time.Time{}
+	}
+	return f.IndexedAt.AsTime()
+}
+
+// ListFilesRequest is a request to list indexed files.
+type ListFilesRequest struct {
+	Store        string `json:"store"`
+	PathPrefix   string `json:"path_prefix,omitempty"`
+	Language     string `json:"language,omitempty"`
+	ConnectionID string `json:"connection_id,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Page         int32  `json:"page"`
+	PageSize     int32  `json:"page_size"`
+	SortBy       string `json:"sort_by,omitempty"`    // path, size, indexed_at
+	SortOrder    string `json:"sort_order,omitempty"` // asc, desc
+}
+
+// ListFilesResponse contains a paginated list of files.
+type ListFilesResponse struct {
+	Files      []*IndexedFile `json:"files"`
+	Total      int32          `json:"total"`
+	Page       int32          `json:"page"`
+	PageSize   int32          `json:"page_size"`
+	TotalPages int32          `json:"total_pages"`
+}
+
+// =============================================================================
+// Query Understanding Messages
+// =============================================================================
+
+// ParsedQuery represents a parsed query with extracted intent.
+type ParsedQuery struct {
+	Original     string   `json:"original"`
+	Normalized   string   `json:"normalized"`
+	Keywords     []string `json:"keywords,omitempty"`
+	CodeTerms    []string `json:"code_terms,omitempty"`
+	ActionIntent string   `json:"action_intent,omitempty"`
+	TargetType   string   `json:"target_type,omitempty"`
+	Expanded     []string `json:"expanded,omitempty"`
+	SearchQuery  string   `json:"search_query"`
+	Confidence   float32  `json:"confidence"`
+	UsedModel    bool     `json:"used_model"`
 }

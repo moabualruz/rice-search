@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/ricesearch/rice-search/internal/ml"
@@ -18,6 +19,7 @@ type Service struct {
 	qdrant *qdrant.Client
 	log    *logger.Logger
 	cfg    Config
+	mu     sync.RWMutex
 }
 
 // Config configures the search service.
@@ -179,18 +181,23 @@ type SearchMetadata struct {
 func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	start := time.Now()
 
+	// Get config snapshot for this request
+	s.mu.RLock()
+	cfg := s.cfg
+	s.mu.RUnlock()
+
 	// Apply defaults
 	topK := req.TopK
 	if topK <= 0 {
-		topK = s.cfg.DefaultTopK
+		topK = cfg.DefaultTopK
 	}
 
-	enableReranking := s.cfg.EnableReranking
+	enableReranking := cfg.EnableReranking
 	if req.EnableReranking != nil {
 		enableReranking = *req.EnableReranking
 	}
 
-	rerankTopK := s.cfg.RerankTopK
+	rerankTopK := cfg.RerankTopK
 	if req.RerankTopK > 0 {
 		rerankTopK = req.RerankTopK
 	}
@@ -226,7 +233,7 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	embedTime := time.Since(embedStart)
 
 	// Build search request
-	prefetchLimit := uint64(topK * s.cfg.PrefetchMultiplier)
+	prefetchLimit := uint64(topK * cfg.PrefetchMultiplier)
 	if enableReranking && uint64(rerankTopK) > prefetchLimit {
 		prefetchLimit = uint64(rerankTopK)
 	}
@@ -327,9 +334,13 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 func (s *Service) SearchDenseOnly(ctx context.Context, req Request) (*Response, error) {
 	start := time.Now()
 
+	s.mu.RLock()
+	cfg := s.cfg
+	s.mu.RUnlock()
+
 	topK := req.TopK
 	if topK <= 0 {
-		topK = s.cfg.DefaultTopK
+		topK = cfg.DefaultTopK
 	}
 
 	if req.Query == "" || req.Store == "" {
@@ -398,9 +409,13 @@ func (s *Service) SearchDenseOnly(ctx context.Context, req Request) (*Response, 
 func (s *Service) SearchSparseOnly(ctx context.Context, req Request) (*Response, error) {
 	start := time.Now()
 
+	s.mu.RLock()
+	cfg := s.cfg
+	s.mu.RUnlock()
+
 	topK := req.TopK
 	if topK <= 0 {
-		topK = s.cfg.DefaultTopK
+		topK = cfg.DefaultTopK
 	}
 
 	if req.Query == "" || req.Store == "" {
@@ -468,8 +483,12 @@ func (s *Service) SearchSparseOnly(ctx context.Context, req Request) (*Response,
 
 // Similar finds similar chunks to a given chunk ID.
 func (s *Service) Similar(ctx context.Context, store, chunkID string, topK int) ([]Result, error) {
+	s.mu.RLock()
+	cfg := s.cfg
+	s.mu.RUnlock()
+
 	if topK <= 0 {
-		topK = s.cfg.DefaultTopK
+		topK = cfg.DefaultTopK
 	}
 
 	// For similarity, we'd need to fetch the chunk's vector and search
@@ -513,4 +532,26 @@ func GroupByFile(results []Result, maxPerFile int) []Result {
 	}
 
 	return grouped
+}
+
+// UpdateConfig updates the search configuration at runtime.
+// This is called when settings are changed via the admin UI.
+func (s *Service) UpdateConfig(cfg Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.cfg = cfg
+	s.log.Info("Search config updated",
+		"default_top_k", cfg.DefaultTopK,
+		"enable_reranking", cfg.EnableReranking,
+		"rerank_top_k", cfg.RerankTopK,
+		"sparse_weight", cfg.SparseWeight,
+		"dense_weight", cfg.DenseWeight,
+	)
+}
+
+// GetConfig returns the current search configuration.
+func (s *Service) GetConfig() Config {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.cfg
 }

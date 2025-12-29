@@ -192,7 +192,19 @@ func runServer(cmd *cobra.Command, args []string) error {
 	mux := http.NewServeMux()
 
 	// Register Web UI routes (uses gRPC server as backend)
-	webHandler := web.NewHandler(grpcSrv, log)
+	// Note: Some services (modelReg, mapperSvc, connSvc, metrics) are not yet wired up
+	// The web handler checks for nil and handles gracefully
+	webHandler := web.NewHandler(
+		grpcSrv,           // GRPCClient
+		log,               // Logger
+		appCfg,            // Config
+		nil,               // modelReg (TODO: wire up models.Registry)
+		nil,               // mapperSvc (TODO: wire up models.MapperService)
+		nil,               // connSvc (TODO: wire up connection.Service)
+		nil,               // settingsSvc (TODO: wire up settings.Service)
+		nil,               // metrics (TODO: wire up metrics.Metrics)
+		appCfg.Qdrant.URL, // qdrantURL
+	)
 	webHandler.RegisterRoutes(mux)
 
 	// Register REST API routes

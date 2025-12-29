@@ -404,3 +404,145 @@ Swagger Docs: `http://localhost:8080/docs` or `http://localhost:8088/docs`
 | GET | `/mcp/tools` | List available MCP tools |
 | POST | `/mcp` | Handle MCP JSON-RPC request |
 | POST | `/mcp/tools/call` | Call MCP tool directly |
+
+---
+
+## Go Search (go-search/)
+
+Pure Go rewrite of Rice Search. Single binary, no Python/Node dependencies.
+
+### Tech Stack
+
+| Component | Technology |
+|-----------|------------|
+| Language | Go 1.21+ |
+| Vector DB | Qdrant (not Milvus) |
+| ML Inference | ONNX Runtime |
+| Web UI | templ + HTMX + Tailwind |
+| Communication | Event-driven (Go channels) |
+
+### Local Development
+
+```bash
+cd go-search
+
+# 1. Start Qdrant only (data is ephemeral, resets on down)
+docker-compose -f deployments/docker-compose.dev.yml up -d
+
+# 2. Verify Qdrant is running
+curl http://localhost:6333/healthz
+# Dashboard: http://localhost:6333/dashboard
+
+# 3. Download ML models (first time only)
+./rice-search models download
+
+# 4. Run server from code (hot reload with air, or manual restart)
+go run ./cmd/rice-search-server
+# Or build and run:
+go build -o rice-search.exe ./cmd/rice-search && ./rice-search.exe serve
+
+# 5. Access Web UI at http://localhost:8080
+```
+
+### Build Commands
+
+```bash
+cd go-search
+
+# Build
+make build                    # Build binary
+go build ./...                # Verify compilation
+
+# Code Generation
+templ generate ./internal/web/   # Generate templ Go files
+make proto                       # Regenerate protobuf (requires protoc)
+
+# Test
+make test                     # Run all tests
+go test ./internal/...        # Test specific packages
+
+# Quality
+make lint                     # Run golangci-lint
+go vet ./...                  # Go vet
+```
+
+### Service Ports (go-search)
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Rice Search Server | 8080 | HTTP API + Web UI |
+| Qdrant HTTP | 6333 | Vector DB API + Dashboard |
+| Qdrant gRPC | 6334 | Vector DB gRPC |
+
+### Directory Structure
+
+```
+go-search/
+├── api/proto/              # Protobuf definitions
+├── cmd/
+│   ├── rice-search/        # CLI binary
+│   └── rice-search-server/ # Server binary
+├── deployments/
+│   └── docker-compose.dev.yml  # Qdrant only (dev)
+├── internal/
+│   ├── bus/                # Event bus
+│   ├── client/             # HTTP client
+│   ├── config/             # Configuration
+│   ├── connection/         # PC/connection tracking
+│   ├── index/              # Indexing pipeline
+│   ├── metrics/            # Prometheus metrics
+│   ├── ml/                 # ML inference (ONNX)
+│   ├── models/             # Model registry & mappers
+│   ├── onnx/               # ONNX runtime wrapper
+│   ├── qdrant/             # Qdrant client
+│   ├── query/              # Query understanding
+│   ├── search/             # Search service
+│   ├── server/             # HTTP/gRPC server
+│   ├── store/              # Store management
+│   └── web/                # Web UI (templ + HTMX)
+├── models/                 # Downloaded ONNX models
+└── docs/                   # Documentation
+```
+
+### Key Differences from Main (NestJS) Version
+
+| Aspect | Main (api/) | Go (go-search/) |
+|--------|-------------|-----------------|
+| Vector DB | Milvus | Qdrant |
+| ML Runtime | Infinity server | ONNX Runtime (embedded) |
+| Web Framework | NestJS | net/http + templ |
+| Frontend | Next.js (separate) | templ + HTMX (embedded) |
+| BM25 | Tantivy (sidecar) | Built-in sparse vectors |
+| Deployment | Multiple containers | Single binary |
+
+### Configuration
+
+Environment variables with `RICE_` prefix:
+
+```bash
+RICE_HOST=0.0.0.0
+RICE_PORT=8080
+RICE_LOG_LEVEL=debug          # debug, info, warn, error
+RICE_LOG_FORMAT=text          # text, json
+QDRANT_URL=http://localhost:6333
+RICE_ML_DEVICE=cpu            # cpu, cuda
+RICE_CACHE_TYPE=memory        # memory, redis
+```
+
+### Troubleshooting (go-search)
+
+```bash
+# Reset Qdrant (loses all data)
+cd go-search
+docker-compose -f deployments/docker-compose.dev.yml down
+docker-compose -f deployments/docker-compose.dev.yml up -d
+
+# Check Qdrant collections
+curl http://localhost:6333/collections
+
+# View server logs
+./rice-search serve 2>&1 | tee server.log
+
+# Regenerate templates after changes
+templ generate ./internal/web/
+```

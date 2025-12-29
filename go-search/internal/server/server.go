@@ -12,21 +12,27 @@ import (
 
 	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/config"
+	"github.com/ricesearch/rice-search/internal/connection"
 	"github.com/ricesearch/rice-search/internal/index"
+	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/ml"
+	"github.com/ricesearch/rice-search/internal/models"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/qdrant"
 	"github.com/ricesearch/rice-search/internal/search"
+	"github.com/ricesearch/rice-search/internal/settings"
 	"github.com/ricesearch/rice-search/internal/store"
+	"github.com/ricesearch/rice-search/internal/web"
 )
 
 // Server is the main HTTP server that wires all services together.
 type Server struct {
 	cfg        Config
+	appCfg     *config.Config
 	log        *logger.Logger
 	httpServer *http.Server
 
-	// Services
+	// Core Services
 	bus    bus.Bus
 	ml     ml.Service
 	qdrant *qdrant.Client
@@ -34,11 +40,19 @@ type Server struct {
 	index  *index.Pipeline
 	search *search.Service
 
+	// New Services (Phase 1)
+	connection  *connection.Service
+	modelReg    *models.Registry
+	mapperSvc   *models.MapperService
+	metrics     *metrics.Metrics
+	settingsSvc *settings.Service
+
 	// Handlers
 	searchHandler *search.Handler
 	healthHandler *search.HealthHandler
 	storeHandler  *StoreHandler
 	indexHandler  *IndexHandler
+	webHandler    *web.Handler
 
 	mu      sync.RWMutex
 	started bool
@@ -84,12 +98,17 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 	}
 
 	s := &Server{
-		cfg: cfg,
-		log: log,
+		cfg:    cfg,
+		appCfg: &appCfg,
+		log:    log,
 	}
 
 	// Initialize event bus (in-memory for monolith)
 	s.bus = bus.NewMemoryBus()
+
+	// Initialize metrics
+	s.metrics = metrics.New()
+	log.Info("Initialized metrics")
 
 	// Initialize Qdrant client
 	qdrantCfg := qdrant.DefaultClientConfig()
@@ -139,12 +158,85 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 	searchCfg := search.DefaultConfig()
 	s.search = search.NewService(s.ml, s.qdrant, log, searchCfg)
 
+	// Initialize connection service
+	if appCfg.Connection.Enabled {
+		connCfg := connection.ServiceConfig{
+			StoragePath: appCfg.Connection.StoragePath,
+		}
+		connSvc, err := connection.NewService(s.bus, connCfg)
+		if err != nil {
+			log.Warn("Failed to create connection service, continuing without it", "error", err)
+		} else {
+			s.connection = connSvc
+			log.Info("Initialized connection service", "storage", connCfg.StoragePath)
+		}
+	}
+
+	// Initialize model registry
+	modelRegCfg := models.RegistryConfig{
+		StoragePath:  appCfg.Models.RegistryPath,
+		ModelsDir:    appCfg.ML.ModelsDir,
+		LoadDefaults: true,
+	}
+	modelReg, err := models.NewRegistry(modelRegCfg, log)
+	if err != nil {
+		log.Warn("Failed to create model registry, continuing without it", "error", err)
+	} else {
+		s.modelReg = modelReg
+		log.Info("Initialized model registry")
+	}
+
+	// Initialize mapper service
+	if s.modelReg != nil {
+		modelStorage := models.NewFileStorage(appCfg.Models.MappersPath)
+		mapperSvc, err := models.NewMapperService(modelStorage, s.modelReg, log)
+		if err != nil {
+			log.Warn("Failed to create mapper service, continuing without it", "error", err)
+		} else {
+			s.mapperSvc = mapperSvc
+			log.Info("Initialized mapper service")
+		}
+	}
+
+	// Initialize settings service
+	settingsCfg := settings.ServiceConfig{
+		StoragePath:  "./data/settings",
+		LoadDefaults: true,
+	}
+	settingsSvc, err := settings.NewService(settingsCfg, s.bus, log)
+	if err != nil {
+		log.Warn("Failed to create settings service, continuing with defaults", "error", err)
+	} else {
+		s.settingsSvc = settingsSvc
+		log.Info("Initialized settings service")
+
+		// Subscribe to settings changes to update services at runtime
+		s.subscribeToSettingsChanges()
+	}
+
 	// Initialize handlers
 	s.searchHandler = search.NewHandler(s.search)
 	healthChecker := search.NewHealthChecker(s.ml, s.qdrant)
 	s.healthHandler = search.NewHealthHandler(healthChecker, cfg.Version)
 	s.storeHandler = NewStoreHandler(s.store)
 	s.indexHandler = NewIndexHandler(s.index, s.store)
+
+	// Initialize web handler (with local gRPC adapter)
+	if appCfg.EnableWeb {
+		grpcAdapter := NewLocalGRPCAdapter(s)
+		s.webHandler = web.NewHandler(
+			grpcAdapter,
+			log,
+			&appCfg,
+			s.modelReg,
+			s.mapperSvc,
+			s.connection,
+			s.settingsSvc,
+			s.metrics,
+			appCfg.Qdrant.URL,
+		)
+		log.Info("Initialized web UI handler")
+	}
 
 	return s, nil
 }
@@ -268,6 +360,18 @@ func (s *Server) setupRoutes() *http.ServeMux {
 	// Index endpoints
 	s.indexHandler.RegisterRoutes(mux)
 
+	// Web UI routes (if enabled)
+	if s.webHandler != nil {
+		s.webHandler.RegisterRoutes(mux)
+		s.log.Info("Registered Web UI routes")
+	}
+
+	// Prometheus metrics endpoint (independent of web handler)
+	if s.metrics != nil {
+		mux.Handle("GET /metrics", s.metrics.Handler())
+		s.log.Info("Registered /metrics endpoint")
+	}
+
 	// Wrap with logging
 	return wrapWithLogging(handler, s.log)
 }
@@ -309,4 +413,51 @@ func (s *Server) Health() bool {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.started
+}
+
+// subscribeToSettingsChanges subscribes to settings change events
+// and updates services with new configuration values.
+func (s *Server) subscribeToSettingsChanges() {
+	if s.bus == nil || s.settingsSvc == nil {
+		return
+	}
+
+	// Subscribe to settings.changed events
+	err := s.bus.Subscribe(context.Background(), bus.TopicSettingsChanged, func(ctx context.Context, event bus.Event) error {
+		settingsEvent, ok := event.Payload.(settings.SettingsChangedEvent)
+		if !ok {
+			s.log.Warn("Invalid settings changed event payload")
+			return nil
+		}
+
+		s.log.Info("Settings changed, updating services",
+			"version", settingsEvent.NewConfig.Version,
+			"changed_by", settingsEvent.ChangedBy,
+		)
+
+		// Update search service config
+		if s.search != nil {
+			newSearchCfg := search.Config{
+				DefaultTopK:        settingsEvent.NewConfig.DefaultTopK,
+				EnableReranking:    settingsEvent.NewConfig.DefaultRerank,
+				RerankTopK:         settingsEvent.NewConfig.RerankCandidates,
+				SparseWeight:       settingsEvent.NewConfig.SparseWeight,
+				DenseWeight:        settingsEvent.NewConfig.DenseWeight,
+				PrefetchMultiplier: 3, // Keep default multiplier
+			}
+			s.search.UpdateConfig(newSearchCfg)
+		}
+
+		// Note: ML service GPU changes require model reload and are handled
+		// by the admin UI directly through the models API
+		// Index service config changes would also be handled here if needed
+
+		return nil
+	})
+
+	if err != nil {
+		s.log.Warn("Failed to subscribe to settings changes", "error", err)
+	} else {
+		s.log.Info("Subscribed to settings changes")
+	}
 }

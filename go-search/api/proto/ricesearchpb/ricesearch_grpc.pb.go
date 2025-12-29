@@ -44,6 +44,24 @@ type RiceSearchClient interface {
 	Health(ctx context.Context, in *HealthRequest, opts ...grpc.CallOption) (*HealthResponse, error)
 	// Version returns version information.
 	Version(ctx context.Context, in *VersionRequest, opts ...grpc.CallOption) (*VersionResponse, error)
+	// Connection Management
+	RegisterConnection(ctx context.Context, in *RegisterConnectionRequest, opts ...grpc.CallOption) (*Connection, error)
+	ListConnections(ctx context.Context, in *ListConnectionsRequest, opts ...grpc.CallOption) (*ListConnectionsResponse, error)
+	GetConnection(ctx context.Context, in *GetConnectionRequest, opts ...grpc.CallOption) (*Connection, error)
+	DeleteConnection(ctx context.Context, in *DeleteConnectionRequest, opts ...grpc.CallOption) (*DeleteConnectionResponse, error)
+	// Model Management
+	ListModels(ctx context.Context, in *ListModelsRequest, opts ...grpc.CallOption) (*ListModelsResponse, error)
+	DownloadModel(ctx context.Context, in *DownloadModelRequest, opts ...grpc.CallOption) (*DownloadModelResponse, error)
+	SetDefaultModel(ctx context.Context, in *SetDefaultModelRequest, opts ...grpc.CallOption) (*ModelInfo, error)
+	ToggleGPU(ctx context.Context, in *ToggleGPURequest, opts ...grpc.CallOption) (*ModelInfo, error)
+	// Model Mapper Management
+	ListMappers(ctx context.Context, in *ListMappersRequest, opts ...grpc.CallOption) (*ListMappersResponse, error)
+	CreateMapper(ctx context.Context, in *CreateMapperRequest, opts ...grpc.CallOption) (*ModelMapper, error)
+	UpdateMapper(ctx context.Context, in *UpdateMapperRequest, opts ...grpc.CallOption) (*ModelMapper, error)
+	DeleteMapper(ctx context.Context, in *DeleteMapperRequest, opts ...grpc.CallOption) (*DeleteMapperResponse, error)
+	GenerateMapper(ctx context.Context, in *GenerateMapperRequest, opts ...grpc.CallOption) (*ModelMapper, error)
+	// File Browser
+	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
 }
 
 type riceSearchClient struct {
@@ -239,6 +257,136 @@ func (c *riceSearchClient) Version(ctx context.Context, in *VersionRequest, opts
 	return out, nil
 }
 
+// Connection Management
+func (c *riceSearchClient) RegisterConnection(ctx context.Context, in *RegisterConnectionRequest, opts ...grpc.CallOption) (*Connection, error) {
+	out := new(Connection)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/RegisterConnection", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) ListConnections(ctx context.Context, in *ListConnectionsRequest, opts ...grpc.CallOption) (*ListConnectionsResponse, error) {
+	out := new(ListConnectionsResponse)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/ListConnections", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) GetConnection(ctx context.Context, in *GetConnectionRequest, opts ...grpc.CallOption) (*Connection, error) {
+	out := new(Connection)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/GetConnection", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) DeleteConnection(ctx context.Context, in *DeleteConnectionRequest, opts ...grpc.CallOption) (*DeleteConnectionResponse, error) {
+	out := new(DeleteConnectionResponse)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/DeleteConnection", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Model Management
+func (c *riceSearchClient) ListModels(ctx context.Context, in *ListModelsRequest, opts ...grpc.CallOption) (*ListModelsResponse, error) {
+	out := new(ListModelsResponse)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/ListModels", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) DownloadModel(ctx context.Context, in *DownloadModelRequest, opts ...grpc.CallOption) (*DownloadModelResponse, error) {
+	out := new(DownloadModelResponse)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/DownloadModel", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) SetDefaultModel(ctx context.Context, in *SetDefaultModelRequest, opts ...grpc.CallOption) (*ModelInfo, error) {
+	out := new(ModelInfo)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/SetDefaultModel", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) ToggleGPU(ctx context.Context, in *ToggleGPURequest, opts ...grpc.CallOption) (*ModelInfo, error) {
+	out := new(ModelInfo)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/ToggleGPU", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// Model Mapper Management
+func (c *riceSearchClient) ListMappers(ctx context.Context, in *ListMappersRequest, opts ...grpc.CallOption) (*ListMappersResponse, error) {
+	out := new(ListMappersResponse)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/ListMappers", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) CreateMapper(ctx context.Context, in *CreateMapperRequest, opts ...grpc.CallOption) (*ModelMapper, error) {
+	out := new(ModelMapper)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/CreateMapper", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) UpdateMapper(ctx context.Context, in *UpdateMapperRequest, opts ...grpc.CallOption) (*ModelMapper, error) {
+	out := new(ModelMapper)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/UpdateMapper", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) DeleteMapper(ctx context.Context, in *DeleteMapperRequest, opts ...grpc.CallOption) (*DeleteMapperResponse, error) {
+	out := new(DeleteMapperResponse)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/DeleteMapper", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *riceSearchClient) GenerateMapper(ctx context.Context, in *GenerateMapperRequest, opts ...grpc.CallOption) (*ModelMapper, error) {
+	out := new(ModelMapper)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/GenerateMapper", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// File Browser
+func (c *riceSearchClient) ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error) {
+	out := new(ListFilesResponse)
+	err := c.cc.Invoke(ctx, "/ricesearch.v1.RiceSearch/ListFiles", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // RiceSearchServer is the server API for RiceSearch service.
 type RiceSearchServer interface {
 	// Search performs hybrid search with optional reranking.
@@ -271,6 +419,24 @@ type RiceSearchServer interface {
 	Health(context.Context, *HealthRequest) (*HealthResponse, error)
 	// Version returns version information.
 	Version(context.Context, *VersionRequest) (*VersionResponse, error)
+	// Connection Management
+	RegisterConnection(context.Context, *RegisterConnectionRequest) (*Connection, error)
+	ListConnections(context.Context, *ListConnectionsRequest) (*ListConnectionsResponse, error)
+	GetConnection(context.Context, *GetConnectionRequest) (*Connection, error)
+	DeleteConnection(context.Context, *DeleteConnectionRequest) (*DeleteConnectionResponse, error)
+	// Model Management
+	ListModels(context.Context, *ListModelsRequest) (*ListModelsResponse, error)
+	DownloadModel(context.Context, *DownloadModelRequest) (*DownloadModelResponse, error)
+	SetDefaultModel(context.Context, *SetDefaultModelRequest) (*ModelInfo, error)
+	ToggleGPU(context.Context, *ToggleGPURequest) (*ModelInfo, error)
+	// Model Mapper Management
+	ListMappers(context.Context, *ListMappersRequest) (*ListMappersResponse, error)
+	CreateMapper(context.Context, *CreateMapperRequest) (*ModelMapper, error)
+	UpdateMapper(context.Context, *UpdateMapperRequest) (*ModelMapper, error)
+	DeleteMapper(context.Context, *DeleteMapperRequest) (*DeleteMapperResponse, error)
+	GenerateMapper(context.Context, *GenerateMapperRequest) (*ModelMapper, error)
+	// File Browser
+	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
 	mustEmbedUnimplementedRiceSearchServer()
 }
 
@@ -322,6 +488,57 @@ func (UnimplementedRiceSearchServer) Health(context.Context, *HealthRequest) (*H
 func (UnimplementedRiceSearchServer) Version(context.Context, *VersionRequest) (*VersionResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Version not implemented")
 }
+
+// Connection Management
+func (UnimplementedRiceSearchServer) RegisterConnection(context.Context, *RegisterConnectionRequest) (*Connection, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterConnection not implemented")
+}
+func (UnimplementedRiceSearchServer) ListConnections(context.Context, *ListConnectionsRequest) (*ListConnectionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListConnections not implemented")
+}
+func (UnimplementedRiceSearchServer) GetConnection(context.Context, *GetConnectionRequest) (*Connection, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetConnection not implemented")
+}
+func (UnimplementedRiceSearchServer) DeleteConnection(context.Context, *DeleteConnectionRequest) (*DeleteConnectionResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteConnection not implemented")
+}
+
+// Model Management
+func (UnimplementedRiceSearchServer) ListModels(context.Context, *ListModelsRequest) (*ListModelsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListModels not implemented")
+}
+func (UnimplementedRiceSearchServer) DownloadModel(context.Context, *DownloadModelRequest) (*DownloadModelResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DownloadModel not implemented")
+}
+func (UnimplementedRiceSearchServer) SetDefaultModel(context.Context, *SetDefaultModelRequest) (*ModelInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetDefaultModel not implemented")
+}
+func (UnimplementedRiceSearchServer) ToggleGPU(context.Context, *ToggleGPURequest) (*ModelInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ToggleGPU not implemented")
+}
+
+// Model Mapper Management
+func (UnimplementedRiceSearchServer) ListMappers(context.Context, *ListMappersRequest) (*ListMappersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListMappers not implemented")
+}
+func (UnimplementedRiceSearchServer) CreateMapper(context.Context, *CreateMapperRequest) (*ModelMapper, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CreateMapper not implemented")
+}
+func (UnimplementedRiceSearchServer) UpdateMapper(context.Context, *UpdateMapperRequest) (*ModelMapper, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateMapper not implemented")
+}
+func (UnimplementedRiceSearchServer) DeleteMapper(context.Context, *DeleteMapperRequest) (*DeleteMapperResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteMapper not implemented")
+}
+func (UnimplementedRiceSearchServer) GenerateMapper(context.Context, *GenerateMapperRequest) (*ModelMapper, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GenerateMapper not implemented")
+}
+
+// File Browser
+func (UnimplementedRiceSearchServer) ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListFiles not implemented")
+}
+
 func (UnimplementedRiceSearchServer) mustEmbedUnimplementedRiceSearchServer() {}
 
 // UnsafeRiceSearchServer may be embedded to opt out of forward compatibility.
