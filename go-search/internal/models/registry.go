@@ -192,7 +192,7 @@ func (r *Registry) ListModels(ctx context.Context, filter ModelType) ([]ModelInf
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	var result []ModelInfo
+	result := make([]ModelInfo, 0)
 	for _, model := range r.models {
 		if filter == "" || model.Type == filter {
 			result = append(result, *model)

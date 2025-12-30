@@ -31,6 +31,7 @@ import (
 	"github.com/ricesearch/rice-search/internal/query"
 	"github.com/ricesearch/rice-search/internal/search"
 	"github.com/ricesearch/rice-search/internal/search/reranker"
+	"github.com/ricesearch/rice-search/internal/server"
 	"github.com/ricesearch/rice-search/internal/settings"
 	"github.com/ricesearch/rice-search/internal/store"
 	"github.com/ricesearch/rice-search/internal/web"
@@ -402,10 +403,11 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	webHandler.RegisterRoutes(mux)
 
 	// Register REST API routes
-	registerAPIRoutes(mux, searchSvc, storeSvc, indexSvc, mlSvc, qc, log, version, detailedHealthChecker)
+	registerAPIRoutes(mux, searchSvc, storeSvc, indexSvc, mlSvc, modelReg, qc, log, version, detailedHealthChecker)
 
 	// Build middleware chain
 	handler := http.Handler(mux)
+	handler = server.ResponseWrapperMiddleware(handler)
 	handler = inFlightMiddleware(handler)
 	handler = loggingMiddleware(handler, log)
 	handler = corsMiddleware(handler)
@@ -508,7 +510,7 @@ func parseQdrantURL(rawURL string) (string, int, error) {
 }
 
 // registerAPIRoutes registers REST API endpoints.
-func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, _ *qdrant.Client, _ *logger.Logger, version string, detailedHealthChecker *search.DetailedHealthChecker) {
+func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, modelReg *models.Registry, _ *qdrant.Client, _ *logger.Logger, version string, detailedHealthChecker *search.DetailedHealthChecker) {
 	// Health endpoints
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -529,6 +531,22 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		w.Header().Set("Content-Type", "application/json")
 		status := detailedHealthChecker.CheckDetailed(r.Context())
 		_ = json.NewEncoder(w).Encode(status)
+	})
+
+	mux.HandleFunc("GET /v1/models", func(w http.ResponseWriter, r *http.Request) {
+		if modelReg == nil {
+			writeAPIError(w, http.StatusServiceUnavailable, fmt.Errorf("model registry not initialized"))
+			return
+		}
+
+		models, err := modelReg.ListModels(r.Context(), "")
+		if err != nil {
+			writeAPIError(w, http.StatusInternalServerError, err)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(models)
 	})
 
 	// Readiness probe - returns 503 if server is shutting down or ML service is not healthy

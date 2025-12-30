@@ -19,11 +19,11 @@ import (
 	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/config"
 	"github.com/ricesearch/rice-search/internal/connection"
-	"github.com/ricesearch/rice-search/internal/web/components"
 	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/models"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/settings"
+	"github.com/ricesearch/rice-search/internal/web/components"
 )
 
 // GRPCClient interface defines the gRPC methods needed by the web handlers.
@@ -512,6 +512,14 @@ func (h *Handler) renderSearchResults(w http.ResponseWriter, r *http.Request, da
 	}
 }
 
+func (h *Handler) renderHFSearchResults(w http.ResponseWriter, r *http.Request, data components.HFSearchResultsData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := components.HFSearchResults(data).Render(r.Context(), w); err != nil {
+		h.log.Error("Failed to render search results", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
 // =============================================================================
 // Stores Pages
 // =============================================================================
@@ -519,7 +527,7 @@ func (h *Handler) renderSearchResults(w http.ResponseWriter, r *http.Request, da
 func (h *Handler) handleStoresPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	data := StoresPageData{
+	data := components.StoresPageData{
 		Layout: h.getLayoutData(ctx, "Stores", "/stores"),
 	}
 
@@ -573,7 +581,7 @@ func (h *Handler) handleStoreDetail(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	name := r.PathValue("name")
 
-	data := StoreDetailPageData{
+	data := components.StoreDetailPageData{
 		Layout: h.getLayoutData(ctx, name+" Store", "/stores"),
 	}
 
@@ -677,7 +685,7 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 	page := parseIntOr(r.URL.Query().Get("page"), 1)
 	pageSize := parseIntOr(r.URL.Query().Get("page_size"), 50)
 
-	data := FilesPageData{
+	data := components.FilesPageData{
 		Layout:   h.getLayoutData(ctx, "Files", "/files"),
 		Store:    store,
 		Page:     page,
@@ -756,7 +764,7 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 	storeName := r.PathValue("name")
 	filePath := r.PathValue("path")
 
-	data := FileDetailPageData{
+	data := components.FileDetailPageData{
 		Layout: h.getLayoutData(ctx, filePath, "/files"),
 		Store:  storeName,
 	}
@@ -1487,7 +1495,7 @@ func (h *Handler) handleHFModelSearch(w http.ResponseWriter, r *http.Request) {
 		displayResults = append(displayResults, display)
 	}
 
-	data := HFSearchResultsData{
+	data := components.HFSearchResultsData{
 		Results:           displayResults,
 		Query:             query,
 		ModelType:         string(modelType),
@@ -1495,7 +1503,7 @@ func (h *Handler) handleHFModelSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := HFSearchResults(data).Render(ctx, w); err != nil {
+	if err := components.HFSearchResults(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render search results", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -1976,8 +1984,8 @@ func (h *Handler) refreshMappersList(w http.ResponseWriter, r *http.Request) {
 
 	var mappers []components.ModelMapperDisplay
 	if h.mapperSvc != nil {
-		components.MappersList, _ := h.mapperSvc.ListMappers(ctx)
-		for _, m := range components.MappersList {
+		mappersList, _ := h.mapperSvc.ListMappers(ctx)
+		for _, m := range mappersList {
 			mappers = append(mappers, components.ModelMapperDisplay{
 				ID:             m.ID,
 				Name:           m.Name,
@@ -1999,8 +2007,8 @@ func (h *Handler) renderMappersListWithError(w http.ResponseWriter, r *http.Requ
 
 	var mappers []components.ModelMapperDisplay
 	if h.mapperSvc != nil {
-		components.MappersList, _ := h.mapperSvc.ListMappers(ctx)
-		for _, m := range components.MappersList {
+		mappersList, _ := h.mapperSvc.ListMappers(ctx)
+		for _, m := range mappersList {
 			mappers = append(mappers, components.ModelMapperDisplay{
 				ID:             m.ID,
 				Name:           m.Name,
@@ -2809,7 +2817,7 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 				healthStatus.DeviceFallback = comp.DeviceInfo.DeviceFallback
 				healthStatus.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
 			}
-			data.Components[name] = components.HealthStatus
+			data.Components[name] = healthStatus
 		}
 	} else {
 		data.Components["server"] = components.HealthStatus{
