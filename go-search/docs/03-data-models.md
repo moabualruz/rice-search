@@ -297,29 +297,62 @@ type DocInfo struct {
 
 ---
 
-## Cache Structures
+## Embedding Cache
 
-### EmbeddingCache
+The embedding cache uses a simple LRU (Least Recently Used) strategy with content-based hashing.
+
+### Cache Key Generation
 
 ```go
-type CachedEmbedding struct {
-    Hash       string      `json:"hash"`       // sha256(text)
-    Vector     DenseVector `json:"vector"`
-    Model      string      `json:"model"`
-    CachedAt   time.Time   `json:"cached_at"`
+// internal/pkg/hash/hash.go
+// Key is SHA256 hash of input text
+key := hash.SHA256String(text)
+```
+
+### Cache Structure
+
+```go
+// internal/ml/cache.go
+type EmbeddingCache struct {
+    mu          sync.RWMutex
+    cache       map[string][]float32  // key -> embedding
+    maxSize     int                   // max entries
+    order       []string              // LRU order
+    metrics     CacheMetrics          // optional metrics
+    persistPath string                // optional persistence
 }
 ```
 
-### SparseCache
+### Cache Behavior
 
-```go
-type CachedSparse struct {
-    Hash     string       `json:"hash"`
-    Vector   SparseVector `json:"vector"`
-    Model    string       `json:"model"`
-    CachedAt time.Time    `json:"cached_at"`
-}
-```
+- **Get**: Returns copy of cached embedding (prevents external mutation)
+- **Set**: Stores copy of embedding with LRU eviction
+- **Eviction**: Removes oldest entry when at capacity
+- **Thread-safe**: RWMutex for concurrent access
+- **LRU Updates**: On cache hit, moves key to end of order list
+
+### Configuration
+
+| Config | Default | Description |
+|--------|---------|-------------|
+| RICE_CACHE_SIZE | 10000 | Max cached embeddings |
+| RICE_CACHE_TTL | 0 | TTL in seconds (0 = no expiry) |
+| RICE_CACHE_TYPE | memory | Cache backend (memory, redis) |
+
+### Metrics
+
+- `rice_ml_cache_hits_total` - Cache hit count
+- `rice_ml_cache_misses_total` - Cache miss count
+- `rice_ml_cache_size` - Current cache size
+
+### Note on Sparse Encoding
+
+Sparse vectors (SPLADE) are **NOT cached** because:
+1. Vocabulary overlap makes caching less effective
+2. Sparse vectors are larger (many indices + values)
+3. Generation is already fast
+
+Only dense embeddings are cached.
 
 ---
 

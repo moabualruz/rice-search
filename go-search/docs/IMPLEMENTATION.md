@@ -23,7 +23,7 @@ The go-search implementation is **production-ready** with core features implemen
 | **Indexing Pipeline** | ✅ Complete | 100% | Connection-aware, semantic chunking, event-driven |
 | **Settings System** | ✅ Complete | 100% | 80+ settings, export/import, rollback, audit |
 | **Connection Tracking** | ✅ Complete | 100% | Full lifecycle, monitoring, audit |
-| **Stats & Monitoring** | ✅ Complete | 100% | 40+ metrics, Prometheus compatible |
+| **Stats & Monitoring** | ✅ Complete | 100% | 37 metrics, Prometheus compatible |
 | **Event Architecture** | ✅ Complete | 85% | MemoryBus complete; KafkaBus code exists (untested); NATS/Redis NOT IMPLEMENTED |
 | **Search Service** | ✅ Complete | 100% | Hybrid search, multi-pass reranking, post-rank |
 
@@ -181,7 +181,7 @@ The go-search implementation is **production-ready** with core features implemen
 
 | Feature | Status |
 |---------|--------|
-| 40+ Prometheus Metrics | ✅ Complete |
+| 37 Prometheus Metrics | ✅ Complete |
 | Time-Series Storage | ✅ In-memory + Redis optional |
 | Web UI Dashboard | ✅ SVG charts, presets |
 | 13 Metric Presets | ✅ Complete |

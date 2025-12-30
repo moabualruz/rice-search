@@ -14,10 +14,44 @@
 | Web UI | ✅ Complete | 48 routes, 8 pages |
 | Connection Tracking | ✅ Complete | Unique feature vs NestJS |
 | Settings System | ✅ Complete | 80+ settings, hot-reload |
-| Metrics System | ✅ Complete | 40+ Prometheus metrics |
+| Metrics System | ✅ Complete | 37 Prometheus metrics |
 
 See [IMPLEMENTATION.md](./IMPLEMENTATION.md) for detailed status.  
 See [TODO.md](./TODO.md) for remaining features.
+
+---
+
+## Architecture Model
+
+Rice Search Go uses a **client-server architecture**, NOT a monolithic single binary.
+
+### Two Binaries
+
+1. **`rice-search-server`** (Server)
+   - HTTP/gRPC server with embedded Web UI
+   - Runs all services in one process (ML, Search, Index, Store)
+   - Uses in-memory event bus (Go channels) for service communication
+   - Exposes all functionality via HTTP and gRPC endpoints
+
+2. **`rice-search`** (Client)
+   - CLI client for search, indexing, and store management
+   - Connects to server via gRPC (local) or HTTP (remote)
+   - Pure client - no search/indexing logic, only request/response
+
+### Why Client-Server?
+
+- **Separation of concerns** - Server runs services, client provides CLI UX
+- **Remote access** - CLI can connect to remote servers
+- **Flexibility** - Use CLI, Web UI, or API depending on needs
+- **Low latency** - gRPC for local, HTTP for remote
+
+### Why NOT Microservices?
+
+The server is a monolith (all services in one process):
+- **Simplicity** - No distributed coordination overhead
+- **Performance** - Go channels have zero serialization cost
+- **Deployment** - Single server binary + Qdrant container
+- **Future-ready** - Event bus is interface-based for future distributed mode
 
 ---
 
@@ -42,30 +76,37 @@ Current Rice Search (NestJS + Milvus + Infinity + Tantivy):
 ## System Architecture
 
 ```
+                      ┌──────────────────────┐
+                      │   rice-search CLI    │
+                      │   (client binary)    │
+                      └──────────┬───────────┘
+                                 │ gRPC (local)
+                                 │ HTTP (remote)
+                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                            RICE SEARCH - GO                                 │
+│                    rice-search-server (server binary)                       │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
 │                              ┌─────────────┐                                │
 │                              │   Clients   │                                │
-│                              │ ricegrep/UI │                                │
+│                              │  Web UI/API │                                │
 │                              └──────┬──────┘                                │
 │                                     │ HTTP                                  │
 │                                     ▼                                       │
 │  ┌───────────────────────────────────────────────────────────────────────┐ │
-│  │                          HTTP LAYER                                   │ │
+│  │                      HTTP/gRPC LAYER                                  │ │
 │  │                                                                       │ │
-│  │   Every functionality exposed as HTTP endpoint                        │ │
+│  │   Every functionality exposed as HTTP/gRPC endpoint                   │ │
 │  │   /v1/search, /v1/ml/embed, /v1/stores, /healthz, etc.               │ │
 │  │                                                                       │ │
-│  └───────────────────────────────────┬───────────────────────────────────┘ │
+│  └───────────────────────────────┬───────────────────────────────────────┘ │
 │                                      │ publishes                            │
 │                                      ▼                                      │
 │  ┌───────────────────────────────────────────────────────────────────────┐ │
 │  │                          EVENT BUS                                    │ │
 │  │                                                                       │ │
-│  │   Single process: Go channels (zero latency)                          │ │
-│  │   Distributed: Kafka / NATS / Redis (configurable)                    │ │
+│  │   Server process: Go channels (zero latency)                          │ │
+│  │   Future: Kafka / NATS / Redis (for distributed mode)                 │ │
 │  │                                                                       │ │
 │  └───┬───────────────┬───────────────┬───────────────┬───────────────────┘ │
 │      │               │               │               │                      │
@@ -86,15 +127,33 @@ Current Rice Search (NestJS + Milvus + Infinity + Tantivy):
 
 ---
 
+## Deployment Model
+
+Rice Search uses a **client-server architecture** with two binaries:
+
+| Binary | Purpose | Location |
+|--------|---------|----------|
+| `rice-search` | CLI client for search, index, store management | `cmd/rice-search/` |
+| `rice-search-server` | HTTP/gRPC server with Web UI | `cmd/rice-search-server/` |
+
+**Deployment Options:**
+- **Standalone Server**: Run `rice-search-server` directly, access via CLI or Web UI
+- **Embedded**: Import the server package into your own Go application
+- **Docker**: Single container with both binaries
+
+**Communication**: Client → Server via gRPC (local) or HTTP (remote)
+
+---
+
 ## Deployment Modes
 
-### Mode 1: Monolith (Default)
+### Mode 1: Monolith Server (Default)
 
-Single binary, all services in one process.
+Single server process, all services in one binary. Client is separate.
 
 ```
 ┌─────────────────────────────────────┐
-│         rice-search binary          │
+│   rice-search-server binary         │
 │                                     │
 │  ┌─────┐ ┌─────┐ ┌─────┐ ┌─────┐  │
 │  │ API │ │ ML  │ │ Src │ │ Web │  │
@@ -108,16 +167,28 @@ Single binary, all services in one process.
         ┌─────▼─────┐
         │  Qdrant   │
         └───────────┘
+              ▲
+              │ gRPC/HTTP
+        ┌─────┴─────┐
+        │rice-search│
+        │   (CLI)   │
+        └───────────┘
 
-Containers: 2 (rice-search, qdrant)
+Binaries: 2 (server, client)
+Containers: 2 (server, qdrant)
 Memory: ~4GB
 ```
 
 ### Mode 2: Microservices
 
-> ⚠️ **NOT IMPLEMENTED**: Microservices mode is documented for future implementation. Currently only monolith mode with in-memory event bus is supported. Kafka/NATS/Redis bus implementations are not yet available.
+> ⚠️ **NOT IMPLEMENTED**: Microservices mode is documented for future consideration. Currently the architecture uses a **client-server monolith**:
+> - Server runs all services in one process (ML, Search, Index, Store)
+> - Client is separate binary for CLI access
+> - Communication via in-memory event bus (Go channels)
+> 
+> True microservices (each service as separate binary with distributed bus) would require Kafka/NATS/Redis implementations which are not yet available.
 
-Separate binaries, distributed event bus.
+If implemented: Separate service binaries, distributed event bus.
 
 ```
 ┌───────┐  ┌───────┐  ┌───────┐  ┌───────┐
@@ -244,13 +315,13 @@ Event bus is interface-based. Configure any implementation.
 | Aspect | Current (NestJS + Milvus) | Go Edition |
 |--------|---------------------------|------------|
 | Languages | TypeScript, Rust, Python | Go |
-| Containers | 6+ | 2-5 |
+| Containers | 6+ | 2 |
 | Memory | 12GB+ | 4-5GB |
 | BM25 | Tantivy subprocess | SPLADE vectors |
 | Vectors | Milvus (4 containers) | Qdrant (1 container) |
 | ML | Infinity (Python HTTP) | ONNX Runtime (native) |
 | Internal comm | Direct HTTP | Event-driven |
-| Deployment | Complex | Single binary possible |
+| Deployment | Complex | Client-server (2 binaries) |
 | Connection Tracking | ❌ Not implemented | ✅ Full support |
 | Admin Settings UI | ❌ Limited | ✅ 80+ settings |
 

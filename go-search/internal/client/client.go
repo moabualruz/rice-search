@@ -35,13 +35,28 @@ type Config struct {
 	// ConnectionID is an optional explicit connection ID.
 	// If empty, one will be auto-generated from hostname/MAC.
 	ConnectionID string
+
+	// MaxIdleConns controls the maximum number of idle (keep-alive) connections
+	// across all hosts. Zero means no limit.
+	MaxIdleConns int
+
+	// MaxConnsPerHost limits the total number of connections per host.
+	// Zero means no limit.
+	MaxConnsPerHost int
+
+	// IdleConnTimeout is the maximum amount of time an idle (keep-alive)
+	// connection will remain idle before closing itself.
+	IdleConnTimeout time.Duration
 }
 
 // DefaultConfig returns sensible defaults.
 func DefaultConfig() Config {
 	return Config{
-		BaseURL: "http://localhost:8080",
-		Timeout: 30 * time.Second,
+		BaseURL:         "http://localhost:8080",
+		Timeout:         30 * time.Second,
+		MaxIdleConns:    100,
+		MaxConnsPerHost: 100,
+		IdleConnTimeout: 90 * time.Second,
 	}
 }
 
@@ -126,6 +141,15 @@ func New(cfg Config) *Client {
 	if cfg.Timeout == 0 {
 		cfg.Timeout = 30 * time.Second
 	}
+	if cfg.MaxIdleConns == 0 {
+		cfg.MaxIdleConns = 100
+	}
+	if cfg.MaxConnsPerHost == 0 {
+		cfg.MaxConnsPerHost = 100
+	}
+	if cfg.IdleConnTimeout == 0 {
+		cfg.IdleConnTimeout = 90 * time.Second
+	}
 
 	// Auto-generate connection ID if not provided
 	connectionID := cfg.ConnectionID
@@ -133,11 +157,22 @@ func New(cfg Config) *Client {
 		connectionID = GenerateConnectionID()
 	}
 
+	// Configure explicit connection pooling for production tuning
+	transport := &http.Transport{
+		MaxIdleConns:        cfg.MaxIdleConns,
+		MaxIdleConnsPerHost: cfg.MaxConnsPerHost / 5, // 20% per host
+		MaxConnsPerHost:     cfg.MaxConnsPerHost,
+		IdleConnTimeout:     cfg.IdleConnTimeout,
+		DisableCompression:  false,
+		ForceAttemptHTTP2:   true,
+	}
+
 	return &Client{
 		baseURL:      cfg.BaseURL,
 		connectionID: connectionID,
 		httpClient: &http.Client{
-			Timeout: cfg.Timeout,
+			Timeout:   cfg.Timeout,
+			Transport: transport,
 		},
 	}
 }

@@ -1,0 +1,454 @@
+{
+  "doc": "02-events.md",
+  "verification_date": "2025-12-30",
+  "topics_documented": [
+    "ml.embed.request",
+    "ml.embed.response",
+    "ml.sparse.request",
+    "ml.sparse.response",
+    "ml.rerank.request",
+    "ml.rerank.response",
+    "search.request",
+    "search.response",
+    "index.request",
+    "index.response",
+    "index.chunk.created",
+    "index.progress",
+    "index.complete",
+    "store.created",
+    "store.deleted",
+    "settings.changed",
+    "model.downloaded",
+    "model.validated",
+    "connection.registered",
+    "connection.unregistered",
+    "connection.activity",
+    "alert.triggered"
+  ],
+  "topics_implemented": [
+    {
+      "topic": "ml.embed.request",
+      "constant": "TopicEmbedRequest",
+      "defined": true,
+      "location": "internal/bus/bus.go:68",
+      "publishers": [
+        "internal/index/pipeline.go:495",
+        "internal/search/service.go:1209"
+      ],
+      "subscribers": [
+        "internal/ml/handlers.go:31,37",
+        "internal/metrics/events.go:46"
+      ],
+      "pattern": "Request/Reply",
+      "verified": true
+    },
+    {
+      "topic": "ml.embed.response",
+      "constant": "TopicEmbedResponse",
+      "defined": true,
+      "location": "internal/bus/bus.go:69",
+      "publishers": [
+        "internal/ml/handlers.go:70,150 (via Respond)"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:49"
+      ],
+      "pattern": "Request/Reply",
+      "verified": true
+    },
+    {
+      "topic": "ml.sparse.request",
+      "constant": "TopicSparseRequest",
+      "defined": true,
+      "location": "internal/bus/bus.go:70",
+      "publishers": [
+        "internal/index/pipeline.go:533",
+        "internal/search/service.go:1247"
+      ],
+      "subscribers": [
+        "internal/ml/handlers.go:32,37",
+        "internal/metrics/events.go:58"
+      ],
+      "pattern": "Request/Reply",
+      "verified": true
+    },
+    {
+      "topic": "ml.sparse.response",
+      "constant": "TopicSparseResponse",
+      "defined": true,
+      "location": "internal/bus/bus.go:71",
+      "publishers": [
+        "internal/ml/handlers.go:100,150 (via Respond)"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:61"
+      ],
+      "pattern": "Request/Reply",
+      "verified": true
+    },
+    {
+      "topic": "ml.rerank.request",
+      "constant": "TopicRerankRequest",
+      "defined": true,
+      "location": "internal/bus/bus.go:72",
+      "publishers": [
+        "internal/search/service.go:1287"
+      ],
+      "subscribers": [
+        "internal/ml/handlers.go:33,37",
+        "internal/metrics/events.go:52"
+      ],
+      "pattern": "Request/Reply",
+      "verified": true
+    },
+    {
+      "topic": "ml.rerank.response",
+      "constant": "TopicRerankResponse",
+      "defined": true,
+      "location": "internal/bus/bus.go:73",
+      "publishers": [
+        "internal/ml/handlers.go:132,150 (via Respond)"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:55"
+      ],
+      "pattern": "Request/Reply",
+      "verified": true
+    },
+    {
+      "topic": "search.request",
+      "constant": "TopicSearchRequest",
+      "defined": true,
+      "location": "internal/bus/bus.go:76",
+      "publishers": [],
+      "subscribers": [
+        "internal/metrics/events.go:27"
+      ],
+      "pattern": "Request/Reply",
+      "verified": false,
+      "notes": "No publishers found - search.request events not used in current implementation"
+    },
+    {
+      "topic": "search.response",
+      "constant": "TopicSearchResponse",
+      "defined": true,
+      "location": "internal/bus/bus.go:77",
+      "publishers": [
+        "internal/search/service.go:816"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:30"
+      ],
+      "pattern": "Fire-and-forget",
+      "verified": true,
+      "notes": "Published for metrics/observability only, not used in request/reply"
+    },
+    {
+      "topic": "index.request",
+      "constant": "TopicIndexRequest",
+      "defined": true,
+      "location": "internal/bus/bus.go:80",
+      "publishers": [],
+      "subscribers": [
+        "internal/metrics/events.go:35"
+      ],
+      "pattern": "Request/Reply",
+      "verified": false,
+      "notes": "No publishers found - index.request events not used in current implementation"
+    },
+    {
+      "topic": "index.response",
+      "constant": "TopicIndexResponse",
+      "defined": true,
+      "location": "internal/bus/bus.go:81",
+      "publishers": [
+        "internal/index/pipeline.go:230"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:38"
+      ],
+      "pattern": "Fire-and-forget",
+      "verified": true,
+      "notes": "Published for metrics/observability only"
+    },
+    {
+      "topic": "index.chunk.created",
+      "constant": "TopicChunkCreated",
+      "defined": true,
+      "location": "internal/bus/bus.go:82",
+      "publishers": [
+        "internal/index/pipeline.go:257"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:41"
+      ],
+      "pattern": "Fire-and-forget",
+      "verified": true
+    },
+    {
+      "topic": "store.created",
+      "constant": "TopicStoreCreated",
+      "defined": true,
+      "location": "internal/bus/bus.go:85",
+      "publishers": [
+        "internal/store/service.go:225"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:66"
+      ],
+      "pattern": "Fire-and-forget",
+      "verified": true
+    },
+    {
+      "topic": "store.deleted",
+      "constant": "TopicStoreDeleted",
+      "defined": true,
+      "location": "internal/bus/bus.go:86",
+      "publishers": [
+        "internal/store/service.go:225"
+      ],
+      "subscribers": [
+        "internal/metrics/events.go:69"
+      ],
+      "pattern": "Fire-and-forget",
+      "verified": true
+    },
+    {
+      "topic": "settings.changed",
+      "constant": "TopicSettingsChanged",
+      "defined": true,
+      "location": "internal/bus/bus.go:89",
+      "publishers": [
+        "internal/settings/service.go:290"
+      ],
+      "subscribers": [
+        "internal/server/server.go:482"
+      ],
+      "pattern": "Fire-and-forget",
+      "verified": true,
+      "notes": "Enables runtime configuration updates"
+    },
+    {
+      "topic": "model.downloaded",
+      "constant": "TopicModelDownloaded",
+      "defined": true,
+      "location": "internal/bus/bus.go:92",
+      "publishers": [],
+      "subscribers": [],
+      "pattern": "Fire-and-forget",
+      "verified": false,
+      "notes": "Defined but not yet implemented - future feature"
+    },
+    {
+      "topic": "model.validated",
+      "constant": "TopicModelValidated",
+      "defined": true,
+      "location": "internal/bus/bus.go:93",
+      "publishers": [],
+      "subscribers": [],
+      "pattern": "Fire-and-forget",
+      "verified": false,
+      "notes": "Defined but not yet implemented - future feature"
+    },
+    {
+      "topic": "connection.registered",
+      "constant": "TopicConnectionRegistered",
+      "defined": true,
+      "location": "internal/bus/bus.go:96",
+      "publishers": [
+        "internal/connection/service.go:108"
+      ],
+      "subscribers": [
+        "internal/connection/audit.go:73",
+        "internal/connection/monitoring.go:104"
+      ],
+      "pattern": "Fire-and-forget",
+      "verified": true
+    },
+    {
+      "topic": "connection.unregistered",
+      "constant": "TopicConnectionUnregistered",
+      "defined": true,
+      "location": "internal/bus/bus.go:97",
+      "publishers": [],
+      "subscribers": [],
+      "pattern": "Fire-and-forget",
+      "verified": false,
+      "notes": "Defined but not published - connections use 'connection.deleted' instead"
+    },
+    {
+      "topic": "connection.activity",
+      "constant": "TopicConnectionActivity",
+      "defined": true,
+      "location": "internal/bus/bus.go:98",
+      "publishers": [],
+      "subscribers": [],
+      "pattern": "Fire-and-forget",
+      "verified": false,
+      "notes": "Defined but not used - 'connection.seen' is used instead"
+    },
+    {
+      "topic": "alert.triggered",
+      "constant": "TopicAlertTriggered",
+      "defined": true,
+      "location": "internal/bus/bus.go:101",
+      "publishers": [
+        "internal/connection/monitoring.go:333"
+      ],
+      "subscribers": [],
+      "pattern": "Fire-and-forget",
+      "verified": false,
+      "notes": "Published but no subscribers in production code (used in tests only)"
+    }
+  ],
+  "undocumented_topics_implemented": [
+    {
+      "topic": "connection.seen",
+      "constant": "TopicConnectionSeen",
+      "defined": false,
+      "location": "internal/connection/service.go (no constant)",
+      "publishers": [
+        "internal/connection/service.go:182"
+      ],
+      "subscribers": [
+        "internal/connection/audit.go:78",
+        "internal/connection/monitoring.go:99"
+      ],
+      "pattern": "Fire-and-forget",
+      "notes": "Used instead of 'connection.activity' - NOT in bus.go constants"
+    },
+    {
+      "topic": "connection.deleted",
+      "constant": "TopicConnectionDeleted",
+      "defined": false,
+      "location": "internal/connection/service.go (no constant)",
+      "publishers": [
+        "internal/connection/service.go:215"
+      ],
+      "subscribers": [
+        "internal/connection/audit.go:83"
+      ],
+      "pattern": "Fire-and-forget",
+      "notes": "Used instead of 'connection.unregistered' - NOT in bus.go constants"
+    },
+    {
+      "topic": "connection.renamed",
+      "constant": null,
+      "defined": false,
+      "location": null,
+      "publishers": [
+        "internal/connection/service.go:387"
+      ],
+      "subscribers": [
+        "internal/connection/audit.go:88"
+      ],
+      "pattern": "Fire-and-forget",
+      "notes": "NOT documented in 02-events.md and NOT in bus.go constants"
+    }
+  ],
+  "missing_topics": [
+    "index.progress",
+    "index.complete"
+  ],
+  "orphan_topics": [
+    "model.downloaded",
+    "model.validated",
+    "connection.unregistered",
+    "connection.activity",
+    "alert.triggered"
+  ],
+  "request_reply_verified": true,
+  "request_reply_details": {
+    "pattern_implemented": true,
+    "bus_interface_has_request": true,
+    "bus_interface_has_respond": false,
+    "memory_bus_has_request": true,
+    "memory_bus_has_respond": true,
+    "kafka_bus_has_request": true,
+    "request_callers": 5,
+    "respond_callers": 1,
+    "correlation_id_field_exists": true,
+    "notes": "Respond() is a method on MemoryBus specifically, not on the Bus interface. KafkaBus uses internal response routing."
+  },
+  "drainable_verified": true,
+  "drainable_details": {
+    "interface_defined": true,
+    "location": "internal/bus/bus.go:27-33",
+    "drainable_interface_exists": true,
+    "memory_bus_implements": true,
+    "memory_bus_location": "internal/bus/memory.go:160-174",
+    "drain_helper_exists": true,
+    "drain_helper_location": "internal/bus/bus.go:37-42",
+    "uses_waitgroup": true,
+    "notes": "MemoryBus tracks in-flight handlers with sync.WaitGroup for graceful shutdown"
+  },
+  "event_base_structure_verified": true,
+  "event_base_details": {
+    "documented_fields": [
+      "ID",
+      "CorrelationID",
+      "Timestamp",
+      "Source"
+    ],
+    "implemented_fields": [
+      "ID",
+      "Type",
+      "Source",
+      "Timestamp",
+      "CorrelationID",
+      "Payload"
+    ],
+    "location": "internal/bus/bus.go:44-63",
+    "extra_fields": [
+      "Type",
+      "Payload"
+    ],
+    "notes": "Implementation has additional Type and Payload fields not in doc"
+  },
+  "bus_factory_verified": true,
+  "bus_factory_details": {
+    "factory_exists": true,
+    "location": "internal/bus/factory.go:12-43",
+    "supported_types": [
+      "memory",
+      "kafka"
+    ],
+    "unimplemented_types": [
+      "nats",
+      "redis"
+    ],
+    "nats_error": "NATS bus not implemented yet",
+    "redis_error": "Redis Streams bus not implemented yet"
+  },
+  "gaps": [
+    "search.request topic has no publishers (HTTP handlers bypass event bus)",
+    "index.request topic has no publishers (HTTP handlers bypass event bus)",
+    "index.progress and index.complete topics documented but NOT implemented",
+    "connection.seen, connection.deleted, connection.renamed NOT in bus.go constants",
+    "model.downloaded and model.validated defined but not implemented",
+    "connection.unregistered defined but not used (connection.deleted used instead)",
+    "connection.activity defined but not used (connection.seen used instead)",
+    "alert.triggered has no production subscribers (only test subscribers)",
+    "Event struct has Type and Payload fields not documented in EventBase",
+    "Respond() method not on Bus interface, only on MemoryBus implementation"
+  ],
+  "score": "14/22 topics fully implemented",
+  "score_breakdown": {
+    "total_documented": 22,
+    "fully_implemented": 14,
+    "partially_implemented": 3,
+    "not_implemented": 5,
+    "undocumented_but_active": 3
+  },
+  "recommendations": [
+    "Add TopicConnectionSeen, TopicConnectionDeleted to bus.go constants",
+    "Remove or implement index.progress and index.complete events",
+    "Implement or remove model.downloaded and model.validated topics",
+    "Clarify connection.activity vs connection.seen usage",
+    "Clarify connection.unregistered vs connection.deleted usage",
+    "Add subscribers for alert.triggered or mark as test-only",
+    "Update EventBase documentation to include Type and Payload fields",
+    "Consider adding Respond() to Bus interface for consistency",
+    "Document that search.request/index.request bypass event bus in HTTP layer"
+  ]
+}

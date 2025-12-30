@@ -55,6 +55,12 @@ func (m *Metrics) PrometheusFormat() string {
 	writeHistogramVec(&sb, m.BusEventLatency)
 	writeCounterVec(&sb, m.BusErrors)
 
+	// HTTP metrics
+	writeCounterVec(&sb, m.HTTPRequests)
+	writeHistogramVec(&sb, m.HTTPDuration)
+	writeGauge(&sb, m.HTTPRequestsInFlight)
+	writeHistogramVec(&sb, m.HTTPRequestSize)
+
 	return sb.String()
 }
 

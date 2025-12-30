@@ -91,6 +91,12 @@ func (m *MemoryStorage) Exists(id string) bool {
 	return exists
 }
 
+// Close cleans up memory storage resources (no-op for memory storage).
+func (m *MemoryStorage) Close() error {
+	// No resources to clean up for in-memory storage
+	return nil
+}
+
 // FileStorage stores connections in JSON files.
 type FileStorage struct {
 	basePath string
@@ -210,4 +216,12 @@ func (f *FileStorage) Exists(id string) bool {
 	path := f.connectionPath(id)
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// Close cleans up file storage resources.
+func (f *FileStorage) Close() error {
+	// Ensure all file writes are flushed
+	// No open file handles to close since we open/close on each operation
+	// Could add fsync here if we add write caching in the future
+	return nil
 }

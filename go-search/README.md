@@ -27,7 +27,7 @@ Pure Go code search platform. Single binary. Event-driven. GPU-first.
 | **Web UI** | ✅ Complete | 48 routes, 8 pages, admin dashboard |
 | **Connection Tracking** | ✅ Complete | Unique feature: auto search scoping |
 | **Settings System** | ✅ Complete | 80+ settings, export/import |
-| **Metrics** | ✅ Complete | 40+ Prometheus metrics |
+| **Metrics** | ✅ Complete | 37 Prometheus metrics |
 
 See [docs/IMPLEMENTATION.md](docs/IMPLEMENTATION.md) for detailed status.  
 See [docs/TODO.md](docs/TODO.md) for remaining features.
@@ -60,7 +60,7 @@ See [docs/TODO.md](docs/TODO.md) for remaining features.
 - Device status visible in UI and API
 
 ### 📊 Comprehensive Observability
-- 40+ Prometheus metrics
+- 37 Prometheus metrics
 - Time-series dashboards with 13 presets
 - Per-store, per-connection breakdowns
 - Auto-refresh stats page

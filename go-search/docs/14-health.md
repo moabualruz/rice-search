@@ -62,33 +62,26 @@ Kubernetes uses this to know if the pod should receive traffic.
 
 ### Logic
 
-Returns 200 only if ALL of these are true:
-1. Qdrant is reachable
-2. ML models are loaded
-3. Event bus is connected (if distributed)
+Returns 200 if service is healthy or degraded (can handle requests).  
+Returns 503 only if unhealthy (critical failure).
+
+Checks:
+1. Qdrant connectivity
+2. ML models (embedder + sparse required)
 
 ```go
-func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
-    checks := runReadinessChecks()
+func (h *HealthHandler) HandleReady(w http.ResponseWriter, r *http.Request) {
+    status := h.checker.Check(ctx)
     
-    allReady := true
-    for _, check := range checks {
-        if check.Status != "ok" {
-            allReady = false
-            break
-        }
+    if status.Status == "healthy" {
+        w.WriteHeader(http.StatusOK)
+    } else if status.Status == "degraded" {
+        w.WriteHeader(http.StatusOK) // Still OK but with warnings
+    } else {
+        w.WriteHeader(http.StatusServiceUnavailable)
     }
     
-    status := http.StatusOK
-    if !allReady {
-        status = http.StatusServiceUnavailable
-    }
-    
-    w.WriteHeader(status)
-    json.NewEncoder(w).Encode(ReadinessResponse{
-        Status: statusString(allReady),
-        Checks: checks,
-    })
+    json.NewEncoder(w).Encode(status)
 }
 ```
 
@@ -97,11 +90,41 @@ func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 **Ready (200):**
 ```json
 {
-    "status": "ready",
-    "checks": {
-        "qdrant": {"status": "ok", "latency_ms": 5},
-        "models": {"status": "ok"},
-        "event_bus": {"status": "ok"}
+    "status": "healthy",
+    "timestamp": "2025-12-30T01:00:00Z",
+    "version": "1.0.0",
+    "uptime": "1h30m0s",
+    "components": {
+        "ml": {
+            "status": "healthy",
+            "message": "all models loaded"
+        },
+        "qdrant": {
+            "status": "healthy",
+            "message": "connected",
+            "latency_ms": 5
+        }
+    }
+}
+```
+
+**Degraded (200):**
+```json
+{
+    "status": "degraded",
+    "timestamp": "2025-12-30T01:00:00Z",
+    "version": "1.0.0",
+    "uptime": "1h30m0s",
+    "components": {
+        "ml": {
+            "status": "degraded",
+            "message": "some models not loaded"
+        },
+        "qdrant": {
+            "status": "healthy",
+            "message": "connected",
+            "latency_ms": 5
+        }
     }
 }
 ```
@@ -109,11 +132,20 @@ func ReadinessHandler(w http.ResponseWriter, r *http.Request) {
 **Not Ready (503):**
 ```json
 {
-    "status": "not_ready",
-    "checks": {
-        "qdrant": {"status": "ok", "latency_ms": 5},
-        "models": {"status": "loading", "progress": "2/3"},
-        "event_bus": {"status": "ok"}
+    "status": "unhealthy",
+    "timestamp": "2025-12-30T01:00:00Z",
+    "version": "1.0.0",
+    "uptime": "1h30m0s",
+    "components": {
+        "ml": {
+            "status": "healthy",
+            "message": "all models loaded"
+        },
+        "qdrant": {
+            "status": "unhealthy",
+            "message": "connection refused",
+            "latency_ms": 5000
+        }
     }
 }
 ```
@@ -138,7 +170,39 @@ readinessProbe:
 
 Detailed health information for debugging and monitoring.
 
-### Response
+### Current Implementation
+
+Currently returns the same simplified response as `/readyz`:
+
+```json
+{
+    "status": "healthy",
+    "timestamp": "2025-12-30T01:00:00Z",
+    "version": "1.0.0",
+    "uptime": "1h30m0s",
+    "components": {
+        "ml": {
+            "status": "healthy",
+            "message": "all models loaded"
+        },
+        "qdrant": {
+            "status": "healthy",
+            "message": "connected",
+            "latency_ms": 5
+        }
+    }
+}
+```
+
+**Note:** A more comprehensive `DetailedHealthChecker` exists in `internal/search/health_detailed.go` but is not currently wired up to this endpoint. See "Future Enhancement" section below for the full detailed response format.
+
+---
+
+## Future Enhancement: Detailed Health Response
+
+The codebase includes a comprehensive health checker (`DetailedHealthChecker` in `internal/search/health_detailed.go`) that can provide much richer health information. This is not currently exposed but is available for future use.
+
+### Planned Detailed Response Format
 
 ```json
 {
@@ -150,7 +214,7 @@ Detailed health information for debugging and monitoring.
     
     "checks": {
         "qdrant": {
-            "status": "ok",
+            "status": "healthy",
             "url": "http://localhost:6333",
             "version": "1.12.4",
             "latency_ms": 5,
@@ -158,7 +222,7 @@ Detailed health information for debugging and monitoring.
         },
         
         "models": {
-            "status": "ok",
+            "status": "healthy",
             "device": "cuda:0",
             "load_mode": "all",
             "embed": {
@@ -175,18 +239,23 @@ Detailed health information for debugging and monitoring.
                 "loaded": true,
                 "name": "jina-reranker-v2",
                 "memory_mb": 500
+            },
+            "query": {
+                "loaded": true,
+                "name": "codebert-base",
+                "memory_mb": 438
             }
         },
         
         "event_bus": {
-            "status": "ok",
+            "status": "healthy",
             "type": "memory",
             "topics": 6,
             "pending_events": 12
         },
         
         "cache": {
-            "status": "ok",
+            "status": "healthy",
             "type": "memory",
             "embed_entries": 50000,
             "embed_hit_rate": 0.72,
@@ -195,7 +264,7 @@ Detailed health information for debugging and monitoring.
         },
         
         "stores": {
-            "status": "ok",
+            "status": "healthy",
             "count": 2,
             "total_chunks": 45000
         }
@@ -204,88 +273,102 @@ Detailed health information for debugging and monitoring.
     "system": {
         "goroutines": 150,
         "heap_mb": 512,
-        "cpu_percent": 25,
-        "open_files": 50
+        "alloc_mb": 520,
+        "sys_mb": 800,
+        "num_gc": 42,
+        "goos": "linux",
+        "goarch": "amd64",
+        "num_cpu": 8
     }
 }
 ```
+
+To enable this detailed response, wire up `DetailedHealthChecker` to the `/v1/health` endpoint in the server initialization.
 
 ---
 
 ## Health Check Logic
 
-### Qdrant Check
+### Current Implementation
+
+The simplified health checker (`HealthChecker` in `internal/search/health.go`) performs basic checks:
+
+#### Qdrant Check
 
 ```go
-func checkQdrant() HealthCheck {
+func (h *HealthChecker) checkQdrant(ctx context.Context) Component {
+    if h.qdrant == nil {
+        return Component{
+            Status:  "unhealthy",
+            Message: "Qdrant client not configured",
+        }
+    }
+    
     start := time.Now()
-    
-    // Try to list collections
-    _, err := qdrantClient.ListCollections(ctx)
-    
-    latency := time.Since(start)
+    err := h.qdrant.HealthCheck(ctx)
+    latency := time.Since(start).Milliseconds()
     
     if err != nil {
-        return HealthCheck{
-            Status:  "error",
-            Error:   err.Error(),
+        return Component{
+            Status:  "unhealthy",
+            Message: err.Error(),
             Latency: latency,
         }
     }
     
-    return HealthCheck{
-        Status:  "ok",
+    return Component{
+        Status:  "healthy",
+        Message: "connected",
         Latency: latency,
     }
 }
 ```
 
-### Models Check
+#### Models Check
 
 ```go
-func checkModels() HealthCheck {
-    embedLoaded := mlService.IsModelLoaded("embed")
-    sparseLoaded := mlService.IsModelLoaded("sparse")
-    rerankLoaded := mlService.IsModelLoaded("rerank")
-    
-    if embedLoaded && sparseLoaded && rerankLoaded {
-        return HealthCheck{Status: "ok"}
-    }
-    
-    // Return loading status
-    loaded := 0
-    if embedLoaded { loaded++ }
-    if sparseLoaded { loaded++ }
-    if rerankLoaded { loaded++ }
-    
-    return HealthCheck{
-        Status:   "loading",
-        Progress: fmt.Sprintf("%d/3", loaded),
-    }
-}
-```
-
-### Event Bus Check
-
-```go
-func checkEventBus() HealthCheck {
-    // For memory bus, always ok if initialized
-    if bus.Type() == "memory" {
-        return HealthCheck{Status: "ok"}
-    }
-    
-    // For Kafka/NATS, check connection
-    err := bus.Ping(ctx)
-    if err != nil {
-        return HealthCheck{
-            Status: "error",
-            Error:  err.Error(),
+func (h *HealthChecker) checkML() Component {
+    if h.ml == nil {
+        return Component{
+            Status:  "unhealthy",
+            Message: "ML service not configured",
         }
     }
     
-    return HealthCheck{Status: "ok"}
+    health := h.ml.Health()
+    if !health.Healthy {
+        return Component{
+            Status:  "unhealthy",
+            Message: health.Error,
+        }
+    }
+    
+    // Check which models are loaded (embedder + sparse required)
+    allLoaded := true
+    for model, loaded := range health.ModelsLoaded {
+        if !loaded && (model == "embedder" || model == "sparse") {
+            allLoaded = false
+            break
+        }
+    }
+    
+    if !allLoaded {
+        return Component{
+            Status:  "degraded",
+            Message: "some models not loaded",
+        }
+    }
+    
+    return Component{
+        Status:  "healthy",
+        Message: "all models loaded",
+    }
 }
 ```
+
+### Future: Detailed Health Checks
+
+The `DetailedHealthChecker` includes additional checks for event bus, cache, stores, and system metrics. See `internal/search/health_detailed.go` for implementation.
 
 ---
 
@@ -293,13 +376,14 @@ func checkEventBus() HealthCheck {
 
 ```
 1. HTTP server starts (healthz returns 200)
-2. readyz returns 503 (not ready)
+2. readyz returns unhealthy (503)
 3. Connect to Qdrant
 4. Load ML models (may take 30-60s)
-5. Connect to event bus
-6. readyz returns 200 (ready)
-7. Start accepting traffic
+5. readyz returns healthy (200)
+6. Start accepting traffic
 ```
+
+**Note:** The current implementation checks Qdrant + ML only. Future event bus checks would add another step.
 
 ### Startup Probe (Kubernetes)
 
@@ -319,20 +403,24 @@ startupProbe:
 
 ## Dependency Health
 
-### Required Dependencies
+### Required Dependencies (Current)
 
 | Dependency | Required for Ready | Check Method |
 |------------|-------------------|--------------|
-| Qdrant | Yes | List collections |
-| ML Models | Yes | Check loaded flag |
-| Event Bus | Yes (if distributed) | Ping |
+| Qdrant | Yes | `HealthCheck()` |
+| ML Models (embedder + sparse) | Yes | Check loaded flags |
 
-### Optional Dependencies
+### Optional Dependencies (Future)
+
+The `DetailedHealthChecker` includes checks for:
 
 | Dependency | Impact if Down | Check Method |
 |------------|---------------|--------------|
-| Cache (Redis) | Degraded perf | Ping |
-| Metrics endpoint | No metrics | N/A |
+| Event Bus | Degraded | Ping (memory bus always healthy) |
+| Cache | Degraded perf | Stats from ML service |
+| Stores | Degraded | List stores + count chunks |
+| Reranker Model | Degraded search quality | Check loaded flag |
+| Query Model | No query expansion | Check loaded flag |
 
 ---
 
@@ -340,42 +428,49 @@ startupProbe:
 
 | Status | HTTP Code | Meaning |
 |--------|-----------|---------|
-| `healthy` | 200 | All systems operational |
-| `degraded` | 200 | Operating with reduced capability |
-| `not_ready` | 503 | Cannot accept traffic |
-| `unhealthy` | 503 | Critical failure |
+| `healthy` | 200 | All critical systems operational |
+| `degraded` | 200 | Operating with reduced capability (e.g., some models not loaded) |
+| `unhealthy` | 503 | Critical failure (Qdrant down or ML service failed) |
 
 ### Degraded Example
 
 ```json
 {
     "status": "degraded",
-    "checks": {
-        "qdrant": {"status": "ok"},
-        "models": {"status": "ok"},
-        "cache": {"status": "error", "error": "Redis connection refused"}
-    },
-    "message": "Cache unavailable, operating without caching"
+    "timestamp": "2025-12-30T01:00:00Z",
+    "version": "1.0.0",
+    "uptime": "5m0s",
+    "components": {
+        "ml": {
+            "status": "degraded",
+            "message": "some models not loaded"
+        },
+        "qdrant": {
+            "status": "healthy",
+            "message": "connected",
+            "latency_ms": 3
+        }
+    }
 }
 ```
+
+**Note:** Degraded state still returns HTTP 200, indicating the service can handle traffic (albeit with reduced functionality).
 
 ---
 
 ## Configuration
 
-```yaml
-health:
-  # Check intervals
-  qdrant_check_interval: 10s
-  model_check_interval: 30s
-  
-  # Timeouts
-  qdrant_timeout: 5s
-  
-  # Thresholds
-  qdrant_latency_warn_ms: 100
-  qdrant_latency_error_ms: 1000
+Health checks use context timeouts configured in the handlers:
+
+```go
+// Readiness check timeout
+ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+
+// Detailed health check timeout  
+ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 ```
+
+**Note:** Advanced configuration (check intervals, thresholds, etc.) would be added when wiring up the `DetailedHealthChecker`.
 
 ---
 
@@ -412,9 +507,19 @@ server {
 
 When dependencies fail:
 
-| Failure | Behavior |
-|---------|----------|
-| Qdrant down | Return 503, queue requests |
-| Model OOM | Evict LRU, retry |
-| Cache down | Continue without cache |
-| Event bus down | Fall back to local calls |
+| Failure | Current Behavior | Status Code |
+|---------|------------------|-------------|
+| Qdrant down | Return unhealthy | 503 (not ready) |
+| ML service failed | Return unhealthy | 503 (not ready) |
+| Some models not loaded | Return degraded | 200 (still ready) |
+
+**Future Behavior** (with `DetailedHealthChecker`):
+
+| Failure | Behavior | Status Code |
+|---------|----------|-------------|
+| Qdrant down | Return unhealthy | 503 |
+| ML service failed | Return unhealthy | 503 |
+| Some models not loaded | Return degraded | 200 |
+| Event bus down | Return degraded (fall back to local) | 200 |
+| Cache down | Return degraded (continue without cache) | 200 |
+| Stores service error | Return degraded | 200 |

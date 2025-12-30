@@ -24,7 +24,7 @@ Configuration via environment variables, CLI flags, or config file. Priority: CL
 | `QDRANT_URL` | `--qdrant-url` | `http://localhost:6333` | Qdrant URL |
 | `QDRANT_API_KEY` | - | - | Qdrant API key (if auth enabled) |
 | `QDRANT_TIMEOUT` | - | `30s` | Request timeout |
-| `QDRANT_COLLECTION_PREFIX` | - | `rice` | Collection name prefix |
+| `QDRANT_COLLECTION_PREFIX` | - | `rice_` | Collection name prefix (trailing underscore for cleaner names) |
 
 ### Models
 
@@ -38,7 +38,7 @@ Configuration via environment variables, CLI flags, or config file. Priority: CL
 | `RICE_EMBED_DIM` | - | `1536` | Embedding dimensions |
 | `RICE_EMBED_BATCH_SIZE` | - | `32` | Embedding batch size |
 | `RICE_SPARSE_BATCH_SIZE` | - | `32` | Sparse batch size |
-| `RICE_RERANK_BATCH_SIZE` | - | `32` | Rerank batch size |
+| `RICE_RERANK_BATCH_SIZE` | - | `16` | Rerank batch size (optimized for reranker memory usage) |
 | `RICE_MAX_SEQ_LENGTH` | - | `8192` | Maximum sequence length |
 | `RICE_ML_URL` | - | - | External ML service URL (distributed mode) |
 
@@ -113,7 +113,7 @@ All models default to GPU for maximum performance.
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
 | `RICE_CACHE_TYPE` | - | `memory` | Cache backend (memory, redis) |
-| `RICE_CACHE_SIZE` | - | `100000` | Max cache entries |
+| `RICE_CACHE_SIZE` | - | `10000` | Max cache entries |
 | `RICE_CACHE_TTL` | - | `0` | Cache TTL in seconds (0 = no expiry) |
 | `RICE_REDIS_URL` | - | - | Redis URL for distributed cache |
 
@@ -127,7 +127,7 @@ All models default to GPU for maximum performance.
 | `RICE_NATS_URL` | - | `nats://localhost:4222` | NATS URL |
 | `RICE_REDIS_STREAM_URL` | - | - | Redis streams URL |
 | `RICE_EVENT_LOG_ENABLED` | - | `false` | Enable event logging to file |
-| `RICE_EVENT_LOG_PATH` | - | `./logs/events.log` | Event log file path |
+| `RICE_EVENT_LOG_PATH` | - | `./data/events/events.log` | Event log file path |
 
 ### Security
 
@@ -168,7 +168,7 @@ All models default to GPU for maximum performance.
 
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
-| `RICE_MODELS_REGISTRY` | - | `./models/registry.json` | Model registry file path |
+| `RICE_MODELS_REGISTRY` | - | `./data/models/registry.yaml` | Model registry file path |
 | `RICE_MODELS_MAPPERS` | - | `./models/mappers` | Model mappers directory |
 | `RICE_MODELS_AUTO_DOWNLOAD` | - | `false` | Auto-download missing models |
 
@@ -177,7 +177,7 @@ All models default to GPU for maximum performance.
 | Env Var | CLI Flag | Default | Description |
 |---------|----------|---------|-------------|
 | `RICE_SETTINGS_AUDIT_ENABLED` | - | `true` | Enable settings change audit |
-| `RICE_SETTINGS_AUDIT_PATH` | - | `./data/settings-audit.log` | Settings audit log path |
+| `RICE_SETTINGS_AUDIT_PATH` | - | `./data/audit/settings.log` | Settings audit log path |
 
 ---
 
@@ -206,7 +206,7 @@ ml:
   embed_dim: 1536
   embed_batch_size: 32
   sparse_batch_size: 32
-  rerank_batch_size: 32
+  rerank_batch_size: 16
   max_seq_length: 8192
   models_dir: ./models
   external_url: ""  # For distributed mode
@@ -221,13 +221,13 @@ connection:
   max_inactive: 30  # Days
 
 model_registry:
-  registry_path: ./models/registry.json
+  registry_path: ./data/models/registry.yaml
   mappers_path: ./models/mappers
   auto_download: false
 
 cache:
   type: memory  # memory, redis
-  size: 100000
+  size: 10000
   ttl: 0  # 0 = no expiry
   redis_url: ""
 
@@ -238,7 +238,7 @@ bus:
   nats_url: nats://localhost:4222
   redis_url: ""
   event_log_enabled: false
-  event_log_path: ./logs/events.log
+  event_log_path: ./data/events/events.log
 
 index:
   chunk_size: 512
@@ -280,7 +280,7 @@ metrics:
 
 settings:
   audit_enabled: true
-  audit_path: ./data/settings-audit.log
+  audit_path: ./data/audit/settings.log
 ```
 
 ---

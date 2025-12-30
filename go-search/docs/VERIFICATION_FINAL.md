@@ -90,7 +90,7 @@ The go-search implementation is **production-ready** for single-process deployme
 | 08-cli.md | ⚠️ FAIL | Two binaries vs monolithic, flags differ |
 | 09-config.md | ⚠️ PARTIAL | 6 default value mismatches |
 | 11-structure.md | ⚠️ PARTIAL | Directory organization evolved |
-| 13-observability.md | ⚠️ PARTIAL | 36 metrics (not 40+), some missing |
+| 13-observability.md | ✅ CORRECT | 37 metrics accurately documented |
 | 18-performance.md | ⚠️ PARTIAL | No pprof, no benchmark CLI |
 
 ### ❌ Aspirational/Not Implemented (4 Docs)
@@ -162,7 +162,7 @@ The go-search implementation is **production-ready** for single-process deployme
 - [x] Event-driven architecture (MemoryBus)
 - [x] Web UI (52 routes, admin, settings)
 - [x] Connection tracking and scoping
-- [x] Prometheus metrics (36 metrics)
+- [x] Prometheus metrics (37 metrics)
 - [x] Graceful shutdown
 - [x] Store management
 

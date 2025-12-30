@@ -66,7 +66,7 @@ Examples:
 
 ### Topic Registry
 
-**Actual topics from code (bus.go):**
+**Actively used topics (17 topics):**
 
 | Topic | Publisher | Subscriber | Pattern |
 |-------|-----------|------------|---------|
@@ -84,12 +84,25 @@ Examples:
 | `store.created` | Store | API, External | Fire-and-forget |
 | `store.deleted` | Store | API, External | Fire-and-forget |
 | `settings.changed` | Settings | Services | Fire-and-forget |
-| `model.downloaded` | ML | Admin | Fire-and-forget |
-| `model.validated` | ML | Admin | Fire-and-forget |
-| `connection.registered` | Connection | Admin | Fire-and-forget |
-| `connection.unregistered` | Connection | Admin | Fire-and-forget |
-| `connection.activity` | Connection | Metrics | Fire-and-forget |
+| `connection.registered` | Connection | Audit, Monitoring | Fire-and-forget |
+| `connection.seen` | Connection | Audit, Monitoring | Fire-and-forget |
+| `connection.deleted` | Connection | Audit | Fire-and-forget |
 | `alert.triggered` | Any | Monitoring | Fire-and-forget |
+
+**Defined but unused (4 topics):**
+
+| Topic | Status | Location |
+|-------|--------|----------|
+| `model.downloaded` | ❌ Never published | bus/bus.go:92 |
+| `model.validated` | ❌ Never published | bus/bus.go:93 |
+| `connection.unregistered` | ❌ Never published | bus/bus.go:97 |
+| `connection.activity` | ❌ Never published | bus/bus.go:98 |
+
+**Note on connection topics:** Connection event topics are defined in two places:
+- `bus/bus.go` - Defines `TopicConnectionRegistered`, `TopicConnectionUnregistered`, `TopicConnectionActivity`
+- `connection/events.go` - Defines local constants `TopicConnectionRegistered`, `TopicConnectionSeen`, `TopicConnectionDeleted`
+
+The connection package uses its own local topic constants (`connection.seen`, `connection.deleted`) rather than the ones in `bus.go`.
 
 ---
 

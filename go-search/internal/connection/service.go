@@ -389,3 +389,18 @@ func (s *Service) RenameConnection(ctx context.Context, id, newName string) erro
 
 	return nil
 }
+
+// Close cleans up connection service resources.
+func (s *Service) Close() error {
+	// Stop any background goroutines if any (currently none)
+	// Flush any pending data (currently none)
+
+	// Close storage backend if it implements io.Closer
+	if closer, ok := s.storage.(interface{ Close() error }); ok {
+		if err := closer.Close(); err != nil {
+			return fmt.Errorf("failed to close storage: %w", err)
+		}
+	}
+
+	return nil
+}

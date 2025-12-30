@@ -11,6 +11,8 @@ Base URL: `http://localhost:8080`
 
 **Total Endpoints: 71**
 
+> **Note**: All endpoints including the 4 Admin HTMX connection management routes (`/admin/connections/{id}/enable|disable|rename` and `/admin/mappers/{id}/yaml`) are registered in `internal/web/handlers.go`.
+
 ---
 
 ## Table of Contents

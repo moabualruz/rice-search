@@ -26,6 +26,7 @@ import (
 	"github.com/ricesearch/rice-search/internal/models"
 	apperrors "github.com/ricesearch/rice-search/internal/pkg/errors"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
+	"github.com/ricesearch/rice-search/internal/pkg/middleware"
 	"github.com/ricesearch/rice-search/internal/qdrant"
 	"github.com/ricesearch/rice-search/internal/query"
 	"github.com/ricesearch/rice-search/internal/search"
@@ -42,6 +43,10 @@ var (
 
 	// inFlightCounter tracks the number of active HTTP requests
 	inFlightCounter int64
+
+	// serverReady indicates whether the server is ready to accept requests
+	// Set to false during shutdown to fail readiness checks
+	serverReady atomic.Bool
 )
 
 func main() {
@@ -128,6 +133,18 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		appCfg.Qdrant.URL = qdrantURL
 	}
 
+	// Initialize rate limiter if enabled
+	var rateLimiter *middleware.RateLimiter
+	if appCfg.Security.RateLimit > 0 {
+		rlCfg := middleware.RateLimiterConfig{
+			RequestsPerSecond: float64(appCfg.Security.RateLimit),
+			Burst:             appCfg.Security.RateLimit * 2,
+			CleanupInterval:   time.Minute,
+		}
+		rateLimiter = middleware.NewRateLimiter(rlCfg)
+		log.Info("Rate limiting enabled", "requests_per_second", appCfg.Security.RateLimit)
+	}
+
 	// Initialize metrics EARLY (needed for instrumented bus and ML wiring)
 	// Uses Redis persistence if configured, otherwise falls back to memory
 	metricsSvc := metrics.NewWithConfig(appCfg.Metrics.Persistence, appCfg.Metrics.RedisURL)
@@ -168,6 +185,8 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	if appCfg.Qdrant.APIKey != "" {
 		qdrantCfg.APIKey = appCfg.Qdrant.APIKey
 	}
+	// Always use timeout from config (has default of 30s if not set)
+	qdrantCfg.Timeout = appCfg.Qdrant.Timeout
 
 	qc, err := qdrant.NewClient(qdrantCfg)
 	if err != nil {
@@ -338,6 +357,18 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	// Wire monitoring service to search service
 	searchSvc.SetMonitoringService(monitoringSvc)
 
+	// Initialize detailed health checker
+	detailedHealthChecker := search.NewDetailedHealthChecker(search.DetailedHealthCheckerConfig{
+		MLService: mlSvc,
+		Qdrant:    qc,
+		QdrantURL: appCfg.Qdrant.URL,
+		Bus:       eventBus,
+		Stores:    storeSvc,
+		Version:   version,
+		GitCommit: commit,
+	})
+	log.Info("Initialized detailed health checker")
+
 	// Start gRPC server
 	grpcCfg := grpcserver.Config{
 		TCPAddr:        fmt.Sprintf("%s:%d", host, grpcPort),
@@ -371,19 +402,30 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	webHandler.RegisterRoutes(mux)
 
 	// Register REST API routes
-	registerAPIRoutes(mux, searchSvc, storeSvc, indexSvc, mlSvc, qc, log, version)
+	registerAPIRoutes(mux, searchSvc, storeSvc, indexSvc, mlSvc, qc, log, version, detailedHealthChecker)
 
-	// Create HTTP server with in-flight tracking middleware
+	// Build middleware chain
+	handler := http.Handler(mux)
+	handler = inFlightMiddleware(handler)
+	handler = loggingMiddleware(handler, log)
+	handler = corsMiddleware(handler)
+	if rateLimiter != nil {
+		handler = rateLimiter.Middleware(handler)
+	}
+	handler = recoveryMiddleware(handler, log)
+
+	// Create HTTP server with middleware chain
 	httpAddr := fmt.Sprintf("%s:%d", host, httpPort)
 	httpSrv := &http.Server{
 		Addr:         httpAddr,
-		Handler:      recoveryMiddleware(corsMiddleware(loggingMiddleware(inFlightMiddleware(mux), log)), log),
+		Handler:      handler,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 	}
 
 	// Start HTTP server in background
 	go func() {
+		serverReady.Store(true)
 		log.Info("Starting HTTP server", "addr", httpAddr, "web_ui", "enabled")
 		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Error("HTTP server error", "error", err)
@@ -403,6 +445,8 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	defer cancel()
 
 	// Stop accepting new requests
+	log.Info("Setting server to not ready...")
+	serverReady.Store(false)
 	if err := httpSrv.Shutdown(ctx); err != nil {
 		log.Error("HTTP shutdown error", "error", err)
 	}
@@ -414,6 +458,21 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	} else {
 		remaining := atomic.LoadInt64(&inFlightCounter)
 		log.Warn("Shutdown timeout reached with pending requests", "remaining", remaining)
+	}
+
+	// Close services that need cleanup
+	if settingsSvc != nil {
+		if err := settingsSvc.Close(); err != nil {
+			log.Warn("Error closing settings service", "error", err)
+		} else {
+			log.Info("Closed settings service")
+		}
+	}
+
+	if err := metricsSvc.Close(); err != nil {
+		log.Warn("Error closing metrics service", "error", err)
+	} else {
+		log.Info("Closed metrics service")
 	}
 
 	grpcSrv.Stop()
@@ -449,7 +508,7 @@ func parseQdrantURL(rawURL string) (string, int, error) {
 }
 
 // registerAPIRoutes registers REST API endpoints.
-func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, _ *qdrant.Client, _ *logger.Logger, version string) {
+func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, _ *qdrant.Client, _ *logger.Logger, version string, detailedHealthChecker *search.DetailedHealthChecker) {
 	// Health endpoints
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -466,29 +525,31 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		})
 	})
 
-	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("GET /v1/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		health := mlSvc.Health()
-		status := "healthy"
-		if !health.Healthy {
-			status = "degraded"
-		}
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"status":  status,
-			"version": version,
-			"ml":      health,
-		})
+		status := detailedHealthChecker.CheckDetailed(r.Context())
+		_ = json.NewEncoder(w).Encode(status)
 	})
 
-	// Readiness probe - returns 503 if ML service is not healthy
+	// Readiness probe - returns 503 if server is shutting down or ML service is not healthy
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
+
+		// Check if server is shutting down
+		if !serverReady.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_ = json.NewEncoder(w).Encode(map[string]string{"status": "not_ready", "reason": "shutting_down"})
+			return
+		}
+
+		// Check ML health
 		health := mlSvc.Health()
 		if !health.Healthy {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_ = json.NewEncoder(w).Encode(map[string]string{"status": "not_ready", "reason": "ml_unhealthy"})
 			return
 		}
+
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ready"})
 	})
 

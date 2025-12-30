@@ -6,7 +6,7 @@
 > |---------|--------|
 > | Authentication (API Key, JWT) | ❌ Not implemented |
 > | Authorization (store-level, role-based) | ❌ Not implemented |
-> | Rate Limiting | ❌ Not implemented |
+> | Rate Limiting | ✅ **Implemented** (per-client, configurable) |
 > | TLS/HTTPS | ❌ Not implemented (use reverse proxy) |
 > | Security Headers | ❌ Not implemented |
 > | Audit Logging | ✅ **Fully implemented** (connection + settings) |
@@ -168,69 +168,68 @@ func authorizeStore(c echo.Context, store string) error {
 
 ## Rate Limiting
 
+**Status: ✅ IMPLEMENTED**
+
 ### Configuration
 
-```yaml
-rate_limit:
-  enabled: true
-  
-  # Per-client limits
-  search: 100/min
-  index: 20/min
-  ml: 200/min
-  default: 300/min
-  
-  # Global limits
-  global_search: 10000/min
-  global_index: 500/min
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `RICE_RATE_LIMIT` | `0` | Requests per second per client (0 = disabled) |
+
+Environment variable:
+```bash
+RICE_RATE_LIMIT=100  # 100 requests/sec per client
 ```
 
 ### Implementation
 
+Located in `internal/pkg/middleware/ratelimit.go`:
+
+- **Per-client rate limiting** using `golang.org/x/time/rate`
+- **Client identification** via X-Forwarded-For, X-Real-IP, or RemoteAddr
+- **Automatic cleanup** of stale client entries (5-minute idle timeout)
+- **Token bucket algorithm** with configurable burst allowance (2x rate)
+- Returns **429 Too Many Requests** when rate limit exceeded
+
 ```go
+// Example: 100 req/sec per client
 type RateLimiter struct {
-    limiters map[string]*rate.Limiter
     mu       sync.RWMutex
+    clients  map[string]*rate.Limiter
+    rate     rate.Limit
+    burst    int
+    lastSeen map[string]time.Time
 }
 
-func (rl *RateLimiter) Allow(clientID, operation string) bool {
-    key := clientID + ":" + operation
-    
-    rl.mu.RLock()
-    limiter, exists := rl.limiters[key]
-    rl.mu.RUnlock()
-    
-    if !exists {
-        limiter = rl.createLimiter(operation)
-        rl.mu.Lock()
-        rl.limiters[key] = limiter
-        rl.mu.Unlock()
-    }
-    
-    return limiter.Allow()
+func (rl *RateLimiter) Allow(clientIP string) bool {
+    return rl.getLimiter(clientIP).Allow()
 }
 ```
 
-### Response Headers
+### Usage in Server
 
-```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1735430400
-Retry-After: 60
+```go
+// Enabled when RICE_RATE_LIMIT > 0 in config
+if appCfg.Security.RateLimit > 0 {
+    rateLimiter := middleware.NewRateLimiter(middleware.RateLimiterConfig{
+        RequestsPerSecond: float64(appCfg.Security.RateLimit),
+        Burst:             appCfg.Security.RateLimit * 2,
+        CleanupInterval:   time.Minute,
+    })
+    mux.Use(rateLimiter.Middleware)
+}
 ```
 
 ### Rate Limit Response
 
+Status: `429 Too Many Requests`
+
 ```json
 {
-    "error": {
-        "code": "RATE_LIMITED",
-        "message": "Rate limit exceeded",
-        "details": {
-            "limit": 100,
-            "reset_at": "2025-12-29T01:01:00Z"
-        }
+    "error": "rate limit exceeded",
+    "code": "RATE_LIMITED",
+    "details": {
+        "retry_after": "1"
     }
 }
 ```
@@ -462,14 +461,33 @@ func maskSensitive(headers http.Header) http.Header {
 
 ---
 
+## Implementation Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| Input Validation | ✅ Implemented | 12+ validators for all input types |
+| Path Security | ✅ Implemented | Traversal prevention, null bytes, reserved names |
+| Log Sanitization | ✅ Implemented | Injection prevention, sensitive data masking |
+| Audit Logging | ✅ Implemented | Connection tracking + settings changes |
+| CORS | ✅ Implemented | Configurable via `RICE_CORS_ORIGINS` |
+| Rate Limiting | ✅ Implemented | Per-client, configurable via `RICE_RATE_LIMIT` |
+| Authentication | ❌ Not Implemented | API key + JWT planned |
+| Authorization | ❌ Not Implemented | Store/operation-level planned |
+| TLS/HTTPS | ❌ Not Implemented | Use reverse proxy (nginx, Traefik) |
+| Security Headers | ❌ Not Implemented | CSP, X-Frame-Options planned |
+
+**Security Score: 6/10 implemented** (suitable for development and trusted networks)
+
+---
+
 ## Security Checklist
 
 | Item | Status |
 |------|--------|
 | Authentication enabled | Required for production |
-| Rate limiting enabled | Required for production |
-| TLS enabled | Required for production |
-| Input validation | Always |
-| Security headers | Always |
-| Audit logging | Recommended |
+| Rate limiting enabled | ✅ Available (`RICE_RATE_LIMIT`) |
+| TLS enabled | Required for production (use reverse proxy) |
+| Input validation | ✅ Always enabled |
+| Security headers | Recommended (use reverse proxy) |
+| Audit logging | ✅ Enabled by default |
 | Secrets in env vars | Required |

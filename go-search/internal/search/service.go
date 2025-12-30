@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/ml"
@@ -504,28 +506,50 @@ func (s *Service) Search(ctx context.Context, req Request) (*Response, error) {
 	} else {
 		// Use manual RRF fusion with custom weights
 
-		// Execute sparse and dense searches separately
+		// Execute sparse and dense searches in parallel using errgroup
+		var sparseResults, denseResults []qdrant.SearchResult
+		g, gctx := errgroup.WithContext(ctx)
+
+		// Run sparse search in parallel
 		sparseStart := time.Now()
-		sparseResults, err := s.qdrant.SparseSearch(ctx, req.Store, searchReq)
-		if err != nil {
-			return nil, fmt.Errorf("sparse search failed: %w", err)
-		}
-		sparseTime = time.Since(sparseStart)
-		if s.metrics != nil {
-			s.metrics.RecordSearchStage(req.Store, "sparse", sparseTime.Milliseconds())
-		}
+		g.Go(func() error {
+			var err error
+			sparseResults, err = s.qdrant.SparseSearch(gctx, req.Store, searchReq)
+			if err != nil {
+				return fmt.Errorf("sparse search failed: %w", err)
+			}
+			sparseTime = time.Since(sparseStart)
+			if s.metrics != nil {
+				s.metrics.RecordSearchStage(req.Store, "sparse", sparseTime.Milliseconds())
+			}
+			return nil
+		})
 
+		// Run dense search in parallel
 		denseStart := time.Now()
-		denseResults, err := s.qdrant.DenseSearch(ctx, req.Store, searchReq)
-		if err != nil {
-			return nil, fmt.Errorf("dense search failed: %w", err)
-		}
-		denseTime = time.Since(denseStart)
-		if s.metrics != nil {
-			s.metrics.RecordSearchStage(req.Store, "dense", denseTime.Milliseconds())
+		g.Go(func() error {
+			var err error
+			denseResults, err = s.qdrant.DenseSearch(gctx, req.Store, searchReq)
+			if err != nil {
+				return fmt.Errorf("dense search failed: %w", err)
+			}
+			denseTime = time.Since(denseStart)
+			if s.metrics != nil {
+				s.metrics.RecordSearchStage(req.Store, "dense", denseTime.Milliseconds())
+			}
+			return nil
+		})
+
+		// Wait for both searches to complete
+		if err := g.Wait(); err != nil {
+			return nil, fmt.Errorf("parallel retrieval failed: %w", err)
 		}
 
-		retrievalTime = sparseTime + denseTime
+		// Use the max of the two times since they ran in parallel
+		retrievalTime = sparseTime
+		if denseTime > sparseTime {
+			retrievalTime = denseTime
+		}
 
 		// Fuse results with custom weights
 		fusionStart := time.Now()

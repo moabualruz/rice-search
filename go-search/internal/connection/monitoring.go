@@ -25,6 +25,10 @@ type MonitoringService struct {
 	recentAlerts map[string]time.Time
 	alertMu      sync.RWMutex
 
+	// Lifecycle management
+	stopCh chan struct{}
+	wg     sync.WaitGroup
+
 	// Configuration
 	searchSpikeMultiplier float64
 	inactivityThreshold   time.Duration
@@ -101,11 +105,24 @@ func (m *MonitoringService) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to %s: %w", TopicConnectionRegistered, err)
 	}
 
+	// Initialize stop channel
+	m.stopCh = make(chan struct{})
+
 	// Start periodic anomaly detection
+	m.wg.Add(1)
 	go m.runDetectionLoop(ctx)
 
 	m.log.Info("Connection monitoring service started")
 	return nil
+}
+
+// Stop signals the monitoring service to stop and waits for goroutines to exit.
+func (m *MonitoringService) Stop() {
+	if m.stopCh != nil {
+		close(m.stopCh)
+	}
+	m.wg.Wait()
+	m.log.Info("Connection monitoring service stopped")
 }
 
 // handleConnectionSeen updates metrics and checks for IP changes.
@@ -196,6 +213,8 @@ func (m *MonitoringService) RecordSearch(connID string) {
 
 // runDetectionLoop periodically checks for anomalies.
 func (m *MonitoringService) runDetectionLoop(ctx context.Context) {
+	defer m.wg.Done()
+
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
@@ -204,7 +223,10 @@ func (m *MonitoringService) runDetectionLoop(ctx context.Context) {
 		case <-ticker.C:
 			m.detectAnomalies(ctx)
 		case <-ctx.Done():
-			m.log.Info("Monitoring loop stopped")
+			m.log.Info("Monitoring loop stopped (context cancelled)")
+			return
+		case <-m.stopCh:
+			m.log.Info("Monitoring loop stopped (explicit stop)")
 			return
 		}
 	}

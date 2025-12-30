@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/kelseyhightower/envconfig"
 	"gopkg.in/yaml.v3"
@@ -62,9 +63,10 @@ type Config struct {
 
 // QdrantConfig holds Qdrant connection settings.
 type QdrantConfig struct {
-	URL              string `envconfig:"QDRANT_URL" yaml:"url"`
-	APIKey           string `envconfig:"QDRANT_API_KEY" yaml:"api_key"`
-	CollectionPrefix string `envconfig:"QDRANT_COLLECTION_PREFIX" yaml:"collection_prefix"`
+	URL              string        `envconfig:"QDRANT_URL" yaml:"url"`
+	APIKey           string        `envconfig:"QDRANT_API_KEY" yaml:"api_key"`
+	CollectionPrefix string        `envconfig:"QDRANT_COLLECTION_PREFIX" yaml:"collection_prefix"`
+	Timeout          time.Duration `envconfig:"QDRANT_TIMEOUT" yaml:"timeout"`
 }
 
 // MLConfig holds ML inference settings.
@@ -236,6 +238,7 @@ func setDefaults(cfg *Config) {
 	cfg.Qdrant = QdrantConfig{
 		URL:              "http://localhost:6333",
 		CollectionPrefix: "rice_",
+		Timeout:          30 * time.Second,
 	}
 
 	cfg.ML = MLConfig{

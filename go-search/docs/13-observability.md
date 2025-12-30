@@ -4,6 +4,8 @@
 
 Three pillars: Metrics, Logging, Tracing.
 
+Rice Search exports **37 Prometheus metrics** covering search, indexing, ML inference, connections, stores, system resources, caching, and HTTP.
+
 ---
 
 ## Metrics (Prometheus)
@@ -197,6 +199,26 @@ rice_qdrant_connections_active 10
 rice_qdrant_requests_total{operation="search"} 5000
 rice_qdrant_errors_total{operation="search"} 5
 ```
+
+---
+
+### Metrics Summary
+
+**Total: 37 metrics** exported via `/metrics` endpoint.
+
+| Category | Count | Metric Names |
+|----------|-------|--------------|
+| **Search** | 5 | `rice_search_requests_total`, `rice_search_latency_ms`, `rice_search_results`, `rice_search_errors_total`, `rice_search_stage_duration_ms` |
+| **Index** | 4 | `rice_indexed_documents_total`, `rice_indexed_chunks_total`, `rice_index_latency_ms`, `rice_index_errors_total` |
+| **ML** | 8 | `rice_embed_requests_total`, `rice_embed_latency_ms`, `rice_embed_batch_size`, `rice_rerank_requests_total`, `rice_rerank_latency_ms`, `rice_query_understand_requests_total`, `rice_query_understand_latency_ms`, `rice_sparse_encode_requests_total`, `rice_sparse_encode_latency_ms` |
+| **Cache** | 3 | `rice_ml_cache_hits_total`, `rice_ml_cache_misses_total`, `rice_ml_cache_size` |
+| **Connection** | 3 | `rice_active_connections`, `rice_connections_total`, `rice_connection_errors_total` |
+| **Store** | 3 | `rice_stores_total`, `rice_documents_total`, `rice_chunks_total` |
+| **System** | 3 | `rice_goroutines`, `rice_memory_bytes`, `rice_uptime_seconds` |
+| **Event Bus** | 3 | `rice_bus_events_published_total`, `rice_bus_event_latency_seconds`, `rice_bus_errors_total` |
+| **HTTP** | 4 | `rice_http_requests_total`, `rice_http_request_duration_seconds`, `rice_http_requests_in_flight`, `rice_http_request_size_bytes` |
+
+**Additional**: Go runtime metrics (`go_*`) and process metrics (`process_*`) are also exported automatically.
 
 ---
 

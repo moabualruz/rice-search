@@ -39,7 +39,7 @@ go-search/
 │   │
 │   ├── index/                      # Indexing pipeline
 │   │   ├── batch.go                # Batch processing
-│   │   ├── chunker.go              # Code chunking (47 languages)
+│   │   ├── chunker.go              # Code chunking (40+ languages)
 │   │   ├── document.go             # Document model
 │   │   ├── pipeline.go             # Full indexing pipeline
 │   │   ├── symbols.go              # Symbol extraction
@@ -90,6 +90,9 @@ go-search/
 │   │   │   └── hash.go             # Content hashing
 │   │   ├── logger/                 # Structured logging
 │   │   │   └── logger.go           # Logger wrapper
+│   │   ├── middleware/             # HTTP middleware
+│   │   │   ├── doc.go              # Package documentation
+│   │   │   └── ratelimit.go        # Per-client rate limiting
 │   │   └── security/               # Security utilities
 │   │       ├── security.go         # Sanitization
 │   │       └── validation.go       # Input validation
@@ -356,7 +359,8 @@ Generated files should be committed for reproducible builds.
 
 ## Notes
 
-1. **No `internal/api/` package** - Server routes are in `cmd/rice-search-server/main.go` and `internal/server/`
-2. **No `internal/cache/` package** - Caching is embedded in `internal/ml/cache.go`
-3. **`postrank/` is under `search/`** - Not a top-level internal package
-4. **`fusion/` and `reranker/` are under `search/`** - Search-specific subpackages
+1. **Empty directories exist** - `internal/api/` and `internal/cache/` are placeholder directories (no files)
+2. **`internal/api/` is empty** - Server routes are in `cmd/rice-search-server/main.go` and `internal/server/`
+3. **`internal/cache/` is empty** - Caching is embedded in `internal/ml/cache.go`
+4. **`postrank/` is under `search/`** - Not a top-level internal package
+5. **`fusion/` and `reranker/` are under `search/`** - Search-specific subpackages

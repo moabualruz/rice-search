@@ -133,30 +133,56 @@ rice-search ml --port 8081 --device cuda --load-mode ondemand
 
 ### search
 
-> **⚠️ NOT IMPLEMENTED**: Standalone search service mode is not available. Search is embedded in `rice-search-server`.
->
-> **Note**: For CLI search queries, use `rice-search query "your search"` instead.
-
-Run search service only (microservices mode).
+Search indexed code from command line.
 
 ```bash
-rice-search search [flags]
+rice-search search [flags] <query>
 ```
 
-| Flag | Env Var | Default | Description |
-|------|---------|---------|-------------|
-| `--port` | `PORT` | `8082` | HTTP port |
-| `--bus` | `EVENT_BUS` | `memory` | Event bus URL |
-| `--qdrant-url` | `QDRANT_URL` | `http://localhost:6333` | Qdrant URL |
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--store`, `-s` | `default` | Target store |
+| `--top-k`, `-k` | `20` | Number of results to return |
+| `--no-rerank` | false | Disable neural reranking |
+| `--content` | false | Include content in results |
+| `--path-prefix` | - | Filter by path prefix |
+| `--lang` | - | Filter by language (comma-separated) |
 
 **Examples:**
 
 ```bash
-# Standalone
-rice-search search --port 8082 --qdrant-url http://qdrant:6333
+# Basic search
+rice-search search "authentication handler"
 
-# With Kafka
-rice-search search --bus kafka://localhost:9092 --qdrant-url http://qdrant:6333
+# More results
+rice-search search "error handling" -k 50
+
+# Search specific store
+rice-search search "database connection" -s myproject
+
+# Filter by path and language
+rice-search search "func main" --path-prefix cmd/ --lang go
+
+# Disable reranking for speed
+rice-search search "user login" --no-rerank
+
+# JSON output
+rice-search search "api endpoint" --format json
+```
+
+**Output (text):**
+
+```
+RESULTS (5 matches in 65ms)
+
+#1 [0.92] src/auth/handler.go:45-72
+   func Authenticate(ctx context.Context) error {
+       // validate user credentials
+       ...
+
+#2 [0.85] src/auth/token.go:12-34
+   func ValidateToken(token string) (*Claims, error) {
+       ...
 ```
 
 ---
@@ -186,6 +212,42 @@ rice-search web --port 3000 --api-url http://localhost:8080
 
 # Connect to remote API
 rice-search web --port 3000 --api-url http://api-server:8080
+```
+
+---
+
+### health
+
+Check server health status.
+
+```bash
+rice-search health [flags]
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--format` | `text` | Output format (text, json) |
+
+**Examples:**
+
+```bash
+# Basic health check
+rice-search health
+
+# JSON output
+rice-search health --format json
+```
+
+**Output (text):**
+
+```
+✓ Server: healthy (v1.0.0)
+
+Components:
+  ✓ qdrant     healthy
+  ✓ ml         healthy
+  ✓ index      healthy
+  ✓ search     healthy
 ```
 
 ---
@@ -238,25 +300,32 @@ AVAILABLE MODELS:
   rerank    jina-reranker-v2        score       500MB   ✗ not downloaded
 ```
 
-#### models info
+#### models check
 
-Show model information.
+Check installed models and their status.
 
 ```bash
-rice-search models info <model>
+rice-search models check
 ```
 
 **Output:**
 
 ```
-Model: jina-embeddings-v3
-Type: Dense Embedding
-Dimensions: 1536
-Max Tokens: 8192
-Size: 600MB
-Format: ONNX (FP16)
-Downloaded: Yes
-Path: ./models/jina-embeddings-v3.onnx
+MODEL STATUS:
+
+✓ Jina Code Embeddings v3 (embed)
+  Default model for embed
+  GPU acceleration: enabled
+
+✓ Jina Reranker v2 (rerank)
+  Default model for rerank
+  GPU acceleration: enabled
+
+✗ SPLADE++ (sparse) - not downloaded
+
+Total: 2/3 models downloaded (2.1 GB)
+
+Run 'rice-search models download' to download missing models
 ```
 
 ---
@@ -296,51 +365,7 @@ rice-search index ./src --store my-project
 
 ---
 
-### query
 
-Search from command line.
-
-```bash
-rice-search query [flags] <query>
-```
-
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--store` | `default` | Target store |
-| `--api-url` | `http://localhost:8080` | API URL |
-| `--top-k` | `10` | Results to return |
-| `--no-rerank` | false | Disable reranking |
-| `--format` | `table` | Output format (table, json) |
-
-**Examples:**
-
-```bash
-# Basic search
-rice-search query "authentication handler"
-
-# More results, JSON output
-rice-search query "error handling" --top-k 20 --format json
-
-# Search specific store
-rice-search query "user login" --store my-project
-```
-
-**Output (table):**
-
-```
-RESULTS (5 matches in 65ms)
-
-#1 [0.92] src/auth/handler.go:45-72
-   func Authenticate(ctx context.Context) error {
-       // validate user credentials
-       ...
-
-#2 [0.85] src/auth/token.go:12-34
-   func ValidateToken(token string) (*Claims, error) {
-       ...
-```
-
----
 
 ### stores
 
