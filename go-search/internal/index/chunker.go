@@ -1,9 +1,12 @@
 package index
 
 import (
+	"context"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/ricesearch/rice-search/internal/ast"
 )
 
 // ChunkerConfig holds configuration for the chunker.
@@ -34,6 +37,7 @@ func DefaultChunkerConfig() ChunkerConfig {
 // Chunker splits documents into searchable chunks.
 type Chunker struct {
 	config ChunkerConfig
+	parser ast.Parser
 }
 
 // NewChunker creates a new chunker with the given configuration.
@@ -41,11 +45,43 @@ func NewChunker(cfg ChunkerConfig) *Chunker {
 	if cfg.TargetSize == 0 {
 		cfg = DefaultChunkerConfig()
 	}
-	return &Chunker{config: cfg}
+	return &Chunker{
+		config: cfg,
+		parser: ast.NewParser(),
+	}
 }
 
 // ChunkDocument splits a document into chunks.
 func (c *Chunker) ChunkDocument(store string, doc *Document) []*Chunk {
+	// Try AST chunking first
+	if c.parser.SupportsLanguage(doc.Language) {
+		chunks, err := c.parser.Chunk(context.Background(), []byte(doc.Content), doc.Language, c.config.TargetSize)
+		if err == nil && len(chunks) > 0 {
+			// Convert AST chunks to index chunks
+			var result []*Chunk
+			for _, ac := range chunks {
+				result = append(result, &Chunk{
+					ID:           ComputeChunkID(store, doc.Path, ac.StartLine, ac.EndLine),
+					DocumentID:   doc.Hash,
+					Store:        store,
+					Path:         doc.Path,
+					Language:     doc.Language,
+					Content:      ac.Content,
+					Symbols:      ac.Symbols,
+					StartLine:    ac.StartLine,
+					EndLine:      ac.EndLine,
+					StartChar:    0,               // TODO: map properly if easy
+					EndChar:      len(ac.Content), // Approximate
+					TokenCount:   c.estimateTokens(ac.Content),
+					Hash:         ComputeChunkHash(store, doc.Path, ac.Content, ac.StartLine, ac.EndLine),
+					IndexedAt:    time.Now(),
+					ConnectionID: doc.ConnectionID,
+				})
+			}
+			return result
+		}
+	}
+
 	lines := strings.Split(doc.Content, "\n")
 
 	// For small files, return as single chunk

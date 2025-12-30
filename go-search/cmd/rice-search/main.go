@@ -72,6 +72,7 @@ Then use this CLI:
 		storesCmd(),
 		healthCmd(),
 		modelsCmd(),
+		watchCmd,
 	)
 
 	if err := rootCmd.Execute(); err != nil {

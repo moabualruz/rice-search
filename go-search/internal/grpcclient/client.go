@@ -12,7 +12,6 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/keepalive"
 
 	pb "github.com/ricesearch/rice-search/api/proto/ricesearchpb"
 )
@@ -67,11 +66,10 @@ func New(cfg Config) (*Client, error) {
 
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithKeepaliveParams(keepalive.ClientParameters{
-			Time:                10 * time.Second,
-			Timeout:             3 * time.Second,
-			PermitWithoutStream: true,
-		}),
+		grpc.WithDefaultCallOptions(
+			grpc.MaxCallRecvMsgSize(100*1024*1024), // 100MB
+			grpc.MaxCallSendMsgSize(100*1024*1024), // 100MB
+		),
 	}
 
 	// Add Unix socket dialer if needed
@@ -274,7 +272,7 @@ func (c *Client) Index(ctx context.Context, store string, docs []IndexDocument, 
 		Store:     store,
 		Documents: pbDocs,
 		Force:     force,
-	})
+	}, grpc.MaxCallRecvMsgSize(100*1024*1024), grpc.MaxCallSendMsgSize(100*1024*1024))
 	if err != nil {
 		return nil, err
 	}
