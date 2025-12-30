@@ -106,6 +106,24 @@ bun test                                           # Run all tests
 bun test --filter "Search"                         # Run specific test pattern
 ```
 
+## Terminology (CRITICAL)
+
+**Generic, Not Code-Specific**: Rice Search is optimized for code but works for any documents. Keep terminology generic:
+
+| ❌ Avoid | ✅ Use Instead |
+|----------|---------------|
+| "code search" | "semantic search" or "search" |
+| "code files" | "files" or "documents" |
+| "codebase" | "repository" or "file set" |
+| "source code" | "content" or "text" |
+
+**Why?** The same hybrid search (BM25 + embeddings + reranking) works for documentation, configs, logs, or any text. Code-specific features (Tree-sitter, language detection) are **optimizations**, not requirements.
+
+**When writing docs/comments:**
+- Frame code features as "optimized for" not "exclusively for"
+- Mention that non-code files still work (with regex/generic parsing)
+- Tool descriptions should welcome all document types
+
 ## Code Style & Standards
 
 **Formatting**: Biome (ricegrep) + ESLint/Prettier (API) + Next.js ESLint (web-ui)  

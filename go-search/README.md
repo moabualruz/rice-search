@@ -1,6 +1,8 @@
 # Rice Search - Go Edition
 
-Pure Go code search platform. Single binary. Event-driven. GPU-first.
+Pure Go semantic search platform. Single binary. Event-driven. GPU-first.
+
+> **Optimized for code, works for any documents.** The hybrid search pipeline (BM25 + embeddings + reranking) handles code, documentation, configs, logs, and any text files.
 
 ## Quick Summary
 
@@ -36,8 +38,9 @@ See [docs/TODO.md](docs/TODO.md) for remaining features.
 
 ### 🔍 Hybrid Search
 - **Sparse + Dense retrieval** with Qdrant native RRF fusion
-- **Neural reranking** with Jina Reranker
+- **Neural reranking** with Jina Reranker  
 - **Query understanding** with intent detection and keyword expansion
+- **Works for any text** - Code, documentation, configs, logs, markdown
 
 ### 🖥️ Full Admin UI
 - **Dashboard**: Health indicators, quick stats, recent activity
@@ -81,11 +84,13 @@ docker-compose -f deployments/docker-compose.dev.yml up -d
 # 4. Access Web UI
 open http://localhost:8080
 
-# 5. Index your code
+# 5. Index your files (code, docs, configs, any text)
 ./rice-search index ./src -s myproject
+./rice-search index ./docs -s docs
 
 # 6. Search!
 ./rice-search search "authentication handler" -s myproject
+./rice-search search "deployment configuration" -s docs
 ```
 
 ## Web UI Pages
