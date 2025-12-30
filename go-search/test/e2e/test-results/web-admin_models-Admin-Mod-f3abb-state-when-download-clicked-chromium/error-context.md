@@ -1,0 +1,157 @@
+# Page snapshot
+
+```yaml
+- generic [ref=e2]:
+  - navigation [ref=e3]:
+    - generic [ref=e5]:
+      - generic [ref=e6]:
+        - link "🔍 Rice Search" [ref=e8] [cursor=pointer]:
+          - /url: /
+          - generic [ref=e9]: 🔍
+          - generic [ref=e10]: Rice Search
+        - generic [ref=e11]:
+          - link "Dashboard" [ref=e12] [cursor=pointer]:
+            - /url: /
+          - link "Search" [ref=e13] [cursor=pointer]:
+            - /url: /search
+          - link "Stores" [ref=e14] [cursor=pointer]:
+            - /url: /stores
+          - link "Files" [ref=e15] [cursor=pointer]:
+            - /url: /files
+          - button "Admin" [ref=e17] [cursor=pointer]:
+            - text: Admin
+            - img [ref=e18]
+          - link "Stats" [ref=e20] [cursor=pointer]:
+            - /url: /stats
+      - generic [ref=e21]:
+        - button "💻 System" [ref=e22] [cursor=pointer]:
+          - text: 💻
+          - generic [ref=e23]: System
+        - generic [ref=e24]:
+          - generic "Healthy" [ref=e25]
+          - generic [ref=e26]: Healthy
+        - generic [ref=e27]: dev
+        - link "Qdrant" [ref=e28] [cursor=pointer]:
+          - /url: http://localhost:6333/dashboard
+          - text: Qdrant
+          - img [ref=e29]
+  - main [ref=e31]:
+    - generic [ref=e32]:
+      - generic [ref=e33]:
+        - generic [ref=e34]:
+          - heading "Model Management" [level=1] [ref=e35]
+          - paragraph [ref=e36]: Manage ML models for embeddings, reranking, and query understanding.
+        - link "Import from HuggingFace" [ref=e38] [cursor=pointer]:
+          - /url: /admin/models/search
+          - img [ref=e39]
+          - text: Import from HuggingFace
+      - generic [ref=e43]:
+        - img [ref=e45]
+        - paragraph [ref=e48]: "Download started for model: jinaai/jina-code-embeddings-1.5b"
+      - generic [ref=e49]:
+        - generic [ref=e51]:
+          - generic [ref=e52]:
+            - generic [ref=e53]:
+              - heading "Embeddings" [level=3] [ref=e54]
+              - paragraph [ref=e55]: Dense vector embeddings for semantic search
+            - generic [ref=e56]:
+              - generic [ref=e57]: "GPU:"
+              - button [ref=e58] [cursor=pointer]
+              - generic [ref=e59]: Enabled
+          - generic [ref=e61]:
+            - generic [ref=e63]: Default
+            - generic [ref=e64]:
+              - heading "Jina Code Embeddings 1.5B" [level=4] [ref=e65]
+              - paragraph [ref=e66]: Code-optimized dense embeddings with 1536 dimensions, optimized for code search
+            - generic [ref=e67]:
+              - generic [ref=e68]:
+                - generic [ref=e69]: "Dimensions:"
+                - generic [ref=e70]: "1536"
+              - generic [ref=e71]:
+                - generic [ref=e72]: "Max Tokens:"
+                - generic [ref=e73]: "8192"
+              - generic [ref=e75]: "Size:"
+            - generic [ref=e77]:
+              - img [ref=e78]
+              - text: Not Downloaded
+            - generic [ref=e80]:
+              - generic [ref=e81]: "GPU:"
+              - button [ref=e82] [cursor=pointer]
+            - button "Download" [active] [ref=e84] [cursor=pointer]
+        - generic [ref=e86]:
+          - generic [ref=e87]:
+            - generic [ref=e88]:
+              - heading "Reranking" [level=3] [ref=e89]
+              - paragraph [ref=e90]: Neural reranking for result quality
+            - generic [ref=e91]:
+              - generic [ref=e92]: "GPU:"
+              - button [ref=e93] [cursor=pointer]
+              - generic [ref=e94]: Enabled
+          - generic [ref=e96]:
+            - generic [ref=e98]: Default
+            - generic [ref=e99]:
+              - heading "Jina Reranker v2" [level=4] [ref=e100]
+              - paragraph [ref=e101]: Fast multilingual reranking model with code awareness
+            - generic [ref=e102]:
+              - generic [ref=e103]:
+                - generic [ref=e104]: "Max Tokens:"
+                - generic [ref=e105]: "512"
+              - generic [ref=e107]: "Size:"
+            - generic [ref=e109]:
+              - img [ref=e110]
+              - text: Not Downloaded
+            - generic [ref=e112]:
+              - generic [ref=e113]: "GPU:"
+              - button [ref=e114] [cursor=pointer]
+            - button "Download" [ref=e116] [cursor=pointer]
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - generic [ref=e120]:
+              - heading "Query Understanding" [level=3] [ref=e121]
+              - paragraph [ref=e122]: Intent classification and query expansion
+            - generic [ref=e123]:
+              - generic [ref=e124]: "GPU:"
+              - button [ref=e125] [cursor=pointer]
+              - generic [ref=e126]: Enabled
+          - generic [ref=e128]:
+            - generic [ref=e129]:
+              - paragraph [ref=e130]: Use Model for Query Understanding
+              - paragraph [ref=e131]: Using ML model for query understanding
+            - button "Disable Model" [ref=e132] [cursor=pointer]
+          - generic [ref=e133]:
+            - generic [ref=e134]:
+              - generic [ref=e135]:
+                - heading "CodeT5+ 220M" [level=4] [ref=e136]
+                - paragraph [ref=e137]: Alternative query understanding model - encoder-decoder for code understanding
+              - generic [ref=e138]:
+                - generic [ref=e139]:
+                  - generic [ref=e140]: "Max Tokens:"
+                  - generic [ref=e141]: "512"
+                - generic [ref=e143]: "Size:"
+              - generic [ref=e145]:
+                - img [ref=e146]
+                - text: Not Downloaded
+              - generic [ref=e148]:
+                - generic [ref=e149]: "GPU:"
+                - button [ref=e150] [cursor=pointer]
+              - generic [ref=e151]:
+                - button "Download" [ref=e152] [cursor=pointer]
+                - button "Delete" [ref=e153] [cursor=pointer]
+            - generic [ref=e154]:
+              - generic [ref=e156]: Default
+              - generic [ref=e157]:
+                - heading "CodeBERT Base" [level=4] [ref=e158]
+                - paragraph [ref=e159]: Code-specialized query understanding - pre-trained on 6 languages (Python, Java, JavaScript, PHP, Ruby, Go). Converts queries to optimized search terms with intent classification.
+              - generic [ref=e160]:
+                - generic [ref=e161]:
+                  - generic [ref=e162]: "Max Tokens:"
+                  - generic [ref=e163]: "512"
+                - generic [ref=e165]: "Size:"
+              - generic [ref=e167]:
+                - img [ref=e168]
+                - text: Not Downloaded
+              - generic [ref=e170]:
+                - generic [ref=e171]: "GPU:"
+                - button [ref=e172] [cursor=pointer]
+              - button "Download" [ref=e174] [cursor=pointer]
+```

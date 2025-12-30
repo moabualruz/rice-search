@@ -196,7 +196,7 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 		ModelsDir:    appCfg.ML.ModelsDir,
 		LoadDefaults: true,
 	}
-	modelReg, err := models.NewRegistry(modelRegCfg, log)
+	modelReg, err := models.NewRegistry(modelRegCfg, log, s.bus)
 	if err != nil {
 		log.Warn("Failed to create model registry, continuing without it", "error", err)
 	} else {
@@ -255,6 +255,7 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 			s.metrics,
 			appCfg.Qdrant.URL,
 			nil, // eventLogger - optional, for debugging only
+			s.bus,
 		)
 		log.Info("Initialized web UI handler")
 	}

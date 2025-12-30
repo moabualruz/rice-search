@@ -75,3 +75,8 @@ jspm_packages/
 benchmark_data/
 .rice-benchmark-data/
 benchmark_results/
+
+# models
+models/
+!models/.gitkeep
+!models/README.md

@@ -68,7 +68,7 @@ templ AdminModelsPage(data ModelsPageData) {
 			</div>
 
 			<!-- Models by Type -->
-			<div class="mt-8 space-y-8">
+			<div class="mt-8 space-y-8" hx-ext="sse" sse-connect="/admin/events">
 				@ModelsSection("Embeddings", "embed", data.Models, data.TypeConfigs)
 				@ModelsSection("Reranking", "rerank", data.Models, data.TypeConfigs)
 				@ModelsSection("Query Understanding", "query_understand", data.Models, data.TypeConfigs)
@@ -166,7 +166,7 @@ templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay,
 
 // ModelCard renders a single model card
 templ ModelCard(model ModelInfoDisplay) {
-	<div class="relative rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-4 shadow-sm hover:border-gray-400 dark:hover:border-gray-500">
+	<div id={ fmt.Sprintf("model-card-%s", strings.ReplaceAll(model.ID, "/", "_")) } class="relative rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-4 shadow-sm hover:border-gray-400 dark:hover:border-gray-500">
 		<!-- Default Badge -->
 		if model.IsDefault {
 			<div class="absolute top-2 right-2">
@@ -219,7 +219,7 @@ templ ModelCard(model ModelInfoDisplay) {
 				</div>
 				<!-- Progress bar -->
 				<div class="mt-2 w-full bg-gray-200 rounded-full h-1.5">
-					<div id={ fmt.Sprintf("progress-%s", model.ID) } class="bg-primary-600 h-1.5 rounded-full" style="width: 45%"></div>
+					<div id={ fmt.Sprintf("progress-%s", strings.ReplaceAll(model.ID, "/", "_")) } class="bg-primary-600 h-1.5 rounded-full" style="width: 45%"></div>
 				</div>
 			} else {
 				<div class="flex items-center text-xs text-gray-500">

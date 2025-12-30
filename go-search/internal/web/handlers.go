@@ -59,6 +59,7 @@ type Handler struct {
 	startTime   time.Time
 	qdrantURL   string
 	eventLogger *bus.EventLogger
+	bus         bus.Bus
 }
 
 // NewHandler creates a new web handler.
@@ -73,6 +74,7 @@ func NewHandler(
 	metricsInstance *metrics.Metrics,
 	qdrantURL string,
 	eventLogger *bus.EventLogger,
+	b bus.Bus,
 ) *Handler {
 	return &Handler{
 		grpc:        grpc,
@@ -86,6 +88,7 @@ func NewHandler(
 		startTime:   time.Now(),
 		qdrantURL:   qdrantURL,
 		eventLogger: eventLogger,
+		bus:         b,
 	}
 }
 
@@ -173,6 +176,9 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Event Logging API (for debugging)
 	mux.HandleFunc("GET /api/v1/events", h.handleAPIGetEvents)
+
+	// Admin - Events (SSE)
+	mux.HandleFunc("GET /admin/events", h.handleSSEEvents)
 
 	// Stats API (HTMX)
 	mux.HandleFunc("GET /stats/refresh", h.handleStatsRefresh)
@@ -1112,18 +1118,34 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 					}
 				}()
 
-				// Return appropriate message
+				// Return appropriate message AND OOB card update
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+				// 1. Success Message
 				msg := fmt.Sprintf("Download started for %s. Check export status for progress.", modelID)
 				if err := components.SuccessMessage(msg).Render(ctx, w); err != nil {
 					h.log.Error("Failed to render success message", "error", err)
 				}
+
+				// 2. OOB Swap for Model Card
+				// We construct a display model with "downloading" status
+				modelDisplay := components.ModelInfoDisplay{
+					ID:          modelID,
+					Type:        string(modelType),
+					DisplayName: modelID,
+					Status:      "downloading",
+					Size:        "Calculating...",
+				}
+
+				fmt.Fprintf(w, `<div hx-swap-oob="outerHTML:#model-card-%s">`, strings.ReplaceAll(modelID, "/", "_"))
+				_ = components.ModelCard(modelDisplay).Render(ctx, w)
+				fmt.Fprintf(w, `</div>`)
 				return
 			}
 		}
 	}
 
-	// Fallback to legacy download for registered models
+	// Fallback to legacy download for registered models (Normal path)
 	model, err := h.modelReg.GetModel(ctx, modelID)
 	if err != nil {
 		h.log.Error("Model not found", "model", modelID, "error", err)
@@ -1145,7 +1167,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Monitor progress in background
+	// Monitor progress in background (just logging, actual events via Bus)
 	go func() {
 		for progress := range progressChan {
 			if progress.Error != "" {
@@ -1156,11 +1178,40 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 
-	// Return success message
+	// Return success message AND OOB Card
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// 1. Message
 	if err := components.SuccessMessage(fmt.Sprintf("Download started for model: %s", modelID)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
+
+	// 2. OOB Card
+	displayModel := components.ModelInfoDisplay{
+		ID:          model.ID,
+		Type:        string(model.Type),
+		DisplayName: model.DisplayName,
+		Description: model.Description,
+		OutputDim:   model.OutputDim,
+		MaxTokens:   model.MaxTokens,
+		Downloaded:  false, // It's downloading
+		GPUEnabled:  model.GPUEnabled,
+		Size:        "Downloading...", // Placeholder
+		Status:      "downloading",
+	}
+
+	// Create a buffer or write directly? templ supports writing to w.
+	// But we need to separate OOB swap. HTMX handles multiple elements.
+	// We need to wrap it in <div hx-swap-oob="outerHTML:#model-card-{id}">...</div>
+	// Or just render the component and HTMX swaps it if target matches?
+	// The request target was likely the button. We want to swap the CARD.
+	// So we must use OOB.
+	// Templ doesn't have native OOB wrapper, we must construct it or use a helper.
+
+	// We'll write the OOB wrapper manually
+	fmt.Fprintf(w, `<div hx-swap-oob="outerHTML:#model-card-%s">`, modelID)
+	_ = components.ModelCard(displayModel).Render(ctx, w)
+	fmt.Fprintf(w, `</div>`)
 }
 
 func (h *Handler) handleSetDefaultModel(w http.ResponseWriter, r *http.Request) {

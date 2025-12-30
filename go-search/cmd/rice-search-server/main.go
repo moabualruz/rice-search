@@ -268,7 +268,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		ModelsDir:    appCfg.ML.ModelsDir,
 		LoadDefaults: true,
 	}
-	modelReg, err = models.NewRegistry(modelRegCfg, log)
+	modelReg, err = models.NewRegistry(modelRegCfg, log, eventBus)
 	if err != nil {
 		log.Warn("Failed to create model registry, continuing without it", "error", err)
 		modelReg = nil
@@ -399,6 +399,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		metricsSvc,        // Metrics
 		appCfg.Qdrant.URL, // qdrantURL
 		eventLogger,       // Event logger
+		eventBus,          // Event bus (for SSE)
 	)
 	webHandler.RegisterRoutes(mux)
 

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/onnx"
 	"github.com/ricesearch/rice-search/internal/pkg/errors"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
@@ -57,6 +58,7 @@ type Registry struct {
 	// HuggingFace integration
 	hfClient *HuggingFaceClient
 	exporter *ONNXExporter
+	bus      bus.Bus
 
 	// Export job tracking
 	exportJobs   map[string]*ExportJob
@@ -76,7 +78,7 @@ type RegistryConfig struct {
 }
 
 // NewRegistry creates a new model registry.
-func NewRegistry(cfg RegistryConfig, log *logger.Logger) (*Registry, error) {
+func NewRegistry(cfg RegistryConfig, log *logger.Logger, b bus.Bus) (*Registry, error) {
 	var storage Storage
 	if cfg.StoragePath != "" {
 		storage = NewFileStorage(cfg.StoragePath)
@@ -98,6 +100,7 @@ func NewRegistry(cfg RegistryConfig, log *logger.Logger) (*Registry, error) {
 		hfClient:    NewHuggingFaceClient(),
 		exporter:    NewONNXExporter(modelsDir),
 		exportJobs:  make(map[string]*ExportJob),
+		bus:         b,
 	}
 
 	// Load existing models from storage
@@ -413,6 +416,24 @@ func (r *Registry) DownloadModel(ctx context.Context, modelID string) (<-chan Do
 					if percent > 100 {
 						percent = 100
 					}
+
+					// Publish progress event
+					if r.bus != nil {
+						_ = r.bus.Publish(ctx, bus.TopicModelProgress, bus.Event{
+							ID:        fmt.Sprintf("dl-%s-%d", modelID, time.Now().UnixNano()),
+							Type:      bus.TopicModelProgress,
+							Source:    "registry",
+							Timestamp: time.Now().Unix(),
+							Payload: DownloadProgress{
+								ModelID:    modelID,
+								Downloaded: totalDownloaded,
+								Total:      model.Size,
+								Percent:    percent,
+								Complete:   false,
+							},
+						})
+					}
+
 					select {
 					case progressChan <- DownloadProgress{
 						ModelID:    modelID,
@@ -443,6 +464,23 @@ func (r *Registry) DownloadModel(ctx context.Context, modelID string) (<-chan Do
 					Error:   fmt.Sprintf("failed to download %s (tried multiple paths): %v", file, downloadErr),
 				}
 				return
+			}
+
+			// Publish progress event
+			if r.bus != nil {
+				_ = r.bus.Publish(ctx, bus.TopicModelProgress, bus.Event{
+					ID:        fmt.Sprintf("dl-%s-%d", modelID, time.Now().UnixNano()),
+					Type:      bus.TopicModelProgress,
+					Source:    "registry",
+					Timestamp: time.Now().Unix(),
+					Payload: DownloadProgress{
+						ModelID:    modelID,
+						Downloaded: totalDownloaded, // Approximated for multi-file
+						Total:      model.Size,
+						Percent:    float64(totalDownloaded) / float64(model.Size) * 100, // This logic is imperfect due to loop, handled better inside callback
+						Complete:   false,
+					},
+				})
 			}
 
 			_ = i // Progress tracking uses totalDownloaded

@@ -91,6 +91,7 @@ const (
 	// Model service topics.
 	TopicModelDownloaded = "model.downloaded"
 	TopicModelValidated  = "model.validated"
+	TopicModelProgress   = "model.progress"
 
 	// Connection service topics.
 	TopicConnectionRegistered   = "connection.registered"
