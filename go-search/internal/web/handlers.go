@@ -194,13 +194,13 @@ func (h *Handler) getLayoutData(ctx context.Context, title, currentPath string) 
 	// Get health status
 	healthResp, err := h.grpc.Health(ctx, &pb.HealthRequest{})
 	if err != nil {
-		components.HealthStatus = "unhealthy"
+		healthStatus = "unhealthy"
 	} else if healthResp != nil {
 		switch healthResp.Status {
 		case pb.HealthStatus_HEALTH_STATUS_DEGRADED:
-			components.HealthStatus = "degraded"
+			healthStatus = "degraded"
 		case pb.HealthStatus_HEALTH_STATUS_UNHEALTHY:
-			components.HealthStatus = "unhealthy"
+			healthStatus = "unhealthy"
 		}
 	}
 
@@ -213,7 +213,7 @@ func (h *Handler) getLayoutData(ctx context.Context, title, currentPath string) 
 	return components.LayoutData{
 		Title:        title,
 		CurrentPath:  currentPath,
-		components.HealthStatus: components.HealthStatus,
+		HealthStatus: healthStatus,
 		Version:      version,
 		QdrantURL:    h.qdrantURL,
 	}
@@ -273,11 +273,11 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	// Quick stats from stores
 	storesResp, err := h.grpc.ListStores(ctx, &pb.ListStoresRequest{})
 	if err == nil && storesResp != nil {
-		data.quickStats.TotalStores = len(storesResp.Stores)
+		data.QuickStats.TotalStores = len(storesResp.Stores)
 		for _, s := range storesResp.Stores {
 			if s.Stats != nil {
-				data.quickStats.TotalFiles += s.Stats.DocumentCount
-				data.quickStats.TotalChunks += s.Stats.ChunkCount
+				data.QuickStats.TotalFiles += s.Stats.DocumentCount
+				data.QuickStats.TotalChunks += s.Stats.ChunkCount
 			}
 		}
 	}
@@ -291,7 +291,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 				activeCount++
 			}
 		}
-		data.quickStats.ActiveConnections = activeCount
+		data.QuickStats.ActiveConnections = activeCount
 	}
 
 	// System info
@@ -375,7 +375,7 @@ func (h *Handler) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	data := SearchPageData{
+	data := components.SearchPageData{
 		Layout:      h.getLayoutData(ctx, "Search", "/search"),
 		Store:       r.URL.Query().Get("store"),
 		Stores:      stores,
@@ -414,7 +414,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	if err := r.ParseForm(); err != nil {
-		h.renderSearchResults(w, r, SearchPageData{Error: "Invalid form data"})
+		h.renderSearchResults(w, r, components.SearchPageData{Error: "Invalid form data"})
 		return
 	}
 
@@ -443,7 +443,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	// If no query, just render empty results
 	if query == "" {
-		h.renderSearchResults(w, r, SearchPageData{
+		h.renderSearchResults(w, r, components.SearchPageData{
 			Query:  "",
 			Store:  store,
 			Stores: stores,
@@ -462,7 +462,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.grpc.Search(ctx, searchReq)
 	if err != nil {
-		h.renderSearchResults(w, r, SearchPageData{
+		h.renderSearchResults(w, r, components.SearchPageData{
 			Query:  query,
 			Store:  store,
 			Stores: stores,
@@ -494,7 +494,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 		searchTime = resp.Metadata.SearchTimeMs
 	}
 
-	h.renderSearchResults(w, r, SearchPageData{
+	h.renderSearchResults(w, r, components.SearchPageData{
 		Query:      query,
 		Store:      store,
 		Stores:     stores,
@@ -504,7 +504,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) renderSearchResults(w http.ResponseWriter, r *http.Request, data SearchPageData) {
+func (h *Handler) renderSearchResults(w http.ResponseWriter, r *http.Request, data components.SearchPageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := components.SearchResults(data).Render(r.Context(), w); err != nil {
 		h.log.Error("Failed to render search results", "error", err)
@@ -2365,7 +2365,7 @@ func (h *Handler) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build components.RuntimeConfig from form values
-	cfg := settings.components.RuntimeConfig{
+	cfg := settings.RuntimeConfig{
 		// Server
 		ServerHost: r.FormValue("server_host"),
 		ServerPort: parseIntOr(r.FormValue("server_port"), 8080),
@@ -2585,7 +2585,7 @@ func (h *Handler) handleAPIPutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON body
-	var cfg settings.components.RuntimeConfig
+	var cfg settings.RuntimeConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON: " + err.Error()})
