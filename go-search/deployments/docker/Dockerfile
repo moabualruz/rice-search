@@ -31,16 +31,27 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     ./cmd/rice-search
 
 # =============================================================================
-# Stage 2: Runtime
+# Stage 2: Runtime (with ONNX export support)
 # =============================================================================
-FROM alpine:3.20
+FROM python:3.11-slim
 
 # Install runtime dependencies
-RUN apk add --no-cache ca-certificates tzdata
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    tzdata \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install optimum for ONNX export (enables HuggingFace model conversion)
+RUN pip install --no-cache-dir \
+    optimum[onnx] \
+    transformers \
+    torch --index-url https://download.pytorch.org/whl/cpu \
+    && pip cache purge
 
 # Create non-root user
-RUN addgroup -g 1000 rice && \
-    adduser -D -u 1000 -G rice rice
+RUN groupadd -g 1000 rice && \
+    useradd -u 1000 -g rice -m rice
 
 # Create directories
 RUN mkdir -p /app/models /app/data && \

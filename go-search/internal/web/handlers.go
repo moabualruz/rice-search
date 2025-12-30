@@ -101,7 +101,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /stats", h.handleStatsPage)
 
 	// File Operations API (HTMX)
-	mux.HandleFunc("POST /files/{path...}/reindex", h.handleReindexFile)
+	mux.HandleFunc("POST /files/reindex/{path...}", h.handleReindexFile)
 	mux.HandleFunc("DELETE /files/{path...}", h.handleDeleteFile)
 	mux.HandleFunc("GET /stores/{name}/files/export", h.handleExportFiles)
 
@@ -119,23 +119,33 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/stores", h.handleCreateStore)
 	mux.HandleFunc("DELETE /admin/stores/{name}", h.handleDeleteStore)
 
-	// Models API (HTMX)
-	mux.HandleFunc("POST /admin/models/{id}/download", h.handleDownloadModel)
-	mux.HandleFunc("POST /admin/models/{id}/default", h.handleSetDefaultModel)
-	mux.HandleFunc("POST /admin/models/{id}/gpu", h.handleToggleModelGPU)
-	mux.HandleFunc("DELETE /admin/models/{id}", h.handleDeleteModel)
+	// Models API (HTMX) - action first, model ID (may contain slashes) at end
+	mux.HandleFunc("POST /admin/models/download/{id...}", h.handleDownloadModel)
+	mux.HandleFunc("POST /admin/models/default/{id...}", h.handleSetDefaultModel)
+	mux.HandleFunc("POST /admin/models/gpu/{id...}", h.handleToggleModelGPU)
+	mux.HandleFunc("POST /admin/models/delete/{id...}", h.handleDeleteModel)
+	// Type-level model operations (type is simple string like "embed", "rerank")
+	mux.HandleFunc("POST /admin/models/type/{type}/gpu", h.handleToggleTypeGPU)
+	mux.HandleFunc("POST /admin/models/type/{type}/toggle", h.handleToggleTypeEnabled)
+
+	// HuggingFace Model Search & Import
+	mux.HandleFunc("GET /admin/models/search", h.handleHFModelSearchPage)
+	mux.HandleFunc("POST /admin/models/search", h.handleHFModelSearch)
+	mux.HandleFunc("GET /admin/models/export-jobs", h.handleExportJobsStatus)
+	mux.HandleFunc("GET /admin/models/export-jobs/{id}", h.handleExportJobStatus)
 
 	// Mappers API (HTMX)
 	mux.HandleFunc("POST /admin/mappers", h.handleCreateMapper)
 	mux.HandleFunc("PUT /admin/mappers/{id}", h.handleUpdateMapper)
 	mux.HandleFunc("DELETE /admin/mappers/{id}", h.handleDeleteMapper)
+	mux.HandleFunc("GET /admin/mappers/{id}/edit", h.handleEditMapperModal)
 	mux.HandleFunc("GET /admin/mappers/{id}/yaml", h.handleMapperYAML)
 	mux.HandleFunc("POST /admin/mappers/generate", h.handleGenerateMapper)
 
 	// Connections API (HTMX)
 	mux.HandleFunc("POST /admin/connections/{id}/enable", h.handleEnableConnection)
 	mux.HandleFunc("POST /admin/connections/{id}/disable", h.handleDisableConnection)
-	mux.HandleFunc("POST /admin/connections/{id}/rename", h.handleRenameConnection)
+	mux.HandleFunc("PUT /admin/connections/rename", h.handleRenameConnection)
 	mux.HandleFunc("DELETE /admin/connections/{id}", h.handleDeleteConnection)
 
 	// Settings API (HTMX)
@@ -1064,8 +1074,59 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start download (returns progress channel)
-	progressChan, err := h.modelReg.DownloadModel(ctx, modelID)
+	// Parse form for model type (used for HuggingFace downloads)
+	if err := r.ParseForm(); err == nil {
+		// Check if this is a new HuggingFace model that needs type
+		typeStr := r.FormValue("type")
+		if typeStr != "" {
+			modelType := models.ModelType(typeStr)
+			if modelType.Valid() {
+				// Use smart download that handles ONNX detection and export
+				progressChan, err := h.modelReg.DownloadOrExportModel(context.Background(), modelID, modelType)
+				if err != nil {
+					h.log.Error("Failed to start model download/export", "model", modelID, "error", err)
+					w.Header().Set("Content-Type", "text/html; charset=utf-8")
+					if err := ErrorMessage(fmt.Sprintf("Failed to download model: %s", err.Error())).Render(ctx, w); err != nil {
+						h.log.Error("Failed to render error", "error", err)
+					}
+					return
+				}
+
+				// Monitor progress in background
+				go func() {
+					for progress := range progressChan {
+						if progress.Error != "" {
+							h.log.Error("Model download/export failed", "model", modelID, "error", progress.Error)
+						} else if progress.Complete {
+							h.log.Info("Model download/export complete", "model", modelID, "export", progress.IsExport)
+						}
+					}
+				}()
+
+				// Return appropriate message
+				w.Header().Set("Content-Type", "text/html; charset=utf-8")
+				msg := fmt.Sprintf("Download started for %s. Check export status for progress.", modelID)
+				if err := SuccessMessage(msg).Render(ctx, w); err != nil {
+					h.log.Error("Failed to render success message", "error", err)
+				}
+				return
+			}
+		}
+	}
+
+	// Fallback to legacy download for registered models
+	model, err := h.modelReg.GetModel(ctx, modelID)
+	if err != nil {
+		h.log.Error("Model not found", "model", modelID, "error", err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage(fmt.Sprintf("Model not found: %s", modelID)).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Use smart download with the model's type
+	progressChan, err := h.modelReg.DownloadOrExportModel(context.Background(), modelID, model.Type)
 	if err != nil {
 		h.log.Error("Failed to start model download", "model", modelID, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1075,7 +1136,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Monitor progress in background (simplified - real implementation would use SSE or WebSockets)
+	// Monitor progress in background
 	go func() {
 		for progress := range progressChan {
 			if progress.Error != "" {
@@ -1230,6 +1291,289 @@ func (h *Handler) handleDeleteModel(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := SuccessMessage(fmt.Sprintf("Deleted model: %s", modelID)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
+	}
+}
+
+func (h *Handler) handleToggleTypeGPU(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	modelType := r.PathValue("type")
+
+	if modelType == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Model type is required").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	if h.modelReg == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Parse form to get enabled status
+	if err := r.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	enabled := r.FormValue("enabled") == "true"
+
+	// Toggle GPU for the model type
+	err := h.modelReg.SetTypeGPU(ctx, models.ModelType(modelType), enabled)
+	if err != nil {
+		h.log.Error("Failed to toggle type GPU", "type", modelType, "enabled", enabled, "error", err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage(fmt.Sprintf("Failed to toggle GPU: %s", err.Error())).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	status := "disabled"
+	if enabled {
+		status = "enabled"
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := SuccessMessage(fmt.Sprintf("GPU %s for %s models", status, modelType)).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render success message", "error", err)
+	}
+}
+
+func (h *Handler) handleToggleTypeEnabled(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	modelType := r.PathValue("type")
+
+	if modelType == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Model type is required").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	if h.modelReg == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Toggle the model type enabled state
+	err := h.modelReg.ToggleTypeEnabled(ctx, models.ModelType(modelType))
+	if err != nil {
+		h.log.Error("Failed to toggle type enabled", "type", modelType, "error", err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage(fmt.Sprintf("Failed to toggle: %s", err.Error())).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := SuccessMessage(fmt.Sprintf("Toggled %s model type", modelType)).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render success message", "error", err)
+	}
+}
+
+// =============================================================================
+// HuggingFace Model Search
+// =============================================================================
+
+func (h *Handler) handleHFModelSearchPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	data := HFSearchPageData{
+		Layout:            h.getLayoutData(ctx, "Search HuggingFace Models", "/admin/models/search"),
+		ExporterAvailable: h.modelReg != nil && h.modelReg.IsExporterAvailable(),
+	}
+
+	// Get active export jobs
+	if h.modelReg != nil {
+		jobs := h.modelReg.ListActiveExportJobs()
+		for _, j := range jobs {
+			data.ActiveJobs = append(data.ActiveJobs, ExportJobDisplay{
+				ID:            j.ID,
+				ModelID:       j.ModelID,
+				Status:        j.Status,
+				Message:       j.Message,
+				Percent:       j.Percent,
+				EstimatedTime: j.EstimatedTime,
+				StartedAt:     j.StartedAt,
+			})
+		}
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := HFModelSearchPage(data).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render HF search page", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) handleHFModelSearch(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.modelReg == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	query := r.FormValue("query")
+	modelTypeStr := r.FormValue("type")
+	onnxOnly := r.FormValue("onnx_only") == "true"
+	limitStr := r.FormValue("limit")
+
+	modelType := models.ModelType(modelTypeStr)
+	if !modelType.Valid() {
+		modelType = models.ModelTypeEmbed // Default
+	}
+
+	limit := 20
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	h.log.Info("Searching HuggingFace", "query", query, "type", modelType, "onnx_only", onnxOnly, "limit", limit)
+
+	// Search HuggingFace
+	results, err := h.modelReg.SearchHuggingFaceModels(ctx, modelType, query, onnxOnly, limit)
+	if err != nil {
+		h.log.Error("HuggingFace search failed", "error", err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage(fmt.Sprintf("Search failed: %s", err.Error())).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Check which models have ONNX (for non-ONNX-only searches)
+	displayResults := make([]HFModelDisplay, 0, len(results))
+	for _, m := range results {
+		display := HFModelDisplay{
+			ID:          m.ID,
+			Author:      m.Author,
+			Downloads:   m.Downloads,
+			Likes:       m.Likes,
+			PipelineTag: m.PipelineTag,
+			HasONNX:     m.HasONNX(),
+			Tags:        m.Tags,
+		}
+
+		// For non-ONNX models, check if export is available
+		if !display.HasONNX && h.modelReg.IsExporterAvailable() {
+			display.CanExport = true
+		}
+
+		displayResults = append(displayResults, display)
+	}
+
+	data := HFSearchResultsData{
+		Results:           displayResults,
+		Query:             query,
+		ModelType:         string(modelType),
+		ExporterAvailable: h.modelReg.IsExporterAvailable(),
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := HFSearchResults(data).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render search results", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) handleExportJobsStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	if h.modelReg == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"Model registry not available"}`))
+		return
+	}
+
+	jobs := h.modelReg.ListActiveExportJobs()
+	displayJobs := make([]ExportJobDisplay, 0, len(jobs))
+	for _, j := range jobs {
+		displayJobs = append(displayJobs, ExportJobDisplay{
+			ID:            j.ID,
+			ModelID:       j.ModelID,
+			Status:        j.Status,
+			Message:       j.Message,
+			Percent:       j.Percent,
+			EstimatedTime: j.EstimatedTime,
+			StartedAt:     j.StartedAt,
+			Complete:      j.Complete,
+			Error:         j.Error,
+		})
+	}
+
+	// Return as HTMX partial
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := ExportJobsList(displayJobs).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render export jobs", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) handleExportJobStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	jobID := r.PathValue("id")
+
+	if h.modelReg == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(`{"error":"Model registry not available"}`))
+		return
+	}
+
+	job := h.modelReg.GetExportJob(jobID)
+	if job == nil {
+		// Try to find by model ID
+		job = h.modelReg.GetExportJobByModel(jobID)
+	}
+
+	if job == nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`{"error":"Job not found"}`))
+		return
+	}
+
+	display := ExportJobDisplay{
+		ID:            job.ID,
+		ModelID:       job.ModelID,
+		Status:        job.Status,
+		Message:       job.Message,
+		Percent:       job.Percent,
+		EstimatedTime: job.EstimatedTime,
+		StartedAt:     job.StartedAt,
+		Complete:      job.Complete,
+		Error:         job.Error,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := ExportJobCard(display).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render export job", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
@@ -1834,18 +2178,9 @@ func (h *Handler) handleDeleteConnection(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// handleRenameConnection handles renaming a connection (if route is added in the future).
+// handleRenameConnection handles renaming a connection.
 func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	id := r.PathValue("id")
-
-	if id == "" {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
-			h.log.Error("Failed to render error", "error", err)
-		}
-		return
-	}
 
 	if h.connSvc == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1855,10 +2190,19 @@ func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Parse form to get new name
+	// Parse form to get connection ID and new name
 	if err := r.ParseForm(); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		if err := ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	id := strings.TrimSpace(r.FormValue("connection_id"))
+	if id == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return

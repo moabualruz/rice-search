@@ -218,35 +218,6 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/stores/{store}/search/sparse", h.HandleSparseSearch)
 }
 
-// RegisterRoutesLegacy registers routes for older mux without path patterns.
-func (h *Handler) RegisterRoutesLegacy(mux *http.ServeMux) {
-	// For older Go versions or custom routers
-	mux.HandleFunc("/v1/stores/", func(w http.ResponseWriter, r *http.Request) {
-		// Route based on path suffix
-		path := r.URL.Path
-		store := extractStoreFromPath(path)
-
-		if store == "" {
-			writeError(w, http.StatusNotFound, "not found")
-			return
-		}
-
-		// Check which endpoint
-		suffix := path[len("/v1/stores/"+store):]
-
-		switch {
-		case suffix == "/search" && r.Method == http.MethodPost:
-			h.handleSearchWithStore(w, r, store)
-		case suffix == "/search/dense" && r.Method == http.MethodPost:
-			h.handleDenseWithStore(w, r, store)
-		case suffix == "/search/sparse" && r.Method == http.MethodPost:
-			h.handleSparseWithStore(w, r, store)
-		default:
-			writeError(w, http.StatusNotFound, "not found")
-		}
-	})
-}
-
 func (h *Handler) handleSearchWithStore(w http.ResponseWriter, r *http.Request, store string) {
 	var req SearchRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

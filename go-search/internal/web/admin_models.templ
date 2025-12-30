@@ -40,12 +40,20 @@ templ AdminModelsPage(data ModelsPageData) {
 	@Layout(data.Layout) {
 		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
 			<!-- Header -->
-			<div class="sm:flex sm:items-center">
+			<div class="sm:flex sm:items-center sm:justify-between">
 				<div class="sm:flex-auto">
 					<h1 class="text-2xl font-semibold text-gray-900">Model Management</h1>
 					<p class="mt-2 text-sm text-gray-700">
 						Manage ML models for embeddings, reranking, and query understanding.
 					</p>
+				</div>
+				<div class="mt-4 sm:mt-0">
+					<a href="/admin/models/search" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500">
+						<svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+						</svg>
+						Import from HuggingFace
+					</a>
 				</div>
 			</div>
 
@@ -227,7 +235,7 @@ templ ModelCard(model ModelInfoDisplay) {
 		<div class="mb-3 flex items-center justify-between text-xs">
 			<span class="text-gray-500">GPU:</span>
 			<button
-				hx-post={ fmt.Sprintf("/admin/models/%s/gpu", model.ID) }
+				hx-post={ fmt.Sprintf("/admin/models/gpu/%s", model.ID) }
 				hx-vals={ fmt.Sprintf(`{"enabled": %t}`, !model.GPUEnabled) }
 				hx-target="#model-messages"
 				hx-swap="innerHTML"
@@ -245,7 +253,7 @@ templ ModelCard(model ModelInfoDisplay) {
 		<div class="flex space-x-2">
 			if !model.Downloaded && model.Status != "downloading" {
 				<button
-					hx-post={ fmt.Sprintf("/admin/models/%s/download", model.ID) }
+					hx-post={ fmt.Sprintf("/admin/models/download/%s", model.ID) }
 					hx-target="#model-messages"
 					hx-swap="innerHTML"
 					class="flex-1 rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-blue-500"
@@ -255,7 +263,7 @@ templ ModelCard(model ModelInfoDisplay) {
 			}
 			if !model.IsDefault && model.Downloaded {
 				<button
-					hx-post={ fmt.Sprintf("/admin/models/%s/default", model.ID) }
+					hx-post={ fmt.Sprintf("/admin/models/default/%s", model.ID) }
 					hx-target="#model-messages"
 					hx-swap="innerHTML"
 					class="flex-1 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
@@ -265,7 +273,7 @@ templ ModelCard(model ModelInfoDisplay) {
 			}
 			if !model.IsDefault {
 				<button
-					hx-delete={ fmt.Sprintf("/admin/models/%s", model.ID) }
+					hx-post={ fmt.Sprintf("/admin/models/delete/%s", model.ID) }
 					hx-target="#model-messages"
 					hx-swap="innerHTML"
 					hx-confirm={ fmt.Sprintf("Delete %s?", model.DisplayName) }

@@ -370,10 +370,10 @@ func (s *Server) setupRoutes() *http.ServeMux {
 	handler := search.CORSMiddleware(mux)
 
 	// Health endpoints
-	s.healthHandler.RegisterRoutesLegacy(mux)
+	s.healthHandler.RegisterRoutes(mux)
 
 	// Search endpoints
-	s.searchHandler.RegisterRoutesLegacy(mux)
+	s.searchHandler.RegisterRoutes(mux)
 
 	// Store endpoints
 	s.storeHandler.RegisterRoutes(mux)

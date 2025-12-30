@@ -77,7 +77,7 @@ func AdminModelsPage(data ModelsPageData) templ.Component {
 				}()
 			}
 			ctx = templ.InitializeContext(ctx)
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8\"><!-- Header --><div class=\"sm:flex sm:items-center\"><div class=\"sm:flex-auto\"><h1 class=\"text-2xl font-semibold text-gray-900\">Model Management</h1><p class=\"mt-2 text-sm text-gray-700\">Manage ML models for embeddings, reranking, and query understanding.</p></div></div><!-- Messages --><div id=\"model-messages\" class=\"mt-4\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<div class=\"mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8\"><!-- Header --><div class=\"sm:flex sm:items-center sm:justify-between\"><div class=\"sm:flex-auto\"><h1 class=\"text-2xl font-semibold text-gray-900\">Model Management</h1><p class=\"mt-2 text-sm text-gray-700\">Manage ML models for embeddings, reranking, and query understanding.</p></div><div class=\"mt-4 sm:mt-0\"><a href=\"/admin/models/search\" class=\"inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500\"><svg class=\"h-4 w-4 mr-2\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 6v6m0 0v6m0-6h6m-6 0H6\"></path></svg> Import from HuggingFace</a></div></div><!-- Messages --><div id=\"model-messages\" class=\"mt-4\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -152,7 +152,7 @@ func ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay, 
 		var templ_7745c5c3_Var4 string
 		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(displayName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 79, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 87, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
 		if templ_7745c5c3_Err != nil {
@@ -170,7 +170,7 @@ func ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay, 
 			var templ_7745c5c3_Var5 string
 			templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(typeConfig.Description)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 81, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 89, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 			if templ_7745c5c3_Err != nil {
@@ -204,7 +204,7 @@ func ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay, 
 			var templ_7745c5c3_Var7 string
 			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/type/%s/gpu", modelType))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 90, Col: 68}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 98, Col: 68}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 			if templ_7745c5c3_Err != nil {
@@ -217,7 +217,7 @@ func ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay, 
 			var templ_7745c5c3_Var8 string
 			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf(`{"enabled": %t}`, !typeConfig.GPUEnabled))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 91, Col: 71}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 99, Col: 71}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 			if templ_7745c5c3_Err != nil {
@@ -341,7 +341,7 @@ func ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay, 
 				var templ_7745c5c3_Var15 string
 				templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/type/%s/toggle", modelType))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 129, Col: 72}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 137, Col: 72}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 				if templ_7745c5c3_Err != nil {
@@ -440,7 +440,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 		var templ_7745c5c3_Var18 string
 		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(model.DisplayName)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 173, Col: 74}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 181, Col: 74}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
@@ -453,7 +453,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 		var templ_7745c5c3_Var19 string
 		templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(model.Description)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 174, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 182, Col: 60}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 		if templ_7745c5c3_Err != nil {
@@ -471,7 +471,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 			var templ_7745c5c3_Var20 string
 			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(model.OutputDim))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 182, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 190, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 			if templ_7745c5c3_Err != nil {
@@ -489,7 +489,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprint(model.MaxTokens))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 187, Col: 61}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 195, Col: 61}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 		if templ_7745c5c3_Err != nil {
@@ -502,7 +502,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 		var templ_7745c5c3_Var22 string
 		templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(model.Size)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 191, Col: 44}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 199, Col: 44}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 		if templ_7745c5c3_Err != nil {
@@ -525,7 +525,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 			var templ_7745c5c3_Var23 string
 			templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("progress-%s", model.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 214, Col: 51}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 222, Col: 51}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 			if templ_7745c5c3_Err != nil {
@@ -557,9 +557,9 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var25 string
-		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/%s/gpu", model.ID))
+		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/gpu/%s", model.ID))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 230, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 238, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {
@@ -572,7 +572,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 		var templ_7745c5c3_Var26 string
 		templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf(`{"enabled": %t}`, !model.GPUEnabled))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 231, Col: 63}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 239, Col: 63}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 		if templ_7745c5c3_Err != nil {
@@ -625,9 +625,9 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var30 string
-			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/%s/download", model.ID))
+			templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/download/%s", model.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 248, Col: 65}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 256, Col: 65}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 			if templ_7745c5c3_Err != nil {
@@ -644,9 +644,9 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var31 string
-			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/%s/default", model.ID))
+			templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/default/%s", model.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 258, Col: 64}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 266, Col: 64}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 			if templ_7745c5c3_Err != nil {
@@ -658,14 +658,14 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 			}
 		}
 		if !model.IsDefault {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<button hx-delete=\"")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 59, "<button hx-post=\"")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var32 string
-			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/%s", model.ID))
+			templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("/admin/models/delete/%s", model.ID))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 268, Col: 58}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 276, Col: 63}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 			if templ_7745c5c3_Err != nil {
@@ -678,7 +678,7 @@ func ModelCard(model ModelInfoDisplay) templ.Component {
 			var templ_7745c5c3_Var33 string
 			templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("Delete %s?", model.DisplayName))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 271, Col: 62}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/admin_models.templ`, Line: 279, Col: 62}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 			if templ_7745c5c3_Err != nil {

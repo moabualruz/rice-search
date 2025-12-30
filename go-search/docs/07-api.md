@@ -9,7 +9,7 @@ Rice Search exposes a comprehensive HTTP API with:
 
 Base URL: `http://localhost:8080`
 
-**Total Endpoints: 71**
+**Total Endpoints: 75**
 
 > **Note**: All endpoints including the 4 Admin HTMX connection management routes (`/admin/connections/{id}/enable|disable|rename` and `/admin/mappers/{id}/yaml`) are registered in `internal/web/handlers.go`.
 
@@ -810,6 +810,7 @@ HTML pages with HTMX interactivity.
 | GET | `/stats` | Time-series dashboards |
 | GET | `/admin` | Redirects to /stores |
 | GET | `/admin/models` | Model management (download, GPU toggle) |
+| GET | `/admin/models/search` | HuggingFace model search & import |
 | GET | `/admin/mappers` | Model I/O mappings |
 | GET | `/admin/connections` | Connection management |
 | GET | `/admin/settings` | 80+ runtime settings |
@@ -837,18 +838,58 @@ HTMX endpoints that return HTML fragments.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/files/{path...}/reindex` | Reindex file (requires CLI) |
+| POST | `/files/reindex/{path...}` | Reindex file (requires CLI) |
 | DELETE | `/files/{path...}` | Delete file from index |
 | GET | `/stores/{name}/files/export` | Export files (CSV/JSON) |
 
 ### Models
 
+Model IDs may contain slashes (e.g., `jinaai/jina-code-embeddings-1.5b`), so action comes first in the URL.
+
 | Method | Path | Description |
 |--------|------|-------------|
-| POST | `/admin/models/{id}/download` | Start model download |
-| POST | `/admin/models/{id}/default` | Set as default for type |
-| POST | `/admin/models/{id}/gpu` | Toggle GPU (form: enabled=true/false) |
-| DELETE | `/admin/models/{id}` | Delete model files |
+| POST | `/admin/models/download/{id...}` | Start model download (form: type=embed/rerank/query_understand) |
+| POST | `/admin/models/default/{id...}` | Set as default for type |
+| POST | `/admin/models/gpu/{id...}` | Toggle GPU (form: enabled=true/false) |
+| POST | `/admin/models/delete/{id...}` | Delete model files |
+| POST | `/admin/models/type/{type}/gpu` | Toggle GPU for model type |
+| POST | `/admin/models/type/{type}/toggle` | Toggle model type enabled state |
+
+### HuggingFace Integration
+
+Search and import models from HuggingFace Hub. Non-ONNX models are automatically exported using `optimum-cli`.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/admin/models/search` | HuggingFace search page |
+| POST | `/admin/models/search` | Execute search (form: query, type, onnx_only, limit) |
+| GET | `/admin/models/export-jobs` | List active export jobs (HTMX partial) |
+| GET | `/admin/models/export-jobs/{id}` | Get single export job status |
+
+**Search Parameters:**
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `query` | string | - | Search query (e.g., "bge", "jina", "e5") |
+| `type` | string | embed | Model type: embed, rerank, query_understand |
+| `onnx_only` | bool | false | If true, only return models with ONNX files |
+| `limit` | int | 20 | Max results (1-100) |
+
+**Export Job Response:**
+
+```json
+{
+  "id": "jinaai/jina-code-embeddings-1.5b-1234567890",
+  "model_id": "jinaai/jina-code-embeddings-1.5b",
+  "status": "exporting",
+  "message": "Converting to ONNX format...",
+  "percent": 45.0,
+  "estimated_time": 180,
+  "started_at": "2025-12-30T12:00:00Z",
+  "complete": false,
+  "error": ""
+}
+```
 
 ### Mappers
 
@@ -929,6 +970,6 @@ HTMX endpoints that return HTML fragments.
 | ML | 3 | `/v1/ml/embed`, `/v1/ml/rerank` |
 | Settings REST | 5 | `/api/v1/settings`, `settings/rollback` |
 | Stats REST | 8 | `/api/v1/stats/*` |
-| Web UI Pages | 13 | `/`, `/search`, `/admin/*` |
-| Admin HTMX | 24 | `/admin/stores/*`, `/admin/models/*` |
-| **Total** | **71** | |
+| Web UI Pages | 14 | `/`, `/search`, `/admin/*` |
+| Admin HTMX | 28 | `/admin/stores/*`, `/admin/models/*` |
+| **Total** | **75** | |

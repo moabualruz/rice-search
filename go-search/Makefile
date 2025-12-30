@@ -125,6 +125,12 @@ deps-update: ## Update dependencies
 tidy: ## Tidy go.mod
 	$(GO) mod tidy
 
+.PHONY: setup-optimum
+setup-optimum: ## Install optimum-cli for ONNX model export (requires Python 3.8+)
+	pip install --upgrade pip
+	pip install optimum[onnxruntime] transformers torch --extra-index-url https://download.pytorch.org/whl/cpu
+	@echo "✓ optimum-cli installed. Usage: optimum-cli export onnx --model <model-id> <output-dir>"
+
 ##@ Models
 
 .PHONY: models-download

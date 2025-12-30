@@ -39,7 +39,7 @@ func Layout(data LayoutData) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\" class=\"h-full bg-gray-50\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html lang=\"en\" class=\"h-full\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -52,7 +52,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " - Rice Search</title><!-- Tailwind CSS via CDN --><script src=\"https://cdn.tailwindcss.com\"></script><!-- HTMX --><script src=\"https://unpkg.com/htmx.org@1.9.10\"></script><!-- Custom styles --><style>\n\t\t\t\t.htmx-indicator {\n\t\t\t\t\topacity: 0;\n\t\t\t\t\ttransition: opacity 200ms ease-in;\n\t\t\t\t}\n\t\t\t\t.htmx-request .htmx-indicator {\n\t\t\t\t\topacity: 1;\n\t\t\t\t}\n\t\t\t\t.htmx-request.htmx-indicator {\n\t\t\t\t\topacity: 1;\n\t\t\t\t}\n\t\t\t\t/* Code highlighting */\n\t\t\t\t.code-line {\n\t\t\t\t\tfont-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;\n\t\t\t\t\tfont-size: 0.875rem;\n\t\t\t\t\tline-height: 1.5;\n\t\t\t\t}\n\t\t\t\t.code-line:hover {\n\t\t\t\t\tbackground-color: rgba(59, 130, 246, 0.1);\n\t\t\t\t}\n\t\t\t\t/* Search result animation */\n\t\t\t\t.search-result {\n\t\t\t\t\tanimation: fadeIn 0.2s ease-in-out;\n\t\t\t\t}\n\t\t\t\t@keyframes fadeIn {\n\t\t\t\t\tfrom { opacity: 0; transform: translateY(-4px); }\n\t\t\t\t\tto { opacity: 1; transform: translateY(0); }\n\t\t\t\t}\n\t\t\t\t/* Dropdown animation */\n\t\t\t\t.dropdown-content {\n\t\t\t\t\tdisplay: none;\n\t\t\t\t}\n\t\t\t\t.dropdown:hover .dropdown-content {\n\t\t\t\t\tdisplay: block;\n\t\t\t\t}\n\t\t\t</style></head><body class=\"h-full\" hx-boost=\"true\"><div class=\"min-h-full\"><!-- Navigation --><nav class=\"bg-white border-b border-gray-200 shadow-sm\"><div class=\"mx-auto max-w-7xl px-4 sm:px-6 lg:px-8\"><div class=\"flex h-16 justify-between\"><div class=\"flex\"><div class=\"flex flex-shrink-0 items-center\"><a href=\"/\" class=\"text-xl font-bold text-gray-900 flex items-center gap-2\"><span class=\"text-2xl\">🔍</span> <span>Rice Search</span></a></div><div class=\"hidden sm:ml-8 sm:flex sm:space-x-8\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 2, " - Rice Search</title><!-- Theme initialization (before render to prevent flash) --><script>\n\t\t\t\t(function() {\n\t\t\t\t\tvar theme = localStorage.getItem('theme') || 'system';\n\t\t\t\t\tvar isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', isDark);\n\t\t\t\t})();\n\t\t\t</script><!-- Tailwind CSS via CDN --><script src=\"https://cdn.tailwindcss.com\"></script><script>\n\t\t\t\ttailwind.config = {\n\t\t\t\t\tdarkMode: 'class',\n\t\t\t\t\ttheme: {\n\t\t\t\t\t\textend: {}\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t</script><!-- HTMX --><script src=\"https://unpkg.com/htmx.org@1.9.10\"></script><!-- Custom styles --><style>\n\t\t\t\t.htmx-indicator {\n\t\t\t\t\topacity: 0;\n\t\t\t\t\ttransition: opacity 200ms ease-in;\n\t\t\t\t}\n\t\t\t\t.htmx-request .htmx-indicator {\n\t\t\t\t\topacity: 1;\n\t\t\t\t}\n\t\t\t\t.htmx-request.htmx-indicator {\n\t\t\t\t\topacity: 1;\n\t\t\t\t}\n\t\t\t\t/* Code highlighting */\n\t\t\t\t.code-line {\n\t\t\t\t\tfont-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;\n\t\t\t\t\tfont-size: 0.875rem;\n\t\t\t\t\tline-height: 1.5;\n\t\t\t\t}\n\t\t\t\t.code-line:hover {\n\t\t\t\t\tbackground-color: rgba(59, 130, 246, 0.1);\n\t\t\t\t}\n\t\t\t\t/* Search result animation */\n\t\t\t\t.search-result {\n\t\t\t\t\tanimation: fadeIn 0.2s ease-in-out;\n\t\t\t\t}\n\t\t\t\t@keyframes fadeIn {\n\t\t\t\t\tfrom { opacity: 0; transform: translateY(-4px); }\n\t\t\t\t\tto { opacity: 1; transform: translateY(0); }\n\t\t\t\t}\n\t\t\t\t/* Dropdown animation */\n\t\t\t\t.dropdown-content {\n\t\t\t\t\tdisplay: none;\n\t\t\t\t}\n\t\t\t\t.dropdown:hover .dropdown-content {\n\t\t\t\t\tdisplay: block;\n\t\t\t\t}\n\t\t\t</style><!-- Theme toggle script --><script>\n\t\t\t\tfunction getTheme() {\n\t\t\t\t\treturn localStorage.getItem('theme') || 'system';\n\t\t\t\t}\n\t\t\t\tfunction setTheme(theme) {\n\t\t\t\t\tlocalStorage.setItem('theme', theme);\n\t\t\t\t\tapplyTheme();\n\t\t\t\t\tupdateThemeIcon();\n\t\t\t\t}\n\t\t\t\tfunction applyTheme() {\n\t\t\t\t\tvar theme = getTheme();\n\t\t\t\t\tvar isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);\n\t\t\t\t\tdocument.documentElement.classList.toggle('dark', isDark);\n\t\t\t\t}\n\t\t\t\tfunction cycleTheme() {\n\t\t\t\t\tvar current = getTheme();\n\t\t\t\t\tvar next = current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';\n\t\t\t\t\tsetTheme(next);\n\t\t\t\t}\n\t\t\t\tfunction updateThemeIcon() {\n\t\t\t\t\tvar theme = getTheme();\n\t\t\t\t\tvar icons = { light: '☀️', dark: '🌙', system: '💻' };\n\t\t\t\t\tvar labels = { light: 'Light', dark: 'Dark', system: 'System' };\n\t\t\t\t\tvar btn = document.getElementById('theme-toggle');\n\t\t\t\t\tif (btn) {\n\t\t\t\t\t\tbtn.innerHTML = icons[theme] + ' <span class=\"hidden sm:inline\">' + labels[theme] + '</span>';\n\t\t\t\t\t}\n\t\t\t\t}\n\t\t\t\t// Listen for system preference changes\n\t\t\t\twindow.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {\n\t\t\t\t\tif (getTheme() === 'system') applyTheme();\n\t\t\t\t});\n\t\t\t\t// Initialize on load\n\t\t\t\tdocument.addEventListener('DOMContentLoaded', updateThemeIcon);\n\t\t\t</script></head><body class=\"h-full bg-gray-50 dark:bg-gray-900 transition-colors\" hx-boost=\"true\"><div class=\"min-h-full\"><!-- Navigation --><nav class=\"bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm\"><div class=\"mx-auto max-w-7xl px-4 sm:px-6 lg:px-8\"><div class=\"flex h-16 justify-between\"><div class=\"flex\"><div class=\"flex flex-shrink-0 items-center\"><a href=\"/\" class=\"text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2\"><span class=\"text-2xl\">🔍</span> <span>Rice Search</span></a></div><div class=\"hidden sm:ml-8 sm:flex sm:space-x-8\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -140,11 +140,11 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\">Files</a><!-- Admin Dropdown --><div class=\"relative dropdown\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 10, "\">Files</a><!-- Admin Dropdown --><div class=\"relative dropdown inline-flex items-center\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var11 = []any{"inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/admin")}
+		var templ_7745c5c3_Var11 = []any{"inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium h-full", navLinkClass(data.CurrentPath, "/admin")}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var11...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -162,7 +162,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\">Admin <svg class=\"ml-1 h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\"></path></svg></button><div class=\"dropdown-content absolute left-0 mt-2 w-48 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 z-50\"><div class=\"py-1\"><a href=\"/admin/models\" class=\"block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100\">Models</a> <a href=\"/admin/mappers\" class=\"block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100\">Mappers</a> <a href=\"/admin/connections\" class=\"block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100\">Connections</a> <a href=\"/admin/settings\" class=\"block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100\">Settings</a></div></div></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 12, "\">Admin <svg class=\"ml-1 h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M19 9l-7 7-7-7\"></path></svg></button><div class=\"dropdown-content absolute left-0 top-full mt-1 w-48 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-700 z-50\"><div class=\"py-1\"><a href=\"/admin/models\" class=\"block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700\">Models</a> <a href=\"/admin/mappers\" class=\"block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700\">Mappers</a> <a href=\"/admin/connections\" class=\"block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700\">Connections</a> <a href=\"/admin/settings\" class=\"block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700\">Settings</a></div></div></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -184,7 +184,7 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\">Stats</a></div></div><div class=\"flex items-center gap-4\"><!-- Health Indicator --><div class=\"flex items-center gap-2\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 14, "\">Stats</a></div></div><div class=\"flex items-center gap-4\"><!-- Theme Toggle --><button id=\"theme-toggle\" onclick=\"cycleTheme()\" class=\"inline-flex items-center gap-1 px-2 py-1 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors\" title=\"Toggle theme (Light/Dark/System)\">💻 <span class=\"hidden sm:inline\">System</span></button><!-- Health Indicator --><div class=\"flex items-center gap-2\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -192,14 +192,14 @@ func Layout(data LayoutData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span class=\"text-sm text-gray-600\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 15, "<span class=\"text-sm text-gray-600 dark:text-gray-300\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var15 string
 		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(healthLabel(data.HealthStatus))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 129, Col: 77}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 190, Col: 96}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
 		if templ_7745c5c3_Err != nil {
@@ -210,14 +210,14 @@ func Layout(data LayoutData) templ.Component {
 			return templ_7745c5c3_Err
 		}
 		if data.Version != "" {
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<span class=\"text-sm text-gray-400\">")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "<span class=\"text-sm text-gray-400 dark:text-gray-500\">")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
 			var templ_7745c5c3_Var16 string
 			templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(data.Version)
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 133, Col: 59}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 194, Col: 78}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 			if templ_7745c5c3_Err != nil {
@@ -240,13 +240,13 @@ func Layout(data LayoutData) templ.Component {
 			var templ_7745c5c3_Var17 templ.SafeURL
 			templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinURLErrs(templ.URL(data.QdrantURL + "/dashboard"))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 138, Col: 57}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 199, Col: 57}
 			}
 			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1\">Qdrant <svg class=\"h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14\"></path></svg></a>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" target=\"_blank\" rel=\"noopener noreferrer\" class=\"text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1\">Qdrant <svg class=\"h-4 w-4\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14\"></path></svg></a>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -270,9 +270,9 @@ func Layout(data LayoutData) templ.Component {
 // navLinkClass returns the appropriate classes for navigation links.
 func navLinkClass(currentPath, linkPath string) string {
 	if currentPath == linkPath || (currentPath == "/" && linkPath == "/dashboard") {
-		return "border-blue-500 text-gray-900"
+		return "border-blue-500 text-gray-900 dark:text-white"
 	}
-	return "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+	return "border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-200"
 }
 
 // healthLabel returns a human-readable label for health status.
@@ -311,7 +311,7 @@ func LoadingSpinner() templ.Component {
 			templ_7745c5c3_Var18 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"htmx-indicator flex items-center justify-center py-4\"><svg class=\"animate-spin h-6 w-6 text-blue-600\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z\"></path></svg> <span class=\"ml-2 text-sm text-gray-600\">Searching...</span></div>")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 24, "<div class=\"htmx-indicator flex items-center justify-center py-4\"><svg class=\"animate-spin h-6 w-6 text-blue-600 dark:text-blue-400\" xmlns=\"http://www.w3.org/2000/svg\" fill=\"none\" viewBox=\"0 0 24 24\"><circle class=\"opacity-25\" cx=\"12\" cy=\"12\" r=\"10\" stroke=\"currentColor\" stroke-width=\"4\"></circle> <path class=\"opacity-75\" fill=\"currentColor\" d=\"M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z\"></path></svg> <span class=\"ml-2 text-sm text-gray-600 dark:text-gray-300\">Searching...</span></div>")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -341,27 +341,27 @@ func EmptyState(title, message string) templ.Component {
 			templ_7745c5c3_Var19 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"text-center py-12\"><svg class=\"mx-auto h-12 w-12 text-gray-400\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg><h3 class=\"mt-2 text-sm font-medium text-gray-900\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 25, "<div class=\"text-center py-12\"><svg class=\"mx-auto h-12 w-12 text-gray-400 dark:text-gray-500\" fill=\"none\" viewBox=\"0 0 24 24\" stroke=\"currentColor\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z\"></path></svg><h3 class=\"mt-2 text-sm font-medium text-gray-900 dark:text-white\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var20 string
 		templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(title)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 202, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 263, Col: 76}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</h3><p class=\"mt-1 text-sm text-gray-500\">")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 26, "</h3><p class=\"mt-1 text-sm text-gray-500 dark:text-gray-400\">")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var21 string
 		templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 203, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 264, Col: 68}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 		if templ_7745c5c3_Err != nil {
@@ -404,7 +404,7 @@ func ErrorMessage(message string) templ.Component {
 		var templ_7745c5c3_Var23 string
 		templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 217, Col: 57}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 278, Col: 57}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 		if templ_7745c5c3_Err != nil {
@@ -447,7 +447,7 @@ func SuccessMessage(message string) templ.Component {
 		var templ_7745c5c3_Var25 string
 		templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(message)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 233, Col: 59}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/layout.templ`, Line: 294, Col: 59}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 		if templ_7745c5c3_Err != nil {

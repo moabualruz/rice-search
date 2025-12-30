@@ -555,7 +555,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 
 	// Search handler
 	searchHandler := search.NewHandler(searchSvc)
-	searchHandler.RegisterRoutesLegacy(mux)
+	searchHandler.RegisterRoutes(mux)
 
 	// Store handler
 	mux.HandleFunc("GET /v1/stores", func(w http.ResponseWriter, r *http.Request) {

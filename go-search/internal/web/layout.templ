@@ -12,13 +12,29 @@ type LayoutData struct {
 // Layout is the base HTML layout for all pages.
 templ Layout(data LayoutData) {
 	<!DOCTYPE html>
-	<html lang="en" class="h-full bg-gray-50">
+	<html lang="en" class="h-full">
 		<head>
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ data.Title } - Rice Search</title>
+			<!-- Theme initialization (before render to prevent flash) -->
+			<script>
+				(function() {
+					var theme = localStorage.getItem('theme') || 'system';
+					var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+					document.documentElement.classList.toggle('dark', isDark);
+				})();
+			</script>
 			<!-- Tailwind CSS via CDN -->
 			<script src="https://cdn.tailwindcss.com"></script>
+			<script>
+				tailwind.config = {
+					darkMode: 'class',
+					theme: {
+						extend: {}
+					}
+				}
+			</script>
 			<!-- HTMX -->
 			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 			<!-- Custom styles -->
@@ -58,16 +74,52 @@ templ Layout(data LayoutData) {
 					display: block;
 				}
 			</style>
+			<!-- Theme toggle script -->
+			<script>
+				function getTheme() {
+					return localStorage.getItem('theme') || 'system';
+				}
+				function setTheme(theme) {
+					localStorage.setItem('theme', theme);
+					applyTheme();
+					updateThemeIcon();
+				}
+				function applyTheme() {
+					var theme = getTheme();
+					var isDark = theme === 'dark' || (theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+					document.documentElement.classList.toggle('dark', isDark);
+				}
+				function cycleTheme() {
+					var current = getTheme();
+					var next = current === 'light' ? 'dark' : current === 'dark' ? 'system' : 'light';
+					setTheme(next);
+				}
+				function updateThemeIcon() {
+					var theme = getTheme();
+					var icons = { light: '☀️', dark: '🌙', system: '💻' };
+					var labels = { light: 'Light', dark: 'Dark', system: 'System' };
+					var btn = document.getElementById('theme-toggle');
+					if (btn) {
+						btn.innerHTML = icons[theme] + ' <span class="hidden sm:inline">' + labels[theme] + '</span>';
+					}
+				}
+				// Listen for system preference changes
+				window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+					if (getTheme() === 'system') applyTheme();
+				});
+				// Initialize on load
+				document.addEventListener('DOMContentLoaded', updateThemeIcon);
+			</script>
 		</head>
-		<body class="h-full" hx-boost="true">
+		<body class="h-full bg-gray-50 dark:bg-gray-900 transition-colors" hx-boost="true">
 			<div class="min-h-full">
 				<!-- Navigation -->
-				<nav class="bg-white border-b border-gray-200 shadow-sm">
+				<nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
 					<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
 						<div class="flex h-16 justify-between">
 							<div class="flex">
 									<div class="flex flex-shrink-0 items-center">
-									<a href="/" class="text-xl font-bold text-gray-900 flex items-center gap-2">
+									<a href="/" class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
 										<span class="text-2xl">🔍</span>
 										<span>Rice Search</span>
 									</a>
@@ -98,19 +150,19 @@ templ Layout(data LayoutData) {
 									Files
 								</a>
 								<!-- Admin Dropdown -->
-								<div class="relative dropdown">
-									<button class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/admin") }>
+								<div class="relative dropdown inline-flex items-center">
+									<button class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium h-full", navLinkClass(data.CurrentPath, "/admin") }>
 										Admin
 										<svg class="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
 										</svg>
 									</button>
-									<div class="dropdown-content absolute left-0 mt-2 w-48 rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 z-50">
+									<div class="dropdown-content absolute left-0 top-full mt-1 w-48 rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-700 z-50">
 										<div class="py-1">
-											<a href="/admin/models" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Models</a>
-											<a href="/admin/mappers" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Mappers</a>
-											<a href="/admin/connections" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Connections</a>
-											<a href="/admin/settings" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">Settings</a>
+											<a href="/admin/models" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Models</a>
+											<a href="/admin/mappers" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Mappers</a>
+											<a href="/admin/connections" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Connections</a>
+											<a href="/admin/settings" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Settings</a>
 										</div>
 									</div>
 								</div>
@@ -123,14 +175,23 @@ templ Layout(data LayoutData) {
 							</div>
 						</div>
 							<div class="flex items-center gap-4">
+								<!-- Theme Toggle -->
+								<button 
+									id="theme-toggle"
+									onclick="cycleTheme()"
+									class="inline-flex items-center gap-1 px-2 py-1 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+									title="Toggle theme (Light/Dark/System)"
+								>
+									💻 <span class="hidden sm:inline">System</span>
+								</button>
 								<!-- Health Indicator -->
 								<div class="flex items-center gap-2">
 									@HealthDot(data.HealthStatus)
-									<span class="text-sm text-gray-600">{ healthLabel(data.HealthStatus) }</span>
+									<span class="text-sm text-gray-600 dark:text-gray-300">{ healthLabel(data.HealthStatus) }</span>
 								</div>
 								<!-- Version -->
 								if data.Version != "" {
-									<span class="text-sm text-gray-400">{ data.Version }</span>
+									<span class="text-sm text-gray-400 dark:text-gray-500">{ data.Version }</span>
 								}
 								<!-- Qdrant Link -->
 								if data.QdrantURL != "" {
@@ -138,7 +199,7 @@ templ Layout(data LayoutData) {
 										href={ templ.URL(data.QdrantURL + "/dashboard") } 
 										target="_blank"
 										rel="noopener noreferrer"
-										class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+										class="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 flex items-center gap-1"
 									>
 										Qdrant
 										<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -163,9 +224,9 @@ templ Layout(data LayoutData) {
 // navLinkClass returns the appropriate classes for navigation links.
 func navLinkClass(currentPath, linkPath string) string {
 	if currentPath == linkPath || (currentPath == "/" && linkPath == "/dashboard") {
-		return "border-blue-500 text-gray-900"
+		return "border-blue-500 text-gray-900 dark:text-white"
 	}
-	return "border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700"
+	return "border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-200"
 }
 
 // healthLabel returns a human-readable label for health status.
@@ -185,22 +246,22 @@ func healthLabel(status string) string {
 // Loading indicator component
 templ LoadingSpinner() {
 	<div class="htmx-indicator flex items-center justify-center py-4">
-		<svg class="animate-spin h-6 w-6 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+		<svg class="animate-spin h-6 w-6 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
 			<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 			<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 		</svg>
-		<span class="ml-2 text-sm text-gray-600">Searching...</span>
+		<span class="ml-2 text-sm text-gray-600 dark:text-gray-300">Searching...</span>
 	</div>
 }
 
 // Empty state component
 templ EmptyState(title, message string) {
 	<div class="text-center py-12">
-		<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+		<svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 			<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
 		</svg>
-		<h3 class="mt-2 text-sm font-medium text-gray-900">{ title }</h3>
-		<p class="mt-1 text-sm text-gray-500">{ message }</p>
+		<h3 class="mt-2 text-sm font-medium text-gray-900 dark:text-white">{ title }</h3>
+		<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{ message }</p>
 	</div>
 }
 

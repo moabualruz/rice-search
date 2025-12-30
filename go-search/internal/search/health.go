@@ -218,35 +218,3 @@ func (h *HealthHandler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/version", h.HandleVersion)
 	mux.HandleFunc("GET /v1/health", h.HandleDetailedHealth)
 }
-
-// RegisterRoutesLegacy registers routes for older mux.
-func (h *HealthHandler) RegisterRoutesLegacy(mux *http.ServeMux) {
-	mux.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			h.HandleHealth(w, r)
-		} else {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-	mux.HandleFunc("/readyz", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			h.HandleReady(w, r)
-		} else {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-	mux.HandleFunc("/v1/version", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			h.HandleVersion(w, r)
-		} else {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-	mux.HandleFunc("/v1/health", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet {
-			h.HandleDetailedHealth(w, r)
-		} else {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-	})
-}
