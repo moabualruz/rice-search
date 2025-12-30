@@ -2,23 +2,32 @@
 
 ## Error Types
 
-### Base Error
+### AppError
+
+Located in `internal/pkg/errors/errors.go`:
 
 ```go
-type Error struct {
-    Code       string         `json:"code"`
-    Message    string         `json:"message"`
-    Details    map[string]any `json:"details,omitempty"`
-    Cause      error          `json:"-"`
-    StatusCode int            `json:"-"`
+type AppError struct {
+    Code    string            `json:"code"`
+    Message string            `json:"message"`
+    Details map[string]string `json:"details,omitempty"`
+    Err     error             `json:"-"`
 }
 
-func (e *Error) Error() string {
-    return e.Message
+func (e *AppError) Error() string {
+    if e.Err != nil {
+        return fmt.Sprintf("%s: %s: %v", e.Code, e.Message, e.Err)
+    }
+    return fmt.Sprintf("%s: %s", e.Code, e.Message)
 }
 
-func (e *Error) Unwrap() error {
-    return e.Cause
+func (e *AppError) Unwrap() error {
+    return e.Err
+}
+
+// HTTPStatus returns the HTTP status code for this error.
+func (e *AppError) HTTPStatus() int {
+    // Maps error code to HTTP status
 }
 ```
 
@@ -53,38 +62,42 @@ func (e *Error) Unwrap() error {
 
 ## Error Response Format
 
+All REST API endpoints return errors in a unified JSON format:
+
 ```json
 {
-    "error": {
-        "code": "VALIDATION_ERROR",
-        "message": "Request validation failed",
-        "details": {
-            "field": "query",
-            "reason": "cannot be empty"
-        }
-    },
-    "meta": {
-        "request_id": "req_abc123"
+    "error": "Human-readable error message",
+    "code": "ERROR_CODE",
+    "message": "Detailed description",
+    "details": {
+        "key": "value"
     }
 }
 ```
 
-### Multiple Validation Errors
+### Example: Validation Error
 
 ```json
 {
-    "error": {
-        "code": "VALIDATION_ERROR",
-        "message": "Multiple validation errors",
-        "details": {
-            "errors": [
-                {"field": "query", "reason": "cannot be empty"},
-                {"field": "top_k", "reason": "must be positive"}
-            ]
-        }
-    }
+    "error": "query cannot be empty",
+    "code": "VALIDATION_ERROR",
+    "message": "query cannot be empty"
 }
 ```
+
+### Example: Internal Error (Sanitized)
+
+For 5xx errors, internal details are NOT exposed to clients:
+
+```json
+{
+    "error": "internal server error",
+    "code": "INTERNAL_ERROR",
+    "message": "An unexpected error occurred"
+}
+```
+
+The actual error details are logged server-side for debugging.
 
 ---
 
@@ -244,18 +257,37 @@ if resp.Error != nil {
 
 ### HTTP Middleware
 
+Implemented in `cmd/rice-search-server/main.go`:
+
 ```go
-func RecoveryMiddleware(next http.Handler) http.Handler {
+func recoveryMiddleware(next http.Handler, log *logger.Logger) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         defer func() {
             if err := recover(); err != nil {
-                log.Error("panic recovered", "error", err, "stack", debug.Stack())
-                WriteError(w, ErrInternal(fmt.Errorf("panic: %v", err)))
+                log.Error("Panic recovered in HTTP handler",
+                    "error", err,
+                    "method", r.Method,
+                    "path", r.URL.Path,
+                )
+                // Return sanitized error (no internal details)
+                w.Header().Set("Content-Type", "application/json")
+                w.WriteHeader(http.StatusInternalServerError)
+                json.NewEncoder(w).Encode(map[string]interface{}{
+                    "error":   "internal server error",
+                    "code":    "INTERNAL_ERROR",
+                    "message": "An unexpected error occurred. Please try again.",
+                })
             }
         }()
         next.ServeHTTP(w, r)
     })
 }
+```
+
+The middleware is applied as the outermost wrapper in the HTTP handler chain:
+
+```go
+Handler: recoveryMiddleware(corsMiddleware(loggingMiddleware(inFlightMiddleware(mux), log)), log),
 ```
 
 ### Event Handler
@@ -272,6 +304,50 @@ func SafeHandler(handler Handler) Handler {
     }
 }
 ```
+
+---
+
+## Error Sanitization
+
+Located in `internal/pkg/errors/errors.go`:
+
+### WriteError
+
+Writes an error response with automatic sanitization:
+
+```go
+func WriteError(w http.ResponseWriter, err error) {
+    if appErr, ok := err.(*AppError); ok {
+        // Use AppError's code and status
+        WriteJSON(w, appErr.HTTPStatus(), ErrorResponse{...})
+        return
+    }
+    // For non-AppError, sanitize (hide internal details)
+    WriteJSON(w, http.StatusInternalServerError, ErrorResponse{
+        Error:   "internal server error",
+        Code:    CodeInternal,
+        Message: "An unexpected error occurred",
+    })
+}
+```
+
+### WriteErrorWithStatus
+
+Writes an error with explicit status code:
+
+```go
+func WriteErrorWithStatus(w http.ResponseWriter, status int, err error) {
+    // 4xx errors: show message (client error)
+    // 5xx errors: sanitize message (server error)
+}
+```
+
+### Security Considerations
+
+- **5xx errors**: Never expose internal error messages (Qdrant details, ML errors, stack traces)
+- **4xx errors**: Safe to expose since they describe client mistakes
+- **Logging**: Always log full error details server-side for debugging
+- **Production**: Set log level to `info` to avoid verbose debug logs
 
 ---
 

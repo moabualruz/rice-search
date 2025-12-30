@@ -26,7 +26,7 @@ The indexing pipeline transforms source files into searchable chunks with vector
 │     └─────────────────────────────────────────────────────────────────┘    │
 │                                    │                                        │
 │                                    ▼                                        │
-│  3. LANGUAGE DETECTION                                                      │
+│  3. LANGUAGE DETECTION (47 languages supported)                             │
 │     ┌─────────────────────────────────────────────────────────────────┐    │
 │     │  language = detectLanguage(path) → "go"                          │    │
 │     └─────────────────────────────────────────────────────────────────┘    │

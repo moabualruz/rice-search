@@ -2,9 +2,30 @@
 
 ## Overview
 
-Every functionality exposed as HTTP endpoint. RESTful JSON API.
+Rice Search exposes a comprehensive HTTP API with:
+- **REST API** (`/v1/*`) - JSON endpoints for programmatic access
+- **Web UI** (`/`, `/search`, `/admin/*`) - HTML pages with HTMX interactivity
+- **Metrics** (`/metrics`) - Prometheus endpoint
 
 Base URL: `http://localhost:8080`
+
+**Total Endpoints: 71**
+
+---
+
+## Table of Contents
+
+1. [Authentication](#authentication)
+2. [Health & System](#health--system-endpoints)
+3. [Search API](#search-endpoints)
+4. [Store API](#store-endpoints)
+5. [Index API](#index-endpoints)
+6. [ML API](#ml-endpoints)
+7. [Settings API](#settings-endpoints)
+8. [Stats API](#stats-endpoints)
+9. [Web UI Pages](#web-ui-pages)
+10. [Admin HTMX API](#admin-htmx-api)
+11. [Error Codes](#error-codes)
 
 ---
 
@@ -18,72 +39,85 @@ Base URL: `http://localhost:8080`
 | `api-key` | API key in header | ❌ Not implemented |
 | `jwt` | JWT bearer token | ❌ Not implemented |
 
-```bash
-# FUTURE - Not yet supported
-# API key mode
-AUTH_MODE=api-key
-API_KEYS=key1,key2,key3
+---
 
-# JWT mode
-AUTH_MODE=jwt
-JWT_SECRET=your-secret
-```
+## Health & System Endpoints
 
-### Headers (Future)
+### GET /healthz
 
-```http
-# API key
-X-API-Key: your-api-key
+Liveness probe. Returns 200 if process is running.
 
-# JWT
-Authorization: Bearer eyJhbG...
+**Response:**
+```json
+{"status": "ok"}
 ```
 
 ---
 
-## Common Response Format
+### GET /readyz
 
-> **Note**: Current implementation returns responses directly without wrappers. The `data`/`meta` wrapper pattern shown in some examples below is a design goal but NOT YET IMPLEMENTED. Responses are returned flat.
+Readiness probe. Returns 200 if ready to serve, 503 if ML unhealthy.
 
-### Success (Current - Direct Response)
+**Response (Ready):**
+```json
+{"status": "ready"}
+```
 
+**Response (Not Ready):**
+```json
+{"status": "not_ready", "reason": "ml_unhealthy"}
+```
+
+---
+
+### GET /v1/version
+
+Version information.
+
+**Response:**
 ```json
 {
-    "query": "authentication handler",
-    "store": "default",
-    "results": [...],
-    "total": 20,
-    "metadata": {
-        "search_time_ms": 65,
-        "reranking_applied": true
+    "version": "1.0.0",
+    "git_commit": "abc123",
+    "build_time": "2025-12-29T01:00:00Z",
+    "go_version": "go1.23.0"
+}
+```
+
+---
+
+### GET /v1/health
+
+Detailed health with ML component status.
+
+**Response:**
+```json
+{
+    "status": "healthy",
+    "version": "1.0.0",
+    "ml": {
+        "healthy": true,
+        "embed_loaded": true,
+        "rerank_loaded": true,
+        "sparse_loaded": true,
+        "device": "cuda"
     }
 }
 ```
 
-### Success (Future - With Wrapper)
+---
 
-> **NOT IMPLEMENTED**: The wrapper pattern below is a design goal for future versions.
+### GET /metrics
 
-```json
-{
-    "data": { ... },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 45
-    }
-}
+Prometheus metrics endpoint.
+
+**Response:** `text/plain` with Prometheus format
+
 ```
-
-### Error
-
-```json
-{
-    "error": {
-        "code": "STORE_NOT_FOUND",
-        "message": "Store 'foo' does not exist",
-        "details": { ... }
-    }
-}
+# HELP rice_search_requests_total Total search requests
+# TYPE rice_search_requests_total counter
+rice_search_requests_total{store="default"} 1234
+...
 ```
 
 ---
@@ -95,7 +129,6 @@ Authorization: Bearer eyJhbG...
 Convenience endpoint using default store.
 
 **Request:**
-
 ```json
 {
     "query": "authentication handler",
@@ -112,7 +145,6 @@ Convenience endpoint using default store.
 Full search with all options.
 
 **Request:**
-
 ```json
 {
     "query": "authentication handler",
@@ -121,12 +153,11 @@ Full search with all options.
         "path_prefix": "src/",
         "languages": ["go", "typescript"]
     },
-    "options": {
-        "sparse_weight": 0.5,
-        "dense_weight": 0.5,
-        "enable_reranking": true,
-        "rerank_top_k": 30
-    }
+    "sparse_weight": 0.5,
+    "dense_weight": 0.5,
+    "enable_reranking": true,
+    "rerank_top_k": 30,
+    "include_content": true
 }
 ```
 
@@ -136,58 +167,130 @@ Full search with all options.
 | top_k | int | No | 20 | Results to return |
 | filters.path_prefix | string | No | - | Filter by path prefix |
 | filters.languages | []string | No | - | Filter by languages |
-| options.sparse_weight | float | No | 0.5 | Sparse retriever weight |
-| options.dense_weight | float | No | 0.5 | Dense retriever weight |
-| options.enable_reranking | bool | No | true | Enable reranking |
-| options.rerank_top_k | int | No | 30 | Candidates for reranking |
+| sparse_weight | float | No | 0.5 | BM25/SPLADE weight |
+| dense_weight | float | No | 0.5 | Dense embedding weight |
+| enable_reranking | bool | No | true | Enable neural reranking |
+| rerank_top_k | int | No | 30 | Candidates for reranking |
+| include_content | bool | No | true | Include chunk content |
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "query": "authentication handler",
-        "store": "default",
-        "results": [
-            {
-                "doc_id": "chunk_abc123",
-                "path": "src/auth/handler.go",
-                "language": "go",
-                "content": "func Authenticate(ctx context.Context) error {\n    ...\n}",
-                "symbols": ["Authenticate", "ValidateToken"],
-                "start_line": 45,
-                "end_line": 72,
-                "score": 0.92,
-                "sparse_score": 0.85,
-                "dense_score": 0.88
-            }
-        ],
-        "total": 156,
-        "metadata": {
-            "search_time_ms": 65,
-            "embed_time_ms": 20,
-            "retrieval_time_ms": 30,
-            "rerank_time_ms": 15,
-            "candidates_reranked": 30,
-            "reranking_applied": true
-        },
-        "parsed_query": {
-            "original": "authentication handler",
-            "normalized": "authentication handler",
-            "keywords": ["authentication", "handler"],
-            "code_terms": ["handler"],
-            "action_intent": "find",
-            "target_type": "function",
-            "expanded": ["auth", "authenticate", "login"],
-            "search_query": "authentication handler auth authenticate login",
-            "confidence": 0.92,
-            "used_model": true
+    "query": "authentication handler",
+    "store": "default",
+    "results": [
+        {
+            "id": "chunk_abc123",
+            "path": "src/auth/handler.go",
+            "language": "go",
+            "content": "func Authenticate(ctx context.Context) error {...}",
+            "symbols": ["Authenticate", "ValidateToken"],
+            "start_line": 45,
+            "end_line": 72,
+            "score": 0.92,
+            "sparse_score": 0.85,
+            "dense_score": 0.88,
+            "rerank_score": 0.95
         }
-    },
-    "meta": {
-        "request_id": "req_xyz789",
-        "latency_ms": 65
+    ],
+    "total": 156,
+    "metadata": {
+        "search_time_ms": 65,
+        "embed_time_ms": 20,
+        "retrieval_time_ms": 30,
+        "rerank_time_ms": 15,
+        "candidates_reranked": 30,
+        "reranking_applied": true
     }
+}
+```
+
+---
+
+## Store Endpoints
+
+### GET /v1/stores
+
+List all stores.
+
+**Response:**
+```json
+{
+    "stores": [
+        {
+            "name": "default",
+            "display_name": "Default Store",
+            "stats": {
+                "document_count": 150,
+                "chunk_count": 890
+            },
+            "created_at": "2025-12-29T01:00:00Z"
+        }
+    ]
+}
+```
+
+---
+
+### POST /v1/stores
+
+Create a new store.
+
+**Request:**
+```json
+{
+    "name": "my-project",
+    "display_name": "My Project",
+    "description": "Code search for my project"
+}
+```
+
+**Response:** `201 Created`
+```json
+{
+    "name": "my-project",
+    "display_name": "My Project",
+    "created_at": "2025-12-29T01:00:00Z"
+}
+```
+
+---
+
+### GET /v1/stores/{name}
+
+Get store details.
+
+**Response:**
+```json
+{
+    "name": "my-project",
+    "display_name": "My Project",
+    "description": "Code search for my project",
+    "created_at": "2025-12-29T01:00:00Z"
+}
+```
+
+---
+
+### DELETE /v1/stores/{name}
+
+Delete store and all its data.
+
+**Response:** `204 No Content`
+
+---
+
+### GET /v1/stores/{name}/stats
+
+Get store statistics.
+
+**Response:**
+```json
+{
+    "document_count": 150,
+    "chunk_count": 890,
+    "total_size": 5242880,
+    "last_indexed": "2025-12-29T02:00:00Z"
 }
 ```
 
@@ -195,70 +298,56 @@ Full search with all options.
 
 ## Index Endpoints
 
-### POST /v1/stores/{store}/index
+### POST /v1/stores/{name}/index
 
 Index documents.
 
 **Request:**
-
 ```json
 {
-    "documents": [
+    "files": [
         {
             "path": "src/main.go",
-            "content": "package main\n\nfunc main() {\n    ...\n}"
-        },
-        {
-            "path": "src/auth.go",
-            "content": "package auth\n\nfunc Authenticate() {\n    ...\n}"
+            "content": "package main\n\nfunc main() {...}",
+            "language": "go"
         }
     ],
-    "options": {
-        "force": false
-    }
+    "force": false
 }
 ```
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| documents | []Document | Yes | Documents to index |
-| documents[].path | string | Yes | File path |
-| documents[].content | string | Yes | File content |
-| options.force | bool | No | Reindex even if unchanged |
+| files | []File | Yes | Documents to index |
+| files[].path | string | Yes | File path |
+| files[].content | string | Yes | File content |
+| files[].language | string | No | Override language detection |
+| force | bool | No | Reindex even if unchanged |
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "indexed": 2,
-        "skipped": 0,
-        "errors": 0,
-        "chunks_created": 8
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 1500
-    }
+    "indexed": 2,
+    "skipped": 0,
+    "errors": 0,
+    "chunks_created": 8
 }
 ```
 
 ---
 
-### DELETE /v1/stores/{store}/index
+### DELETE /v1/stores/{name}/index
 
 Delete documents from index.
 
-**Request:**
-
+**Request (by paths):**
 ```json
 {
     "paths": ["src/old.go", "src/deprecated.go"]
 }
 ```
 
-Or delete by prefix:
-
+**Request (by prefix):**
 ```json
 {
     "path_prefix": "src/deprecated/"
@@ -266,118 +355,81 @@ Or delete by prefix:
 ```
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "deleted": 5
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 50
-    }
+    "deleted_count": 5,
+    "paths": ["src/old.go", "src/deprecated.go"]
 }
 ```
 
 ---
 
-### POST /v1/stores/{store}/index/sync
+### POST /v1/stores/{name}/index/sync
 
 Sync index with filesystem (remove deleted files).
 
 **Request:**
-
 ```json
 {
-    "current_paths": [
-        "src/main.go",
-        "src/auth.go",
-        "src/user.go"
-    ]
+    "current_paths": ["src/main.go", "src/auth.go", "src/user.go"]
 }
 ```
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "removed": 3,
-        "removed_paths": ["src/old.go", "src/temp.go", "src/test.go"]
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 100
-    }
+    "removed": ["src/old.go", "src/temp.go"]
 }
 ```
 
 ---
 
-### POST /v1/stores/{store}/index/reindex
+### POST /v1/stores/{name}/index/reindex
 
-Clear and rebuild entire index for a store.
+Clear and rebuild entire index.
 
 **Request:**
-
 ```json
 {
-    "documents": [
-        {
-            "path": "src/main.go",
-            "content": "package main\n\nfunc main() {\n    ...\n}"
-        }
+    "files": [
+        {"path": "src/main.go", "content": "..."}
     ]
 }
 ```
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "cleared": 150,
-        "indexed": 1,
-        "chunks_created": 5
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 2000
-    }
+    "cleared": 150,
+    "indexed": 1,
+    "chunks_created": 5
 }
 ```
 
 ---
 
-### GET /v1/stores/{store}/index/stats
+### GET /v1/stores/{name}/index/stats
 
-Get indexing statistics for a store.
+Get indexing statistics.
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "total_documents": 150,
-        "total_chunks": 890,
-        "total_size_bytes": 5242880,
-        "last_indexed": "2025-12-29T01:00:00Z",
-        "languages": {
-            "go": 80,
-            "typescript": 45,
-            "python": 25
-        }
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 15
+    "total_documents": 150,
+    "total_chunks": 890,
+    "total_size_bytes": 5242880,
+    "last_indexed": "2025-12-29T01:00:00Z",
+    "languages": {
+        "go": 80,
+        "typescript": 45,
+        "python": 25
     }
 }
 ```
 
 ---
 
-### GET /v1/stores/{store}/index/files
+### GET /v1/stores/{name}/index/files
 
 List indexed files with pagination.
 
@@ -393,29 +445,22 @@ List indexed files with pagination.
 | sort_order | string | asc | Sort order (asc, desc) |
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "files": [
-            {
-                "path": "src/auth.go",
-                "language": "go",
-                "size": 2048,
-                "hash": "a1b2c3d4e5f6",
-                "indexed_at": "2025-12-29T01:00:00Z",
-                "chunk_count": 5
-            }
-        ],
-        "total": 150,
-        "page": 1,
-        "page_size": 50,
-        "total_pages": 3
-    },
-    "meta": {
-        "request_id": "req_abc123",
-        "latency_ms": 25
-    }
+    "files": [
+        {
+            "path": "src/auth.go",
+            "language": "go",
+            "size": 2048,
+            "hash": "a1b2c3d4e5f6",
+            "indexed_at": "2025-12-29T01:00:00Z",
+            "chunk_count": 5
+        }
+    ],
+    "total": 150,
+    "page": 1,
+    "page_size": 50,
+    "total_pages": 3
 }
 ```
 
@@ -423,14 +468,13 @@ List indexed files with pagination.
 
 ## ML Endpoints
 
-ML operations are available as HTTP endpoints for direct invocation and debugging.
+Direct access to ML operations for debugging and testing.
 
 ### POST /v1/ml/embed
 
-Generate dense embeddings for texts.
+Generate dense embeddings.
 
 **Request:**
-
 ```json
 {
     "texts": ["function authenticate(user)", "class UserService"]
@@ -438,16 +482,13 @@ Generate dense embeddings for texts.
 ```
 
 **Response:**
-
 ```json
 {
     "embeddings": [
         [0.123, 0.456, ...],
         [0.789, 0.012, ...]
     ],
-    "model": "jina-embeddings-v3",
-    "dimensions": 1536,
-    "latency_ms": 45
+    "count": 2
 }
 ```
 
@@ -455,10 +496,9 @@ Generate dense embeddings for texts.
 
 ### POST /v1/ml/sparse
 
-Generate sparse (SPLADE) vectors for texts.
+Generate sparse (SPLADE) vectors.
 
 **Request:**
-
 ```json
 {
     "texts": ["authentication handler", "user login function"]
@@ -466,15 +506,13 @@ Generate sparse (SPLADE) vectors for texts.
 ```
 
 **Response:**
-
 ```json
 {
     "vectors": [
         {"indices": [123, 456, 789], "values": [1.2, 0.8, 0.5]},
         {"indices": [234, 567], "values": [1.5, 0.9]}
     ],
-    "model": "splade-pp-en-v1",
-    "latency_ms": 30
+    "count": 2
 }
 ```
 
@@ -482,10 +520,9 @@ Generate sparse (SPLADE) vectors for texts.
 
 ### POST /v1/ml/rerank
 
-Rerank documents by relevance to query.
+Rerank documents by relevance.
 
 **Request:**
-
 ```json
 {
     "query": "authentication handler",
@@ -499,215 +536,351 @@ Rerank documents by relevance to query.
 ```
 
 **Response:**
-
 ```json
 {
     "results": [
-        {"index": 0, "score": 0.95, "document": "func Authenticate..."},
-        {"index": 1, "score": 0.82, "document": "func HandleLogin..."}
+        {"index": 0, "score": 0.95},
+        {"index": 1, "score": 0.82}
     ],
-    "model": "jina-reranker-v2",
-    "latency_ms": 25
+    "count": 2
 }
 ```
 
 ---
 
-> **Note**: For high-throughput scenarios, ML operations are also available via the internal event bus. The search and index services use the event bus for better batching and resource management.
+## Settings Endpoints
+
+### GET /api/v1/settings
+
+Get current runtime settings.
+
+**Response:**
+```json
+{
+    "server_host": "0.0.0.0",
+    "server_port": 8080,
+    "log_level": "info",
+    "embed_model": "jinaai/jina-code-embeddings-1.5b",
+    "rerank_model": "jinaai/jina-reranker-v2-base-multilingual",
+    "default_top_k": 20,
+    "enable_reranking": true,
+    "version": 3,
+    "updated_at": "2025-12-29T02:00:00Z"
+}
+```
 
 ---
 
-## Store Endpoints
+### PUT /api/v1/settings
 
-### GET /v1/stores
+Update settings.
 
-List all stores.
+**Request:** (partial or full settings object)
+```json
+{
+    "default_top_k": 30,
+    "enable_reranking": false
+}
+```
+
+**Response:** Updated settings object
+
+---
+
+### GET /api/v1/settings/history
+
+Get settings version history.
+
+**Query Parameters:**
+- `limit` (int, default 10): Number of versions to return
 
 **Response:**
+```json
+{
+    "history": [
+        {"version": 3, "updated_at": "2025-12-29T02:00:00Z", "updated_by": "admin"},
+        {"version": 2, "updated_at": "2025-12-29T01:00:00Z", "updated_by": "api"}
+    ],
+    "count": 2
+}
+```
 
+---
+
+### GET /api/v1/settings/audit
+
+Get settings audit log.
+
+**Query Parameters:**
+- `limit` (int, default 50): Number of entries to return
+
+**Response:**
+```json
+{
+    "entries": [
+        {
+            "timestamp": "2025-12-29T02:00:00Z",
+            "action": "update",
+            "actor": "admin",
+            "changes": {"default_top_k": {"from": 20, "to": 30}}
+        }
+    ],
+    "count": 1
+}
+```
+
+---
+
+### POST /api/v1/settings/rollback/{version}
+
+Rollback settings to a specific version.
+
+**Response:**
+```json
+{
+    "message": "rollback successful",
+    "rolled_back_to": 2,
+    "new_version": 4,
+    "current_settings": {...}
+}
+```
+
+---
+
+## Stats Endpoints
+
+JSON API for monitoring and Grafana integration.
+
+### GET /api/v1/stats/overview
+
+Overall statistics.
+
+**Query Parameters:**
+- `store` (string): Filter by store
+- `time_range` (string, default "1h"): Time range
+
+**Response:**
 ```json
 {
     "data": {
-        "stores": [
-            {
-                "name": "default",
-                "document_count": 150,
-                "chunk_count": 890,
-                "created_at": "2025-12-29T01:00:00Z"
-            },
-            {
-                "name": "my-project",
-                "document_count": 45,
-                "chunk_count": 234,
-                "created_at": "2025-12-29T02:00:00Z"
-            }
-        ]
+        "total_stores": 3,
+        "total_files": 1500,
+        "total_chunks": 8900,
+        "total_connections": 5,
+        "total_searches": 12345
+    },
+    "meta": {
+        "store": "",
+        "time_range": "1h",
+        "generated_at": "2025-12-29T02:00:00Z"
     }
 }
 ```
 
 ---
 
-### POST /v1/stores
+### GET /api/v1/stats/search-timeseries
 
-Create store.
+Search rate over time.
 
-**Request:**
-
-```json
-{
-    "name": "my-project",
-    "display_name": "My Project",
-    "description": "Code search for my project"
-}
-```
+**Query Parameters:**
+- `store` (string): Filter by store
+- `time_range` (string, default "1h"): Time range
+- `granularity` (string, default "5m"): Bucket size
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "name": "my-project",
-        "display_name": "My Project",
-        "created_at": "2025-12-29T01:00:00Z"
-    }
+    "data": [
+        {"timestamp": "2025-12-29T01:00:00Z", "value": 45},
+        {"timestamp": "2025-12-29T01:05:00Z", "value": 52}
+    ],
+    "meta": {"time_range": "1h", "granularity": "5m"}
 }
 ```
 
 ---
 
-### GET /v1/stores/{store}
+### GET /api/v1/stats/index-timeseries
 
-Get store details.
+Indexing rate over time (same format as search-timeseries).
+
+---
+
+### GET /api/v1/stats/latency-timeseries
+
+Search latency over time (same format as search-timeseries).
+
+---
+
+### GET /api/v1/stats/stores
+
+Per-store breakdown.
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "name": "my-project",
-        "display_name": "My Project",
-        "description": "Code search for my project",
-        "config": {
-            "embed_model": "jina-embed-v3",
-            "sparse_model": "splade-v1",
-            "chunk_size": 512,
-            "chunk_overlap": 64
-        },
-        "stats": {
-            "document_count": 45,
-            "chunk_count": 234,
-            "total_size_bytes": 1250000,
-            "last_indexed": "2025-12-29T01:00:00Z"
-        },
-        "created_at": "2025-12-29T01:00:00Z",
-        "updated_at": "2025-12-29T02:00:00Z"
-    }
+    "data": [
+        {"store": "default", "file_count": 150, "chunk_count": 890},
+        {"store": "my-project", "file_count": 45, "chunk_count": 234}
+    ],
+    "meta": {"time_range": "1h"}
 }
 ```
 
 ---
 
-### DELETE /v1/stores/{store}
+### GET /api/v1/stats/languages
 
-Delete store and all its data.
+Language breakdown.
+
+**Query Parameters:**
+- `store` (string, default "default"): Store to analyze
 
 **Response:**
-
 ```json
 {
-    "data": {
-        "deleted": true
-    }
+    "data": [
+        {"language": "go", "file_count": 80, "chunk_count": 450, "percentage": 53.3},
+        {"language": "typescript", "file_count": 45, "chunk_count": 280, "percentage": 30.0}
+    ],
+    "meta": {"store": "default"}
 }
 ```
 
 ---
 
-## Health Endpoints
+### GET /api/v1/stats/connections
 
-### GET /healthz
-
-Liveness probe. Returns 200 if process is running.
+Connection activity metrics.
 
 **Response:**
-
 ```json
 {
-    "status": "ok"
+    "data": [
+        {
+            "connection_id": "abc123",
+            "connection_name": "dev-laptop",
+            "files_indexed": 150,
+            "search_count": 234,
+            "is_active": true,
+            "last_active": "2025-12-29T02:00:00Z"
+        }
+    ],
+    "meta": {"time_range": "1h"}
 }
 ```
 
 ---
 
-### GET /readyz
+### GET /api/v1/events
 
-Readiness probe. Returns 200 if ready to serve requests.
+Get logged events (for debugging).
+
+**Query Parameters:**
+- `since` (timestamp, default 1h ago): Start time
+- `limit` (int, default 50, max 1000): Number of events
 
 **Response:**
-
 ```json
 {
-    "status": "ready",
-    "checks": {
-        "qdrant": "ok",
-        "models": "ok",
-        "event_bus": "ok"
-    }
-}
-```
-
-If not ready:
-
-```json
-{
-    "status": "not_ready",
-    "checks": {
-        "qdrant": "ok",
-        "models": "loading",
-        "event_bus": "ok"
-    }
+    "events": [...],
+    "count": 50,
+    "meta": {"since": "2025-12-29T01:00:00Z", "limit": 50}
 }
 ```
 
 ---
 
-### GET /v1/version
+## Web UI Pages
 
-Version information.
+HTML pages with HTMX interactivity.
 
-**Response:**
-
-```json
-{
-    "data": {
-        "version": "1.0.0",
-        "git_commit": "abc123",
-        "build_time": "2025-12-29T01:00:00Z",
-        "go_version": "1.23.0"
-    }
-}
-```
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/` | Dashboard - overview, health, quick stats |
+| GET | `/search` | Search page with 12+ options |
+| GET | `/stores` | Store management |
+| GET | `/stores/{name}` | Store detail with connections |
+| GET | `/stores/{name}/files` | File browser for store |
+| GET | `/stores/{name}/files/{path...}` | File detail with chunks |
+| GET | `/files` | Global file browser |
+| GET | `/stats` | Time-series dashboards |
+| GET | `/admin` | Redirects to /stores |
+| GET | `/admin/models` | Model management (download, GPU toggle) |
+| GET | `/admin/mappers` | Model I/O mappings |
+| GET | `/admin/connections` | Connection management |
+| GET | `/admin/settings` | 80+ runtime settings |
 
 ---
 
-### GET /metrics
+## Admin HTMX API
 
-Prometheus metrics endpoint.
+HTMX endpoints that return HTML fragments.
 
-**Response:** (text/plain)
+### Search
 
-```
-# HELP rice_search_requests_total Total search requests
-# TYPE rice_search_requests_total counter
-rice_search_requests_total{store="default"} 1234
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/search` | Execute search, return results HTML |
 
-# HELP rice_search_latency_seconds Search latency
-# TYPE rice_search_latency_seconds histogram
-rice_search_latency_seconds_bucket{le="0.1"} 500
-rice_search_latency_seconds_bucket{le="0.5"} 950
-...
-```
+### Stores
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/admin/stores` | Create store |
+| DELETE | `/admin/stores/{name}` | Delete store |
+
+### Files
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/files/{path...}/reindex` | Reindex file (requires CLI) |
+| DELETE | `/files/{path...}` | Delete file from index |
+| GET | `/stores/{name}/files/export` | Export files (CSV/JSON) |
+
+### Models
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/admin/models/{id}/download` | Start model download |
+| POST | `/admin/models/{id}/default` | Set as default for type |
+| POST | `/admin/models/{id}/gpu` | Toggle GPU (form: enabled=true/false) |
+| DELETE | `/admin/models/{id}` | Delete model files |
+
+### Mappers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/admin/mappers` | Create mapper |
+| PUT | `/admin/mappers/{id}` | Update mapper |
+| DELETE | `/admin/mappers/{id}` | Delete mapper |
+| GET | `/admin/mappers/{id}/yaml` | Get mapper as YAML |
+| POST | `/admin/mappers/generate` | Auto-generate mapper for model |
+
+### Connections
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/admin/connections/{id}/enable` | Enable connection |
+| POST | `/admin/connections/{id}/disable` | Disable connection |
+| POST | `/admin/connections/{id}/rename` | Rename (form: name=...) |
+| DELETE | `/admin/connections/{id}` | Delete connection |
+
+### Settings
+
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/admin/settings` | Save all settings (form data) |
+| GET | `/admin/settings/export` | Download as YAML/JSON |
+| POST | `/admin/settings/import` | Upload settings file |
+| POST | `/admin/settings/reset` | Reset to defaults |
+
+### Stats
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/stats/refresh` | Refresh stats content |
 
 ---
 
@@ -725,23 +898,35 @@ rice_search_latency_seconds_bucket{le="0.5"} 950
 | `INTERNAL_ERROR` | 500 | Server error |
 | `SERVICE_UNAVAILABLE` | 503 | Dependency unavailable |
 
+### Error Response Format
+
+```json
+{
+    "error": "STORE_NOT_FOUND",
+    "message": "Store 'foo' does not exist",
+    "code": "STORE_NOT_FOUND"
+}
+```
+
 ---
 
 ## Rate Limiting
 
-> ⚠️ **NOT IMPLEMENTED**: Rate limiting is not yet implemented. For production, use a reverse proxy for rate limiting.
+> ⚠️ **NOT IMPLEMENTED**: Rate limiting is not yet implemented. For production, use a reverse proxy.
 
-| Endpoint | Planned Limit | Status |
-|----------|---------------|--------|
-| Search | 100 req/min | ❌ Not implemented |
-| Index | 20 req/min | ❌ Not implemented |
-| ML endpoints | 200 req/min | ❌ Not implemented |
-| Other | 300 req/min | ❌ Not implemented |
+---
 
-Headers (Future):
+## Endpoint Summary
 
-```http
-X-RateLimit-Limit: 100
-X-RateLimit-Remaining: 95
-X-RateLimit-Reset: 1735430400
-```
+| Category | Count | Examples |
+|----------|-------|----------|
+| Health & System | 5 | `/healthz`, `/readyz`, `/metrics` |
+| Search | 2 | `/v1/search`, `/v1/stores/{store}/search` |
+| Stores | 5 | `/v1/stores`, `/v1/stores/{name}` |
+| Index | 6 | `/v1/stores/{name}/index`, `index/files` |
+| ML | 3 | `/v1/ml/embed`, `/v1/ml/rerank` |
+| Settings REST | 5 | `/api/v1/settings`, `settings/rollback` |
+| Stats REST | 8 | `/api/v1/stats/*` |
+| Web UI Pages | 13 | `/`, `/search`, `/admin/*` |
+| Admin HTMX | 24 | `/admin/stores/*`, `/admin/models/*` |
+| **Total** | **71** | |

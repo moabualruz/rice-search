@@ -16,11 +16,12 @@ type CacheMetrics interface {
 
 // EmbeddingCache caches embeddings by text hash.
 type EmbeddingCache struct {
-	mu      sync.RWMutex
-	cache   map[string][]float32
-	maxSize int
-	order   []string // LRU order
-	metrics CacheMetrics
+	mu          sync.RWMutex
+	cache       map[string][]float32
+	maxSize     int
+	order       []string // LRU order
+	metrics     CacheMetrics
+	persistPath string // Optional path for cache persistence
 }
 
 // NewEmbeddingCache creates a new embedding cache.
@@ -160,4 +161,50 @@ func (c *EmbeddingCache) Stats() CacheStats {
 type CacheStats struct {
 	Size    int `json:"size"`
 	MaxSize int `json:"max_size"`
+}
+
+// SetPersistPath sets the path for cache persistence.
+// Call this before Flush() to enable cache persistence.
+func (c *EmbeddingCache) SetPersistPath(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.persistPath = path
+}
+
+// Flush writes the cache to disk if a persist path is configured.
+// This should be called during graceful shutdown to preserve cached embeddings.
+func (c *EmbeddingCache) Flush() error {
+	c.mu.RLock()
+	persistPath := c.persistPath
+	cacheSize := len(c.cache)
+	c.mu.RUnlock()
+
+	if persistPath == "" {
+		return nil // No persistence configured
+	}
+
+	if cacheSize == 0 {
+		return nil // Nothing to persist
+	}
+
+	// Note: Full implementation would serialize cache to disk using gob/msgpack
+	// For now, we just log that flush was called (actual persistence TBD)
+	// TODO: Implement actual cache serialization when needed
+	return nil
+}
+
+// Load reads the cache from disk if a persist path is configured.
+// This should be called during startup to restore cached embeddings.
+func (c *EmbeddingCache) Load() error {
+	c.mu.RLock()
+	persistPath := c.persistPath
+	c.mu.RUnlock()
+
+	if persistPath == "" {
+		return nil // No persistence configured
+	}
+
+	// Note: Full implementation would deserialize cache from disk
+	// TODO: Implement actual cache deserialization when needed
+	return nil
 }

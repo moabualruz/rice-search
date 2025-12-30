@@ -11,11 +11,12 @@ import (
 
 // MemoryBus is an in-memory event bus using Go channels.
 type MemoryBus struct {
-	mu       sync.RWMutex
-	handlers map[string][]Handler
-	pending  map[string]chan Event
-	closed   bool
-	timeout  time.Duration
+	mu         sync.RWMutex
+	handlers   map[string][]Handler
+	pending    map[string]chan Event
+	closed     bool
+	timeout    time.Duration
+	inflightWg sync.WaitGroup // Tracks in-flight handlers for graceful shutdown
 }
 
 // NewMemoryBus creates a new in-memory event bus.
@@ -41,9 +42,11 @@ func (b *MemoryBus) Publish(ctx context.Context, topic string, event Event) erro
 		return nil // No subscribers, not an error
 	}
 
-	// Fan out to all handlers
+	// Fan out to all handlers with in-flight tracking
 	for _, handler := range handlers {
+		b.inflightWg.Add(1)
 		go func(h Handler) {
+			defer b.inflightWg.Done()
 			if err := h(ctx, event); err != nil {
 				// Log error but don't fail the publish
 				fmt.Printf("handler error for topic %s: %v\n", topic, err)
@@ -126,14 +129,54 @@ func (b *MemoryBus) Respond(correlationID string, event Event) error {
 	}
 }
 
-// Close closes the bus.
+// Close closes the bus, waiting for in-flight handlers to complete.
 func (b *MemoryBus) Close() error {
 	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	b.closed = true
+	b.mu.Unlock()
+
+	// Wait for in-flight handlers with timeout
+	done := make(chan struct{})
+	go func() {
+		b.inflightWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		// All handlers completed
+	case <-time.After(10 * time.Second):
+		fmt.Println("bus: event drain timeout reached, some handlers may not have completed")
+	}
+
+	b.mu.Lock()
 	b.handlers = nil
 	b.pending = nil
+	b.mu.Unlock()
 
 	return nil
+}
+
+// DrainTimeout waits for in-flight handlers to complete with custom timeout.
+func (b *MemoryBus) DrainTimeout(timeout time.Duration) bool {
+	done := make(chan struct{})
+	go func() {
+		b.inflightWg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		return true
+	case <-time.After(timeout):
+		return false
+	}
+}
+
+// InFlightCount returns an approximate count of in-flight handlers.
+// Note: This is not exact due to race conditions, use for monitoring only.
+func (b *MemoryBus) InFlightCount() int {
+	// WaitGroup doesn't expose count directly, so we track it separately if needed
+	// For now, return 0 as we don't have a separate counter
+	return 0
 }

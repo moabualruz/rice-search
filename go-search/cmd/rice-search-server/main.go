@@ -12,7 +12,6 @@ import (
 	"os/signal"
 	"strconv"
 	"sync/atomic"
-	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -25,6 +24,7 @@ import (
 	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/ml"
 	"github.com/ricesearch/rice-search/internal/models"
+	apperrors "github.com/ricesearch/rice-search/internal/pkg/errors"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/qdrant"
 	"github.com/ricesearch/rice-search/internal/query"
@@ -377,7 +377,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	httpAddr := fmt.Sprintf("%s:%d", host, httpPort)
 	httpSrv := &http.Server{
 		Addr:         httpAddr,
-		Handler:      corsMiddleware(loggingMiddleware(inFlightMiddleware(mux), log)),
+		Handler:      recoveryMiddleware(corsMiddleware(loggingMiddleware(inFlightMiddleware(mux), log)), log),
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 60 * time.Second,
 	}
@@ -390,9 +390,9 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		}
 	}()
 
-	// Wait for shutdown signal
+	// Wait for shutdown signal (platform-specific: Unix includes SIGQUIT, Windows does not)
 	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(sigCh, shutdownSignals...)
 
 	<-sigCh
 	log.Info("Shutdown signal received")
@@ -500,7 +500,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 	mux.HandleFunc("GET /v1/stores", func(w http.ResponseWriter, r *http.Request) {
 		stores, err := storeSvc.ListStores(r.Context())
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -514,14 +514,14 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			Description string `json:"description"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 		newStore := store.NewStore(req.Name)
 		newStore.DisplayName = req.DisplayName
 		newStore.Description = req.Description
 		if err := storeSvc.CreateStore(r.Context(), newStore); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -533,7 +533,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		name := r.PathValue("name")
 		s, err := storeSvc.GetStore(r.Context(), name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -543,7 +543,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 	mux.HandleFunc("DELETE /v1/stores/{name}", func(w http.ResponseWriter, r *http.Request) {
 		name := r.PathValue("name")
 		if err := storeSvc.DeleteStore(r.Context(), name); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
@@ -553,7 +553,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		name := r.PathValue("name")
 		stats, err := storeSvc.GetStoreStats(r.Context(), name)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -572,7 +572,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			Force bool `json:"force"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 
@@ -591,7 +591,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			Force:     req.Force,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -602,7 +602,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		storeName := r.PathValue("name")
 		stats, err := indexSvc.GetStats(r.Context(), storeName)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusNotFound)
+			writeAPIError(w, http.StatusNotFound, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -616,14 +616,14 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			PathPrefix string   `json:"path_prefix"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 
 		// Delete by prefix if specified
 		if req.PathPrefix != "" {
 			if err := indexSvc.DeleteByPrefix(r.Context(), storeName, req.PathPrefix); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				writeAPIError(w, http.StatusInternalServerError, err)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -635,11 +635,11 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 
 		// Delete specific paths
 		if len(req.Paths) == 0 {
-			http.Error(w, "paths or path_prefix required", http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, apperrors.ValidationError("paths or path_prefix required"))
 			return
 		}
 		if err := indexSvc.Delete(r.Context(), storeName, req.Paths); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -655,17 +655,17 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			CurrentPaths []string `json:"current_paths"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 		if len(req.CurrentPaths) == 0 {
-			http.Error(w, "current_paths required", http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, apperrors.ValidationError("current_paths required"))
 			return
 		}
 
 		removed, err := indexSvc.Sync(r.Context(), storeName, req.CurrentPaths)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -684,7 +684,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			} `json:"files"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 
@@ -702,7 +702,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			Documents: docs,
 		})
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -743,7 +743,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 	mux.HandleFunc("POST /v1/search", func(w http.ResponseWriter, r *http.Request) {
 		var req search.Request
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 		// Use default store if not specified
@@ -752,7 +752,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		}
 		resp, err := searchSvc.Search(r.Context(), req)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -765,16 +765,16 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			Texts []string `json:"texts"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 		if len(req.Texts) == 0 {
-			http.Error(w, "texts array required", http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, apperrors.ValidationError("texts array required"))
 			return
 		}
 		embeddings, err := mlSvc.Embed(r.Context(), req.Texts)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -789,16 +789,16 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			Texts []string `json:"texts"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 		if len(req.Texts) == 0 {
-			http.Error(w, "texts array required", http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, apperrors.ValidationError("texts array required"))
 			return
 		}
 		vectors, err := mlSvc.SparseEncode(r.Context(), req.Texts)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -815,11 +815,11 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			TopK      int      `json:"top_k"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, err)
 			return
 		}
 		if req.Query == "" || len(req.Documents) == 0 {
-			http.Error(w, "query and documents required", http.StatusBadRequest)
+			writeAPIError(w, http.StatusBadRequest, apperrors.ValidationError("query and documents required"))
 			return
 		}
 		if req.TopK == 0 {
@@ -827,7 +827,7 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 		}
 		results, err := mlSvc.Rerank(r.Context(), req.Query, req.Documents, req.TopK)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			writeAPIError(w, http.StatusInternalServerError, err)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -835,6 +835,39 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 			"results": results,
 			"count":   len(results),
 		})
+	})
+}
+
+// writeAPIError writes a JSON error response with proper status code and sanitization.
+// For 4xx errors, shows the error message. For 5xx errors, sanitizes internal details.
+func writeAPIError(w http.ResponseWriter, status int, err error) {
+	apperrors.WriteErrorWithStatus(w, status, err)
+}
+
+// recoveryMiddleware catches panics and returns a 500 error instead of crashing.
+// This prevents uncaught panics from bringing down the entire server.
+func recoveryMiddleware(next http.Handler, log *logger.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if err := recover(); err != nil {
+				// Log the panic with stack trace info
+				log.Error("Panic recovered in HTTP handler",
+					"error", err,
+					"method", r.Method,
+					"path", r.URL.Path,
+				)
+
+				// Return sanitized error to client (don't leak internal details)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{
+					"error":   "internal server error",
+					"code":    "INTERNAL_ERROR",
+					"message": "An unexpected error occurred. Please try again.",
+				})
+			}
+		}()
+		next.ServeHTTP(w, r)
 	})
 }
 

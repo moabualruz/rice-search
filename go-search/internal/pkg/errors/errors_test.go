@@ -143,6 +143,87 @@ func TestConvenienceConstructors(t *testing.T) {
 			t.Errorf("Code = %s, want %s", err.Code, CodeQdrantError)
 		}
 	})
+
+	t.Run("IndexingError", func(t *testing.T) {
+		err := IndexingError("chunking failed", errors.New("too large"))
+		if err.Code != CodeIndexingError {
+			t.Errorf("Code = %s, want %s", err.Code, CodeIndexingError)
+		}
+	})
+
+	t.Run("InvalidRequestError", func(t *testing.T) {
+		err := InvalidRequestError("missing required field")
+		if err.Code != CodeInvalidRequest {
+			t.Errorf("Code = %s, want %s", err.Code, CodeInvalidRequest)
+		}
+	})
+
+	t.Run("UnauthorizedError", func(t *testing.T) {
+		err := UnauthorizedError()
+		if err.Code != CodeUnauthorized {
+			t.Errorf("Code = %s, want %s", err.Code, CodeUnauthorized)
+		}
+		if err.Message != "unauthorized" {
+			t.Errorf("Message = %s, want 'unauthorized'", err.Message)
+		}
+	})
+
+	t.Run("ForbiddenError", func(t *testing.T) {
+		err := ForbiddenError("no access to store")
+		if err.Code != CodeForbidden {
+			t.Errorf("Code = %s, want %s", err.Code, CodeForbidden)
+		}
+		// Test default message
+		errDefault := ForbiddenError("")
+		if errDefault.Message != "access denied" {
+			t.Errorf("Default message = %s, want 'access denied'", errDefault.Message)
+		}
+	})
+
+	t.Run("RateLimitedError", func(t *testing.T) {
+		err := RateLimitedError(60)
+		if err.Code != CodeRateLimited {
+			t.Errorf("Code = %s, want %s", err.Code, CodeRateLimited)
+		}
+		if err.Details["retry_after"] != "60" {
+			t.Errorf("Details[retry_after] = %s, want '60'", err.Details["retry_after"])
+		}
+		// Test without retry
+		errNoRetry := RateLimitedError(0)
+		if errNoRetry.Details != nil && errNoRetry.Details["retry_after"] != "" {
+			t.Errorf("Should not have retry_after with 0")
+		}
+	})
+
+	t.Run("TimeoutError", func(t *testing.T) {
+		err := TimeoutError("search")
+		if err.Code != CodeTimeout {
+			t.Errorf("Code = %s, want %s", err.Code, CodeTimeout)
+		}
+		if err.Message != "search timed out" {
+			t.Errorf("Message = %s, want 'search timed out'", err.Message)
+		}
+		// Test default message
+		errDefault := TimeoutError("")
+		if errDefault.Message != "operation timed out" {
+			t.Errorf("Default message = %s, want 'operation timed out'", errDefault.Message)
+		}
+	})
+
+	t.Run("ServiceUnavailableError", func(t *testing.T) {
+		err := ServiceUnavailableError("Qdrant")
+		if err.Code != CodeUnavailable {
+			t.Errorf("Code = %s, want %s", err.Code, CodeUnavailable)
+		}
+		if err.Message != "Qdrant is unavailable" {
+			t.Errorf("Message = %s, want 'Qdrant is unavailable'", err.Message)
+		}
+		// Test default message
+		errDefault := ServiceUnavailableError("")
+		if errDefault.Message != "service unavailable" {
+			t.Errorf("Default message = %s, want 'service unavailable'", errDefault.Message)
+		}
+	})
 }
 
 func TestIsNotFound(t *testing.T) {

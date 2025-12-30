@@ -2,6 +2,7 @@
 package errors
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 )
@@ -135,6 +136,56 @@ func QdrantError(message string, err error) *AppError {
 	return Wrap(CodeQdrantError, message, err)
 }
 
+// IndexingError creates an indexing error.
+func IndexingError(message string, err error) *AppError {
+	return Wrap(CodeIndexingError, message, err)
+}
+
+// InvalidRequestError creates an invalid request error.
+func InvalidRequestError(message string) *AppError {
+	return New(CodeInvalidRequest, message)
+}
+
+// UnauthorizedError creates an unauthorized error.
+func UnauthorizedError() *AppError {
+	return New(CodeUnauthorized, "unauthorized")
+}
+
+// ForbiddenError creates a forbidden error.
+func ForbiddenError(message string) *AppError {
+	if message == "" {
+		message = "access denied"
+	}
+	return New(CodeForbidden, message)
+}
+
+// RateLimitedError creates a rate limited error with retry information.
+func RateLimitedError(retryAfterSeconds int) *AppError {
+	err := New(CodeRateLimited, "rate limit exceeded")
+	if retryAfterSeconds > 0 {
+		err = err.WithDetail("retry_after", fmt.Sprintf("%d", retryAfterSeconds))
+	}
+	return err
+}
+
+// TimeoutError creates a timeout error for a specific operation.
+func TimeoutError(operation string) *AppError {
+	message := "operation timed out"
+	if operation != "" {
+		message = fmt.Sprintf("%s timed out", operation)
+	}
+	return New(CodeTimeout, message)
+}
+
+// ServiceUnavailableError creates a service unavailable error.
+func ServiceUnavailableError(service string) *AppError {
+	message := "service unavailable"
+	if service != "" {
+		message = fmt.Sprintf("%s is unavailable", service)
+	}
+	return New(CodeUnavailable, message)
+}
+
 // IsNotFound checks if error is a not found error.
 func IsNotFound(err error) bool {
 	if appErr, ok := err.(*AppError); ok {
@@ -149,4 +200,104 @@ func IsValidation(err error) bool {
 		return appErr.Code == CodeValidation
 	}
 	return false
+}
+
+// ErrorResponse is the standard JSON error response structure.
+type ErrorResponse struct {
+	Error   string            `json:"error"`
+	Code    string            `json:"code"`
+	Message string            `json:"message,omitempty"`
+	Details map[string]string `json:"details,omitempty"`
+}
+
+// WriteJSON writes a JSON error response to the ResponseWriter.
+// This is the low-level function used by WriteError.
+func WriteJSON(w http.ResponseWriter, status int, resp ErrorResponse) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	// Ignore encoding errors - headers already sent
+	_ = json.NewEncoder(w).Encode(resp)
+}
+
+// WriteError writes an error response with proper sanitization.
+// If err is an *AppError, it uses the code and status from the error.
+// For other errors, it sanitizes the message to prevent leaking internal details.
+func WriteError(w http.ResponseWriter, err error) {
+	// Check if it's an AppError
+	if appErr, ok := err.(*AppError); ok {
+		WriteJSON(w, appErr.HTTPStatus(), ErrorResponse{
+			Error:   appErr.Message,
+			Code:    appErr.Code,
+			Message: appErr.Message,
+			Details: appErr.Details,
+		})
+		return
+	}
+
+	// For non-AppError errors, sanitize the message
+	// Don't leak internal error details to clients
+	WriteJSON(w, http.StatusInternalServerError, ErrorResponse{
+		Error:   "internal server error",
+		Code:    CodeInternal,
+		Message: "An unexpected error occurred",
+	})
+}
+
+// WriteErrorWithStatus writes an error with a specific HTTP status code.
+// The error message is sanitized based on the status code:
+// - 4xx errors: message is shown to client
+// - 5xx errors: message is sanitized (internal details hidden)
+func WriteErrorWithStatus(w http.ResponseWriter, status int, err error) {
+	// Check if it's an AppError - use its code
+	if appErr, ok := err.(*AppError); ok {
+		WriteJSON(w, status, ErrorResponse{
+			Error:   appErr.Message,
+			Code:    appErr.Code,
+			Message: appErr.Message,
+			Details: appErr.Details,
+		})
+		return
+	}
+
+	// For 4xx errors, we can show the message (client error)
+	if status >= 400 && status < 500 {
+		code := codeForStatus(status)
+		WriteJSON(w, status, ErrorResponse{
+			Error:   err.Error(),
+			Code:    code,
+			Message: err.Error(),
+		})
+		return
+	}
+
+	// For 5xx errors, sanitize the message
+	WriteJSON(w, status, ErrorResponse{
+		Error:   "internal server error",
+		Code:    CodeInternal,
+		Message: "An unexpected error occurred",
+	})
+}
+
+// codeForStatus returns an error code for common HTTP status codes.
+func codeForStatus(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return CodeInvalidRequest
+	case http.StatusUnauthorized:
+		return CodeUnauthorized
+	case http.StatusForbidden:
+		return CodeForbidden
+	case http.StatusNotFound:
+		return CodeNotFound
+	case http.StatusConflict:
+		return CodeAlreadyExists
+	case http.StatusTooManyRequests:
+		return CodeRateLimited
+	case http.StatusServiceUnavailable:
+		return CodeUnavailable
+	case http.StatusGatewayTimeout:
+		return CodeTimeout
+	default:
+		return CodeInternal
+	}
 }

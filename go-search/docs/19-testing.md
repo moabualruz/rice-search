@@ -112,27 +112,26 @@ go test ./internal/... -short -v
 
 ### Test Infrastructure
 
-```go
-// testutil/containers.go
+> **Note**: Integration tests use Docker Compose for Qdrant instead of testcontainers.
+> Start Qdrant with: `docker-compose -f deployments/docker-compose.dev.yml up -d`
 
-func StartQdrant(t *testing.T) *QdrantContainer {
-    ctx := context.Background()
+```go
+// testutil/qdrant.go (simplified approach)
+
+func GetQdrantURL(t *testing.T) string {
+    url := os.Getenv("QDRANT_URL")
+    if url == "" {
+        url = "http://localhost:6333"
+    }
     
-    container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-        ContainerRequest: testcontainers.ContainerRequest{
-            Image:        "qdrant/qdrant:v1.12.4",
-            ExposedPorts: []string{"6333/tcp"},
-            WaitingFor:   wait.ForHTTP("/readyz").WithPort("6333"),
-        },
-        Started: true,
-    })
-    require.NoError(t, err)
+    // Verify Qdrant is accessible
+    resp, err := http.Get(url + "/readyz")
+    if err != nil {
+        t.Skipf("Qdrant not available at %s: %v", url, err)
+    }
+    resp.Body.Close()
     
-    t.Cleanup(func() {
-        container.Terminate(ctx)
-    })
-    
-    return &QdrantContainer{container}
+    return url
 }
 ```
 

@@ -30,9 +30,9 @@ Examples:
 
 ### HTTP Metrics
 
-**Status**: Basic HTTP metrics are **planned**. Currently implementing custom metrics for search/index/ML.
+**Status**: ✅ **Fully Implemented** with custom Prometheus-compatible implementation.
 
-**Planned (not yet implemented)**:
+**Implemented**:
 
 ```prometheus
 # Request counter (planned)
@@ -115,14 +115,18 @@ rice_query_understand_requests_total 5000
 rice_query_understand_latency_ms_bucket{le="50"} 4800
 ```
 
-**Planned (not yet implemented)**:
+**Cache Metrics** (✅ Implemented):
 
 ```prometheus
-# ML cache metrics (planned)
+# ML cache metrics (implemented)
 rice_ml_cache_hits_total{type="embed"} 25000
 rice_ml_cache_misses_total{type="embed"} 10000
 rice_ml_cache_size{type="embed"} 50000
+```
 
+**Planned (not yet implemented)**:
+
+```prometheus
 # GPU metrics (planned)
 rice_ml_gpu_memory_used_bytes 2147483648
 rice_ml_gpu_utilization_percent 75

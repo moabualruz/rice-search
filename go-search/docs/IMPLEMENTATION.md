@@ -24,7 +24,7 @@ The go-search implementation is **production-ready** with core features implemen
 | **Settings System** | ✅ Complete | 100% | 80+ settings, export/import, rollback, audit |
 | **Connection Tracking** | ✅ Complete | 100% | Full lifecycle, monitoring, audit |
 | **Stats & Monitoring** | ✅ Complete | 100% | 40+ metrics, Prometheus compatible |
-| **Event Architecture** | ✅ Complete | 85% | MemoryBus complete; Kafka/NATS/Redis NOT IMPLEMENTED |
+| **Event Architecture** | ✅ Complete | 85% | MemoryBus complete; KafkaBus code exists (untested); NATS/Redis NOT IMPLEMENTED |
 | **Search Service** | ✅ Complete | 100% | Hybrid search, multi-pass reranking, post-rank |
 
 **Overall: ~95% Complete** - Core features implemented, some advanced features pending.
@@ -154,7 +154,7 @@ The go-search implementation is **production-ready** with core features implemen
 | Validation (20+ rules) | ✅ Complete |
 | Event Propagation | ✅ Hot-reload via events |
 | Version Tracking | ✅ Complete |
-| **Rollback to Previous** | ❌ Not implemented |
+| **Rollback to Previous** | ⚠️ API exists, needs testing |
 
 ---
 

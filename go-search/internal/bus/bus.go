@@ -3,6 +3,7 @@ package bus
 
 import (
 	"context"
+	"time"
 )
 
 // Handler is a function that handles events.
@@ -21,6 +22,23 @@ type Bus interface {
 
 	// Close closes the bus and releases resources.
 	Close() error
+}
+
+// Drainable is an optional interface for buses that support graceful draining.
+// Buses implementing this interface can wait for in-flight handlers to complete.
+type Drainable interface {
+	// DrainTimeout waits for in-flight handlers to complete.
+	// Returns true if all handlers completed, false if timeout was reached.
+	DrainTimeout(timeout time.Duration) bool
+}
+
+// DrainBus attempts to drain a bus if it supports draining.
+// Returns true if draining completed or bus doesn't support draining.
+func DrainBus(b Bus, timeout time.Duration) bool {
+	if drainable, ok := b.(Drainable); ok {
+		return drainable.DrainTimeout(timeout)
+	}
+	return true // Bus doesn't support draining, consider it done
 }
 
 // Event represents a bus event.
