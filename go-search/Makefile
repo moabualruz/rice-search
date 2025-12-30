@@ -84,6 +84,10 @@ test-cover: ## Run tests with coverage report
 test-integration: ## Run integration tests (requires Qdrant)
 	$(GO) test -tags=integration -v ./...
 
+.PHONY: test-e2e
+test-e2e: build ## Run End-to-End tests (Playwright)
+	cd test/e2e && npm install && npx playwright test
+
 .PHONY: bench
 bench: ## Run benchmarks
 	$(GO) test -bench=. -benchmem ./...

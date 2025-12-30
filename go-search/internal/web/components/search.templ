@@ -1,0 +1,551 @@
+package components
+
+import "fmt"
+
+// SearchResult represents a single search result
+type SearchResult struct {
+	ID           string
+	Path         string
+	Language     string
+	StartLine    int
+	EndLine      int
+	Content      string
+	Score        float32
+	RerankScore  float32
+	ConnectionID string
+	Symbols      []string
+}
+
+// SearchOptions holds all search configuration options
+type SearchOptions struct {
+	TopK             int
+	EnableReranking  bool
+	RerankTopK       int
+	SparseWeight     float32
+	DenseWeight      float32
+	EnableDedup      bool
+	DedupThreshold   float32
+	EnableDiversity  bool
+	DiversityLambda  float32
+	GroupByFile      bool
+	MaxChunksPerFile int
+	EnableExpansion  bool
+	PathPrefix       string
+	Languages        []string
+	IncludeContent   bool
+}
+
+// ParsedQueryDisplay holds query understanding information
+type ParsedQueryDisplay struct {
+	Original     string
+	Keywords     []string
+	CodeTerms    []string
+	ActionIntent string
+	TargetType   string
+	Expanded     []string
+	SearchQuery  string
+	UsedModel    bool
+	Confidence   float32
+}
+
+// SearchMetadataDisplay holds search execution metadata
+type SearchMetadataDisplay struct {
+	SearchTimeMs       int64
+	EmbedTimeMs        int64
+	RetrievalTimeMs    int64
+	RerankTimeMs       int64
+	CandidatesReranked int32
+	RerankingApplied   bool
+}
+
+// ConnectionOption represents a connection for filtering
+type ConnectionOption struct {
+	ID   string
+	Name string
+}
+
+// SearchPageData holds data for the search page
+type SearchPageData struct {
+	Layout      LayoutData
+	Query       string
+	Store       string
+	Stores      []string
+	Results     []SearchResult
+	Total       int
+	SearchTime  int64
+	Error       string
+	
+	// Advanced options
+	Connections    []ConnectionOption
+	ConnectionID   string
+	
+	// Query understanding
+	ParsedQuery    *ParsedQueryDisplay
+	
+	// Search options (all exposed)
+	Options        SearchOptions
+	
+	// Metadata
+	SearchMetadata *SearchMetadataDisplay
+	
+	// Available languages for filter
+	AvailableLanguages []string
+}
+
+// SearchPage renders the main search page
+templ SearchPage(data SearchPageData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Search Form -->
+			<div class="mb-8">
+				<form 
+					hx-post="/search"
+					hx-target="#search-results"
+					hx-indicator="#search-indicator"
+					class="space-y-4"
+					id="search-form"
+				>
+					<!-- Main Search Bar -->
+					<div class="flex gap-4">
+						<!-- Store selector -->
+						<div class="w-48">
+							<label for="store" class="block text-sm font-medium text-gray-700 mb-1">Store</label>
+							<select 
+								id="store" 
+								name="store" 
+								class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+							>
+								for _, s := range data.Stores {
+									<option value={ s } selected?={ s == data.Store }>{ s }</option>
+								}
+							</select>
+						</div>
+						
+						<!-- Search input -->
+						<div class="flex-1">
+							<label for="query" class="block text-sm font-medium text-gray-700 mb-1">Search Query</label>
+							<div class="flex rounded-md shadow-sm">
+								<input
+									type="text"
+									id="query"
+									name="query"
+									value={ data.Query }
+									placeholder="Search your code..."
+									class="block w-full rounded-l-md border-gray-300 focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+									hx-post="/search"
+									hx-target="#search-results"
+									hx-indicator="#search-indicator"
+									hx-trigger="keyup changed delay:300ms"
+									hx-include="#search-form"
+								/>
+								<button
+									type="submit"
+									class="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+								>
+									<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+									</svg>
+									<span class="ml-2">Search</span>
+								</button>
+							</div>
+						</div>
+					</div>
+					
+					<!-- Advanced Options (Collapsible) -->
+					<div class="border border-gray-200 rounded-lg bg-white">
+						<button
+							type="button"
+							class="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50"
+							onclick="document.getElementById('advanced-options').classList.toggle('hidden')"
+						>
+							<span class="flex items-center">
+								<svg class="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
+								</svg>
+								Advanced Options
+							</span>
+							<svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+							</svg>
+						</button>
+						
+						<div id="advanced-options" class="px-4 pb-4 space-y-4 hidden">
+							<!-- Results & Reranking -->
+							<div class="grid grid-cols-3 gap-4">
+								<div>
+									<label for="top_k" class="block text-sm font-medium text-gray-700 mb-1">Results</label>
+									<select id="top_k" name="top_k" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border">
+										<option value="10" selected?={ data.Options.TopK == 10 }>10</option>
+										<option value="20" selected?={ data.Options.TopK == 20 || data.Options.TopK == 0 }>20</option>
+										<option value="50" selected?={ data.Options.TopK == 50 }>50</option>
+										<option value="100" selected?={ data.Options.TopK == 100 }>100</option>
+									</select>
+								</div>
+								
+								<div>
+									<label class="block text-sm font-medium text-gray-700 mb-1">Reranking</label>
+									<label class="inline-flex items-center mt-2">
+										<input type="checkbox" name="enable_reranking" checked?={ data.Options.EnableReranking || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
+										<span class="ml-2 text-sm text-gray-700">Enable reranking</span>
+									</label>
+								</div>
+								
+								<div>
+									<label for="rerank_top_k" class="block text-sm font-medium text-gray-700 mb-1">Rerank Candidates</label>
+									<input 
+										type="number" 
+										id="rerank_top_k" 
+										name="rerank_top_k" 
+										value={ fmt.Sprint(getOrDefault(data.Options.RerankTopK, 30)) }
+										min="10"
+										max="100"
+										class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+									/>
+								</div>
+							</div>
+							
+							<!-- Weights -->
+							<div class="border-t pt-4">
+								<h4 class="text-sm font-medium text-gray-900 mb-3">Retrieval Weights</h4>
+								<div class="grid grid-cols-2 gap-4">
+									<div>
+										<label for="sparse_weight" class="block text-sm text-gray-700 mb-1">
+											Sparse (BM25): <span id="sparse_weight_val">{ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.SparseWeight, 0.5)) }</span>
+										</label>
+										<input 
+											type="range" 
+											id="sparse_weight" 
+											name="sparse_weight" 
+											value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.SparseWeight, 0.5)) }
+											min="0" 
+											max="1" 
+											step="0.1"
+											class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+											oninput="document.getElementById('sparse_weight_val').textContent = parseFloat(this.value).toFixed(2)"
+										/>
+									</div>
+									
+									<div>
+										<label for="dense_weight" class="block text-sm text-gray-700 mb-1">
+											Dense (Semantic): <span id="dense_weight_val">{ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DenseWeight, 0.5)) }</span>
+										</label>
+										<input 
+											type="range" 
+											id="dense_weight" 
+											name="dense_weight" 
+											value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DenseWeight, 0.5)) }
+											min="0" 
+											max="1" 
+											step="0.1"
+											class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+											oninput="document.getElementById('dense_weight_val').textContent = parseFloat(this.value).toFixed(2)"
+										/>
+									</div>
+								</div>
+							</div>
+							
+							<!-- Post-processing -->
+							<div class="border-t pt-4">
+								<h4 class="text-sm font-medium text-gray-900 mb-3">Post-processing</h4>
+								<div class="grid grid-cols-2 gap-4">
+									<div class="space-y-3">
+										<label class="flex items-center justify-between">
+											<span class="flex items-center">
+												<input type="checkbox" name="enable_dedup" checked?={ data.Options.EnableDedup || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
+												<span class="ml-2 text-sm text-gray-700">Deduplication</span>
+											</span>
+											<input 
+												type="number" 
+												name="dedup_threshold" 
+												value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DedupThreshold, 0.85)) }
+												min="0.5" 
+												max="1" 
+												step="0.05"
+												placeholder="0.85"
+												class="w-20 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-xs py-1 px-2 border"
+											/>
+										</label>
+										
+										<label class="flex items-center justify-between">
+											<span class="flex items-center">
+												<input type="checkbox" name="enable_diversity" checked?={ data.Options.EnableDiversity || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
+												<span class="ml-2 text-sm text-gray-700">Diversity (MMR)</span>
+											</span>
+											<input 
+												type="number" 
+												name="diversity_lambda" 
+												value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DiversityLambda, 0.7)) }
+												min="0" 
+												max="1" 
+												step="0.1"
+												placeholder="0.7"
+												class="w-20 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-xs py-1 px-2 border"
+											/>
+										</label>
+										
+										<label class="inline-flex items-center">
+											<input type="checkbox" name="enable_expansion" checked?={ data.Options.EnableExpansion || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
+											<span class="ml-2 text-sm text-gray-700">Query Expansion</span>
+										</label>
+									</div>
+									
+									<div class="space-y-3">
+										<label class="flex items-center justify-between">
+											<span class="flex items-center">
+												<input type="checkbox" name="group_by_file" checked?={ data.Options.GroupByFile } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
+												<span class="ml-2 text-sm text-gray-700">Group by File</span>
+											</span>
+											<input 
+												type="number" 
+												name="max_chunks_per_file" 
+												value={ fmt.Sprint(getOrDefault(data.Options.MaxChunksPerFile, 3)) }
+												min="1" 
+												max="10"
+												placeholder="3"
+												class="w-20 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-xs py-1 px-2 border"
+											/>
+										</label>
+										
+										<label class="inline-flex items-center">
+											<input type="checkbox" name="include_content" checked?={ data.Options.IncludeContent || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
+											<span class="ml-2 text-sm text-gray-700">Include Content</span>
+										</label>
+									</div>
+								</div>
+							</div>
+							
+							<!-- Filters -->
+							<div class="border-t pt-4">
+								<h4 class="text-sm font-medium text-gray-900 mb-3">Filters</h4>
+								<div class="grid grid-cols-3 gap-4">
+									<div>
+										<label for="path_prefix" class="block text-sm text-gray-700 mb-1">Path Prefix</label>
+										<input 
+											type="text" 
+											id="path_prefix" 
+											name="path_prefix" 
+											value={ data.Options.PathPrefix }
+											placeholder="src/"
+											class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+										/>
+									</div>
+									
+									<div>
+										<label for="languages" class="block text-sm text-gray-700 mb-1">Languages</label>
+										<select id="languages" name="languages" multiple class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border" size="1">
+											<option value="">All Languages</option>
+											if len(data.AvailableLanguages) > 0 {
+												for _, lang := range data.AvailableLanguages {
+													<option value={ lang }>{ lang }</option>
+												}
+											} else {
+												<option value="typescript">TypeScript</option>
+												<option value="javascript">JavaScript</option>
+												<option value="python">Python</option>
+												<option value="go">Go</option>
+												<option value="rust">Rust</option>
+												<option value="java">Java</option>
+												<option value="cpp">C++</option>
+											}
+										</select>
+									</div>
+									
+									<div>
+										<label for="connection_id" class="block text-sm text-gray-700 mb-1">Connection</label>
+										<select id="connection_id" name="connection_id" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border">
+											<option value="">All Connections</option>
+											for _, conn := range data.Connections {
+												<option value={ conn.ID } selected?={ conn.ID == data.ConnectionID }>{ conn.Name }</option>
+											}
+										</select>
+									</div>
+								</div>
+							</div>
+						</div>
+					</div>
+				</form>
+			</div>
+
+			<!-- Loading indicator -->
+			<div id="search-indicator" class="htmx-indicator mb-4">
+				@LoadingSpinner()
+			</div>
+
+			<!-- Search Results -->
+			<div id="search-results">
+				@SearchResults(data)
+			</div>
+		</div>
+	}
+}
+
+// SearchResults renders just the results section (for HTMX updates)
+templ SearchResults(data SearchPageData) {
+	if data.Error != "" {
+		@ErrorMessage(data.Error)
+	} else if data.Query == "" {
+		@EmptyState("Start searching", "Enter a query above to search your code")
+	} else if len(data.Results) == 0 {
+		@EmptyState("No results found", fmt.Sprintf("No matches for \"%s\"", data.Query))
+	} else {
+		<!-- Query Understanding (if available) -->
+		if data.ParsedQuery != nil {
+			@QueryUnderstanding(data.ParsedQuery)
+		}
+		
+		<!-- Results header with metadata -->
+		<div class="mb-4">
+			<div class="flex items-center justify-between mb-2">
+				<p class="text-sm text-gray-600">
+					Found <span class="font-semibold">{ fmt.Sprint(data.Total) }</span> results in <span class="font-semibold">{ fmt.Sprint(data.SearchTime) }ms</span>
+				</p>
+				if data.SearchMetadata != nil {
+					<div class="flex items-center gap-4 text-xs text-gray-500">
+						<span title="Embedding time">Embed: { fmt.Sprint(data.SearchMetadata.EmbedTimeMs) }ms</span>
+						<span title="Retrieval time">Retrieve: { fmt.Sprint(data.SearchMetadata.RetrievalTimeMs) }ms</span>
+						if data.SearchMetadata.RerankingApplied {
+							<span title="Reranking time" class="text-green-600">
+								Rerank: { fmt.Sprint(data.SearchMetadata.RerankTimeMs) }ms ({ fmt.Sprint(data.SearchMetadata.CandidatesReranked) } candidates)
+							</span>
+						}
+					</div>
+				}
+			</div>
+			
+			<!-- Applied options indicator -->
+			<div class="flex flex-wrap gap-2 text-xs">
+				if data.Options.EnableReranking {
+					<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 font-medium text-green-800">
+						<svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
+							<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
+						</svg>
+						Reranking
+					</span>
+				}
+				if data.Options.EnableDedup {
+					<span class="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 font-medium text-primary-800">Dedup</span>
+				}
+				if data.Options.EnableDiversity {
+					<span class="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 font-medium text-purple-800">Diversity</span>
+				}
+				if data.Options.GroupByFile {
+					<span class="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 font-medium text-orange-800">Grouped</span>
+				}
+				if data.Options.PathPrefix != "" {
+					<span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-800">
+						Path: { data.Options.PathPrefix }
+					</span>
+				}
+			</div>
+		</div>
+
+		<!-- Results list -->
+		<div class="space-y-4">
+			for i, result := range data.Results {
+				@SearchResultCard(result, i, data.SearchMetadata != nil && data.SearchMetadata.RerankingApplied)
+			}
+		</div>
+	}
+}
+
+// QueryUnderstanding displays query analysis information
+templ QueryUnderstanding(parsed *ParsedQueryDisplay) {
+	<div class="mb-4 rounded-lg border border-primary-200 bg-primary-50 p-4">
+		<div class="flex items-start">
+			<svg class="h-5 w-5 text-primary-600 mt-0.5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+			</svg>
+			<div class="flex-1">
+				<h3 class="text-sm font-medium text-primary-900">
+					Query Analysis 
+					<span class="text-xs font-normal text-primary-700">
+						if parsed.UsedModel {
+							(model)
+						} else {
+							(keywords)
+						}
+					</span>
+				</h3>
+				<div class="mt-2 text-sm text-primary-800 space-y-1">
+					if len(parsed.Keywords) > 0 {
+						<div class="flex items-start">
+							<span class="font-medium mr-2">Keywords:</span>
+							<div class="flex flex-wrap gap-1">
+								for _, kw := range parsed.Keywords {
+									<span class="inline-block rounded bg-primary-200 px-2 py-0.5 text-xs">{ kw }</span>
+								}
+							</div>
+						</div>
+					}
+					if parsed.ActionIntent != "" || parsed.TargetType != "" {
+						<div>
+							<span class="font-medium">Intent:</span>
+							<span class="ml-2">{ parsed.ActionIntent }</span>
+							if parsed.TargetType != "" {
+								<span class="text-primary-600"> | Target: { parsed.TargetType }</span>
+							}
+						</div>
+					}
+					if len(parsed.Expanded) > 0 {
+						<div class="flex items-start">
+							<span class="font-medium mr-2">Expanded:</span>
+							<div class="flex flex-wrap gap-1">
+								for _, exp := range parsed.Expanded {
+									<span class="text-xs text-primary-700">{ exp }</span>
+								}
+							</div>
+						</div>
+					}
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// SearchResultCard renders a single search result
+templ SearchResultCard(result SearchResult, index int, showRerank bool) {
+	<div class="search-result bg-white rounded-lg shadow border border-gray-200 overflow-hidden hover:shadow-md transition-shadow" style={ fmt.Sprintf("animation-delay: %dms", index*50) }>
+		<!-- Header -->
+		<div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
+			<div class="flex items-center justify-between">
+				<div class="flex items-center gap-3 flex-1 min-w-0">
+					<span class="text-sm font-medium text-gray-900 truncate" title={ result.Path }>{ result.Path }</span>
+					<span class="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800 flex-shrink-0">
+						{ result.Language }
+					</span>
+					<span class="text-sm text-gray-500 flex-shrink-0">
+						Lines { fmt.Sprint(result.StartLine) }-{ fmt.Sprint(result.EndLine) }
+					</span>
+					if len(result.Symbols) > 0 {
+						<div class="flex items-center gap-1 flex-shrink-0">
+							<svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
+							</svg>
+							<span class="text-xs text-gray-500">{ result.Symbols[0] }</span>
+							if len(result.Symbols) > 1 {
+								<span class="text-xs text-gray-400">+{ fmt.Sprint(len(result.Symbols)-1) }</span>
+							}
+						</div>
+					}
+				</div>
+				<div class="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0 ml-4">
+					<span title="Combined score" class="font-mono">
+						{ fmt.Sprintf("%.3f", result.Score) }
+					</span>
+					if showRerank && result.RerankScore > 0 {
+						<span title="Rerank score" class="text-green-600 font-mono">
+							R: { fmt.Sprintf("%.3f", result.RerankScore) }
+						</span>
+					}
+				</div>
+			</div>
+		</div>
+		
+		<!-- Code content -->
+		if result.Content != "" {
+			<div class="px-4 py-3 overflow-x-auto bg-gray-900">
+				<pre class="text-sm text-gray-100"><code class="code-line language-{ result.Language }">{ result.Content }</code></pre>
+			</div>
+		}
+	</div>
+}

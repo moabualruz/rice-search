@@ -1,0 +1,816 @@
+package components
+
+import "fmt"
+
+// SettingsPageData holds data for the admin settings page
+type SettingsPageData struct {
+	Layout           LayoutData
+	Config           RuntimeConfig
+	Sources          SettingSources            // Source tracking for each setting
+	ValidationErrors map[string]string         // Field name -> error message
+	Error            string
+	Success          string
+}
+
+// SettingSources tracks where each setting value comes from
+type SettingSources struct {
+	ServerHost        string
+	ServerPort        string
+	LogLevel          string
+	LogFormat         string
+	EmbedModel        string
+	RerankModel       string
+	QueryModel        string
+	EmbedGPU          string
+	RerankGPU         string
+	QueryGPU          string
+	QueryEnabled      string
+	BatchSize         string
+	MaxConcurrent     string
+	QdrantURL         string
+	QdrantCollection  string
+	QdrantTimeout     string
+	DefaultTopK       string
+	DefaultRerank     string
+	DefaultDedup      string
+	DefaultDiversity  string
+	DedupThreshold    string
+	DiversityLambda   string
+	RerankCandidates  string
+	MaxChunksPerFile  string
+	SparseWeight      string
+	DenseWeight       string
+	ChunkSize         string
+	ChunkOverlap      string
+	MaxFileSize       string
+	ExcludePatterns   string
+	SupportedLangs    string
+	ConnectionEnabled string
+	MaxInactiveHours  string
+}
+
+// RuntimeConfig represents all configurable runtime settings
+type RuntimeConfig struct {
+	// Server settings
+	ServerHost string
+	ServerPort int
+	LogLevel   string
+	LogFormat  string
+
+	// ML Settings
+	EmbedModel    string
+	RerankModel   string
+	QueryModel    string
+	EmbedGPU      bool
+	RerankGPU     bool
+	QueryGPU      bool
+	QueryEnabled  bool
+	BatchSize     int
+	MaxConcurrent int
+
+	// Qdrant Settings
+	QdrantURL        string
+	QdrantCollection string
+	QdrantTimeout    int
+
+	// Search Settings
+	DefaultTopK         int
+	DefaultRerank       bool
+	DefaultDedup        bool
+	DefaultDiversity    bool
+	DedupThreshold      float32
+	DiversityLambda     float32
+	RerankCandidates    int
+	MaxChunksPerFile    int
+	SparseWeight        float32
+	DenseWeight         float32
+
+	// Index Settings
+	ChunkSize        int
+	ChunkOverlap     int
+	MaxFileSize      int64
+	ExcludePatterns  string
+	SupportedLangs   string
+
+	// Connection Settings
+	ConnectionEnabled  bool
+	MaxInactiveHours   int
+}
+
+// AdminSettingsPage renders the settings management page
+templ AdminSettingsPage(data SettingsPageData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Header -->
+			<div class="mb-8">
+				<h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Settings</h1>
+				<p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+					Configure runtime settings for Rice Search.
+				</p>
+			</div>
+
+			<!-- Messages -->
+			<div id="settings-messages" class="mb-6">
+				if data.Error != "" {
+					@ErrorMessage(data.Error)
+				}
+				if data.Success != "" {
+					@SuccessMessage(data.Success)
+				}
+			</div>
+
+			<!-- Export/Import/Reset Controls -->
+			<div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden mb-6">
+				<div class="px-4 py-5 sm:p-6">
+					<h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">Configuration Management</h3>
+					<div class="flex flex-wrap gap-4">
+						<!-- Export Button with Format Selector -->
+						<div class="flex gap-2">
+							<select id="export-format" class="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border">
+								<option value="yaml">YAML</option>
+								<option value="json">JSON</option>
+							</select>
+							<a
+								id="export-link"
+								href="/admin/settings/export?format=yaml"
+								download
+								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+								onclick="this.href='/admin/settings/export?format=' + document.getElementById('export-format').value"
+							>
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+								</svg>
+								Export Settings
+							</a>
+						</div>
+
+						<!-- Import Button -->
+						<div>
+							<input type="file" id="settings-file-input" accept=".yaml,.yml,.json" class="hidden" onchange="handleSettingsImport(this)"/>
+							<button
+								type="button"
+								onclick="document.getElementById('settings-file-input').click()"
+								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+							>
+								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+								</svg>
+								Import Settings
+							</button>
+						</div>
+
+						<!-- Reset Button -->
+						<button
+							type="button"
+							onclick="if(confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) { htmx.ajax('POST', '/admin/settings/reset', {target: '#settings-messages', swap: 'innerHTML'}).then(() => window.location.reload()) }"
+							class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+						>
+							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+							</svg>
+							Reset to Defaults
+						</button>
+					</div>
+				</div>
+			</div>
+
+			<!-- Search/Filter Input -->
+			<div class="mb-6">
+				<div class="relative">
+					<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+						<svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+						</svg>
+					</div>
+					<input
+						type="text"
+						id="settings-search"
+						placeholder="Search settings..."
+						class="block w-full rounded-md border-gray-300 pl-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+						oninput="filterSettings(this.value)"
+					/>
+					<div id="search-stats" class="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-gray-500"></div>
+				</div>
+			</div>
+
+			<form
+				hx-post="/admin/settings"
+				hx-target="#settings-messages"
+				hx-swap="innerHTML"
+				class="space-y-8"
+			>
+				<!-- Server Settings -->
+				@SettingsSection("Server", "server") {
+					<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+						@TextInput("Server Host", "server_host", data.Config.ServerHost, "0.0.0.0")
+						@NumberInput("Server Port", "server_port", data.Config.ServerPort, 8080)
+						@SelectInput("Log Level", "log_level", data.Config.LogLevel, []SelectOption{
+							{Value: "debug", Label: "Debug"},
+							{Value: "info", Label: "Info"},
+							{Value: "warn", Label: "Warning"},
+							{Value: "error", Label: "Error"},
+						})
+						@SelectInput("Log Format", "log_format", data.Config.LogFormat, []SelectOption{
+							{Value: "text", Label: "Text"},
+							{Value: "json", Label: "JSON"},
+						})
+					</div>
+				}
+
+				<!-- ML Settings -->
+				@SettingsSection("Machine Learning", "ml") {
+					<div class="space-y-6">
+						<!-- Model Selection -->
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+							@TextInput("Embed Model", "embed_model", data.Config.EmbedModel, "jinaai/jina-embeddings-v2-base-code")
+							@TextInput("Rerank Model", "rerank_model", data.Config.RerankModel, "jinaai/jina-reranker-v2-base-multilingual")
+							@TextInput("Query Model", "query_model", data.Config.QueryModel, "Salesforce/codet5p-110m-embedding")
+						</div>
+
+						<!-- GPU Toggles -->
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-4">
+							@ToggleInput("Embed GPU", "embed_gpu", data.Config.EmbedGPU)
+							@ToggleInput("Rerank GPU", "rerank_gpu", data.Config.RerankGPU)
+							@ToggleInput("Query GPU", "query_gpu", data.Config.QueryGPU)
+							@ToggleInput("Query Enabled", "query_enabled", data.Config.QueryEnabled)
+						</div>
+
+						<!-- Batch Settings -->
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+							@NumberInput("Batch Size", "batch_size", data.Config.BatchSize, 32)
+							@NumberInput("Max Concurrent", "max_concurrent", data.Config.MaxConcurrent, 4)
+						</div>
+					</div>
+				}
+
+				<!-- Qdrant Settings -->
+				@SettingsSection("Qdrant", "qdrant") {
+					<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+						@TextInput("Qdrant URL", "qdrant_url", data.Config.QdrantURL, "http://localhost:6333")
+						@TextInput("Collection", "qdrant_collection", data.Config.QdrantCollection, "rice_search")
+						@NumberInput("Timeout (ms)", "qdrant_timeout", data.Config.QdrantTimeout, 30000)
+					</div>
+				}
+
+				<!-- Search Settings -->
+				@SettingsSection("Search Defaults", "search") {
+					<div class="space-y-6">
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+							@NumberInput("Default Top K", "default_top_k", data.Config.DefaultTopK, 20)
+							@NumberInput("Rerank Candidates", "rerank_candidates", data.Config.RerankCandidates, 50)
+							@NumberInput("Max Chunks/File", "max_chunks_per_file", data.Config.MaxChunksPerFile, 5)
+						</div>
+
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-4">
+							@ToggleInput("Default Rerank", "default_rerank", data.Config.DefaultRerank)
+							@ToggleInput("Default Dedup", "default_dedup", data.Config.DefaultDedup)
+							@ToggleInput("Default Diversity", "default_diversity", data.Config.DefaultDiversity)
+						</div>
+
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-4">
+							@RangeInput("Sparse Weight", "sparse_weight", data.Config.SparseWeight, 0, 1, 0.1)
+							@RangeInput("Dense Weight", "dense_weight", data.Config.DenseWeight, 0, 1, 0.1)
+							@RangeInput("Dedup Threshold", "dedup_threshold", data.Config.DedupThreshold, 0, 1, 0.05)
+							@RangeInput("Diversity Lambda", "diversity_lambda", data.Config.DiversityLambda, 0, 1, 0.1)
+						</div>
+					</div>
+				}
+
+				<!-- Index Settings -->
+				@SettingsSection("Indexing", "index") {
+					<div class="space-y-6">
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-3">
+							@NumberInput("Chunk Size", "chunk_size", data.Config.ChunkSize, 512)
+							@NumberInput("Chunk Overlap", "chunk_overlap", data.Config.ChunkOverlap, 128)
+							@NumberInput("Max File Size (MB)", "max_file_size", int(data.Config.MaxFileSize/1024/1024), 10)
+						</div>
+						<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+							@TextInput("Exclude Patterns", "exclude_patterns", data.Config.ExcludePatterns, "node_modules,vendor,.git")
+							@TextInput("Supported Languages", "supported_langs", data.Config.SupportedLangs, "go,python,javascript,typescript,rust")
+						</div>
+					</div>
+				}
+
+				<!-- Connection Settings -->
+				@SettingsSection("Connections", "connections") {
+					<div class="grid grid-cols-1 gap-6 sm:grid-cols-2">
+						@ToggleInput("Enable Tracking", "connection_enabled", data.Config.ConnectionEnabled)
+						@NumberInput("Max Inactive (hours)", "max_inactive_hours", data.Config.MaxInactiveHours, 168)
+					</div>
+				}
+
+				<!-- Submit -->
+				<div class="flex justify-end gap-4 pt-6 border-t border-gray-200">
+					<button
+						type="button"
+						hx-get="/admin/settings"
+						hx-target="closest form"
+						hx-swap="outerHTML"
+						class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50"
+					>
+						Reset
+					</button>
+					<button
+						type="submit"
+						class="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+					>
+						Save Settings
+					</button>
+				</div>
+			</form>
+		</div>
+		
+		<!-- Settings Import Script -->
+		<script>
+			function handleSettingsImport(input) {
+				if (!input.files || input.files.length === 0) {
+					return;
+				}
+				
+				const file = input.files[0];
+				const formData = new FormData();
+				formData.append('settings_file', file);
+				
+				// Use htmx programmatically
+				htmx.ajax('POST', '/admin/settings/import', {
+					values: formData,
+					target: '#settings-messages',
+					swap: 'innerHTML'
+				}).then(() => {
+					// Reload page after successful import
+					setTimeout(() => window.location.reload(), 1500);
+				});
+				
+				// Reset file input
+				input.value = '';
+			}
+		</script>
+		
+		<!-- Settings Filter Script -->
+		<script>
+			function filterSettings(query) {
+				const searchQuery = query.toLowerCase().trim();
+				const sections = document.querySelectorAll('.settings-section');
+				let visibleSections = 0;
+				let visibleSettings = 0;
+				let totalSettings = 0;
+				
+				sections.forEach(section => {
+					const sectionTitle = section.dataset.sectionTitle.toLowerCase();
+					const sectionId = section.dataset.sectionId.toLowerCase();
+					const settingItems = section.querySelectorAll('.setting-item');
+					let hasVisibleItems = false;
+					
+					settingItems.forEach(item => {
+						totalSettings++;
+						const label = item.dataset.label.toLowerCase();
+						const name = item.dataset.name.toLowerCase();
+						
+						// Check if query matches section title, section id, label, or name
+						const matches = !searchQuery || 
+							sectionTitle.includes(searchQuery) || 
+							sectionId.includes(searchQuery) ||
+							label.includes(searchQuery) || 
+							name.includes(searchQuery);
+						
+						if (matches) {
+							item.style.display = '';
+							// Highlight matching text
+							highlightMatch(item, searchQuery);
+							hasVisibleItems = true;
+							visibleSettings++;
+						} else {
+							item.style.display = 'none';
+							// Remove highlighting
+							removeHighlight(item);
+						}
+					});
+					
+					// Show section if it has visible items or its title matches
+					const sectionMatches = !searchQuery || 
+						sectionTitle.includes(searchQuery) || 
+						sectionId.includes(searchQuery);
+					
+					if (hasVisibleItems || (sectionMatches && !searchQuery)) {
+						section.style.display = '';
+						visibleSections++;
+					} else {
+						section.style.display = 'none';
+					}
+				});
+				
+				// Update search stats
+				const statsEl = document.getElementById('search-stats');
+				if (searchQuery) {
+					statsEl.textContent = `${visibleSettings} of ${totalSettings} settings`;
+				} else {
+					statsEl.textContent = '';
+				}
+			}
+			
+			function highlightMatch(element, query) {
+				if (!query) return;
+				
+				const label = element.querySelector('label, span.text-sm.font-medium');
+				if (!label) return;
+				
+				const originalText = label.dataset.originalText || label.textContent;
+				if (!label.dataset.originalText) {
+					label.dataset.originalText = originalText;
+				}
+				
+				const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
+				const highlightedText = originalText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+				label.innerHTML = highlightedText;
+			}
+			
+			function removeHighlight(element) {
+				const label = element.querySelector('label, span.text-sm.font-medium');
+				if (!label || !label.dataset.originalText) return;
+				
+				label.textContent = label.dataset.originalText;
+			}
+			
+			function escapeRegex(str) {
+				return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+			}
+			
+			// Add keyboard shortcut (Ctrl+K or Cmd+K to focus search)
+			document.addEventListener('keydown', function(e) {
+				if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+					e.preventDefault();
+					const searchInput = document.getElementById('settings-search');
+					if (searchInput) {
+						searchInput.focus();
+						searchInput.select();
+					}
+				}
+			});
+		</script>
+	}
+}
+
+// SelectOption represents an option for select inputs
+type SelectOption struct {
+	Value string
+	Label string
+}
+
+// SettingsSection renders a collapsible settings section
+templ SettingsSection(title, id string) {
+	<div class="settings-section bg-white dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden" data-section-title={ title } data-section-id={ id }>
+		<div class="px-4 py-5 sm:p-6">
+			<h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">{ title }</h3>
+			{ children... }
+		</div>
+	</div>
+}
+
+// TextInput renders a text input field with source badge
+templ TextInput(label, name, value, placeholder string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+		</div>
+		<input
+			type="text"
+			name={ name }
+			id={ name }
+			value={ value }
+			placeholder={ placeholder }
+			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+		/>
+	</div>
+}
+
+// TextInputWithSource renders a text input field with source badge
+templ TextInputWithSource(label, name, value, placeholder, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+			@SourceBadge(source)
+		</div>
+		<input
+			type="text"
+			name={ name }
+			id={ name }
+			value={ value }
+			placeholder={ placeholder }
+			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+		/>
+	</div>
+}
+
+// NumberInput renders a number input field
+templ NumberInput(label, name string, value, defaultVal int) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+		<input
+			type="number"
+			name={ name }
+			id={ name }
+			value={ intToStr(value, defaultVal) }
+			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+		/>
+	</div>
+}
+
+// NumberInputWithSource renders a number input field with source badge
+templ NumberInputWithSource(label, name string, value, defaultVal int, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+			@SourceBadge(source)
+		</div>
+		<input
+			type="number"
+			name={ name }
+			id={ name }
+			value={ intToStr(value, defaultVal) }
+			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+		/>
+	</div>
+}
+
+// ToggleInput renders a toggle switch
+templ ToggleInput(label, name string, checked bool) {
+	<div class="setting-item flex items-center justify-between" data-label={ label } data-name={ name }>
+		<span class="text-sm font-medium text-gray-700">{ label }</span>
+		<button
+			type="button"
+			role="switch"
+			aria-checked={ boolToStr(checked) }
+			onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); this.nextElementSibling.value = this.getAttribute('aria-checked');"
+			class={ "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2", toggleBgClass(checked) }
+		>
+			<span
+				class={ "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out", toggleKnobClass(checked) }
+			></span>
+		</button>
+		<input type="hidden" name={ name } value={ boolToStr(checked) }/>
+	</div>
+}
+
+// ToggleInputWithSource renders a toggle switch with source badge
+templ ToggleInputWithSource(label, name string, checked bool, source string) {
+	<div class="setting-item flex items-center justify-between" data-label={ label } data-name={ name }>
+		<div class="flex items-center gap-2">
+			<span class="text-sm font-medium text-gray-700">{ label }</span>
+			@SourceBadge(source)
+		</div>
+		<button
+			type="button"
+			role="switch"
+			aria-checked={ boolToStr(checked) }
+			onclick="this.setAttribute('aria-checked', this.getAttribute('aria-checked') === 'true' ? 'false' : 'true'); this.nextElementSibling.value = this.getAttribute('aria-checked');"
+			class={ "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2", toggleBgClass(checked) }
+		>
+			<span
+				class={ "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out", toggleKnobClass(checked) }
+			></span>
+		</button>
+		<input type="hidden" name={ name } value={ boolToStr(checked) }/>
+	</div>
+}
+
+// SelectInput renders a select dropdown
+templ SelectInput(label, name, value string, options []SelectOption) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+		<select
+			name={ name }
+			id={ name }
+			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+		>
+			for _, opt := range options {
+				<option value={ opt.Value } selected?={ value == opt.Value }>{ opt.Label }</option>
+			}
+		</select>
+	</div>
+}
+
+// SelectInputWithSource renders a select dropdown with source badge
+templ SelectInputWithSource(label, name, value string, options []SelectOption, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+			@SourceBadge(source)
+		</div>
+		<select
+			name={ name }
+			id={ name }
+			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+		>
+			for _, opt := range options {
+				<option value={ opt.Value } selected?={ value == opt.Value }>{ opt.Label }</option>
+			}
+		</select>
+	</div>
+}
+
+// RangeInput renders a range slider with value display
+templ RangeInput(label, name string, value float32, min, max, step float64) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+		</div>
+		<input
+			type="range"
+			name={ name }
+			id={ name }
+			value={ floatToStr(value) }
+			min={ floatToStr(float32(min)) }
+			max={ floatToStr(float32(max)) }
+			step={ floatToStr(float32(step)) }
+			oninput="document.getElementById(this.dataset.target).textContent = this.value"
+			data-target={ name + "_value" }
+			class="mt-1 block w-full"
+		/>
+	</div>
+}
+
+// RangeInputWithSource renders a range slider with value display and source badge
+templ RangeInputWithSource(label, name string, value float32, min, max, step float64, source string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex justify-between items-center">
+			<div class="flex items-center gap-2">
+				<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+				@SourceBadge(source)
+			</div>
+			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+		</div>
+		<input
+			type="range"
+			name={ name }
+			id={ name }
+			value={ floatToStr(value) }
+			min={ floatToStr(float32(min)) }
+			max={ floatToStr(float32(max)) }
+			step={ floatToStr(float32(step)) }
+			oninput="document.getElementById(this.dataset.target).textContent = this.value"
+			data-target={ name + "_value" }
+			class="mt-1 block w-full"
+		/>
+	</div>
+}
+
+// Helper functions
+
+func intToStr(val, defaultVal int) string {
+	if val == 0 {
+		return fmt.Sprint(defaultVal)
+	}
+	return fmt.Sprint(val)
+}
+
+func boolToStr(b bool) string {
+	if b {
+		return "true"
+	}
+	return "false"
+}
+
+func floatToStr(f float32) string {
+	return fmt.Sprintf("%.2f", f)
+}
+
+func toggleBgClass(checked bool) string {
+	if checked {
+		return "bg-primary-600"
+	}
+	return "bg-gray-200"
+}
+
+func toggleKnobClass(checked bool) string {
+	if checked {
+		return "translate-x-5"
+	}
+	return "translate-x-0"
+}
+
+// SourceBadge renders a small badge showing where a setting value comes from
+templ SourceBadge(source string) {
+	if source == "admin" {
+		<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800" title="Overridden by admin settings">
+			Admin
+		</span>
+	} else if source == "env" {
+		<span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800" title="From environment variable">
+			ENV
+		</span>
+	} else if source == "config" {
+		<span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800" title="From config file">
+			Config
+		</span>
+	} else if source == "default" {
+		<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600" title="Using default value">
+			Default
+		</span>
+	}
+}
+
+// inputBorderClass returns the appropriate border class based on error state
+func inputBorderClass(err string) string {
+	if err != "" {
+		return "border-red-300 focus:border-red-500 focus:ring-red-500"
+	}
+	return "border-gray-300 focus:border-primary-500 focus:ring-primary-500"
+}
+
+// TextInputWithError renders a text input field with optional error display
+templ TextInputWithError(label, name, value, placeholder, err string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex items-center justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+		</div>
+		<input
+			type="text"
+			name={ name }
+			id={ name }
+			value={ value }
+			placeholder={ placeholder }
+			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border", inputBorderClass(err) }
+		/>
+		if err != "" {
+			<p class="mt-1 text-sm text-red-600">{ err }</p>
+		}
+	</div>
+}
+
+// NumberInputWithError renders a number input field with optional error display
+templ NumberInputWithError(label, name string, value, defaultVal int, err string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+		<input
+			type="number"
+			name={ name }
+			id={ name }
+			value={ intToStr(value, defaultVal) }
+			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border", inputBorderClass(err) }
+		/>
+		if err != "" {
+			<p class="mt-1 text-sm text-red-600">{ err }</p>
+		}
+	</div>
+}
+
+// RangeInputWithError renders a range slider with optional error display
+templ RangeInputWithError(label, name string, value float32, min, max, step float64, err string) {
+	<div class="setting-item" data-label={ label } data-name={ name }>
+		<div class="flex justify-between">
+			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
+			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+		</div>
+		<input
+			type="range"
+			name={ name }
+			id={ name }
+			value={ floatToStr(value) }
+			min={ floatToStr(float32(min)) }
+			max={ floatToStr(float32(max)) }
+			step={ floatToStr(float32(step)) }
+			oninput="document.getElementById(this.dataset.target).textContent = this.value"
+			data-target={ name + "_value" }
+			class="mt-1 block w-full"
+		/>
+		if err != "" {
+			<p class="mt-1 text-sm text-red-600">{ err }</p>
+		}
+	</div>
+}
+
+// validationErrorCount formats the error count message
+func validationErrorCount(count int) string {
+	if count == 1 {
+		return "There is 1 validation error"
+	}
+	return fmt.Sprintf("There are %d validation errors", count)
+}
+
+// ValidationSummary renders a summary of validation errors at the top of the form
+templ ValidationSummary(errors map[string]string) {
+	if len(errors) > 0 {
+		<div class="rounded-md bg-red-50 p-4 mb-6">
+			<div class="flex">
+				<div class="flex-shrink-0">
+					<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd"/>
+					</svg>
+				</div>
+				<div class="ml-3">
+					<h3 class="text-sm font-medium text-red-800">
+						{ validationErrorCount(len(errors)) }
+					</h3>
+					<div class="mt-2 text-sm text-red-700">
+						<ul class="list-disc space-y-1 pl-5">
+							for field, msg := range errors {
+								<li>{ field }: { msg }</li>
+							}
+						</ul>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}

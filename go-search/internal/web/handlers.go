@@ -19,6 +19,7 @@ import (
 	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/config"
 	"github.com/ricesearch/rice-search/internal/connection"
+	"github.com/ricesearch/rice-search/internal/web/components"
 	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/models"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
@@ -186,20 +187,20 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 // Layout Data Helper
 // =============================================================================
 
-func (h *Handler) getLayoutData(ctx context.Context, title, currentPath string) LayoutData {
+func (h *Handler) getLayoutData(ctx context.Context, title, currentPath string) components.LayoutData {
 	healthStatus := "healthy"
 	version := "unknown"
 
 	// Get health status
 	healthResp, err := h.grpc.Health(ctx, &pb.HealthRequest{})
 	if err != nil {
-		healthStatus = "unhealthy"
+		components.HealthStatus = "unhealthy"
 	} else if healthResp != nil {
 		switch healthResp.Status {
 		case pb.HealthStatus_HEALTH_STATUS_DEGRADED:
-			healthStatus = "degraded"
+			components.HealthStatus = "degraded"
 		case pb.HealthStatus_HEALTH_STATUS_UNHEALTHY:
-			healthStatus = "unhealthy"
+			components.HealthStatus = "unhealthy"
 		}
 	}
 
@@ -209,10 +210,10 @@ func (h *Handler) getLayoutData(ctx context.Context, title, currentPath string) 
 		version = verResp.Version
 	}
 
-	return LayoutData{
+	return components.LayoutData{
 		Title:        title,
 		CurrentPath:  currentPath,
-		HealthStatus: healthStatus,
+		components.HealthStatus: components.HealthStatus,
 		Version:      version,
 		QdrantURL:    h.qdrantURL,
 	}
@@ -225,7 +226,7 @@ func (h *Handler) getLayoutData(ctx context.Context, title, currentPath string) 
 func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	data := DashboardData{
+	data := components.DashboardData{
 		Layout: h.getLayoutData(ctx, "Dashboard", "/"),
 	}
 
@@ -234,7 +235,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	if err == nil && healthResp != nil {
 		data.Health.Overall = "healthy"
 		for name, comp := range healthResp.Components {
-			status := HealthStatus{
+			status := components.HealthStatus{
 				Status:  "healthy",
 				Message: comp.Message,
 			}
@@ -266,17 +267,17 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		data.Health.Overall = "unhealthy"
-		data.Health.System = HealthStatus{Status: "unhealthy", Message: "Cannot connect to server"}
+		data.Health.System = components.HealthStatus{Status: "unhealthy", Message: "Cannot connect to server"}
 	}
 
 	// Quick stats from stores
 	storesResp, err := h.grpc.ListStores(ctx, &pb.ListStoresRequest{})
 	if err == nil && storesResp != nil {
-		data.QuickStats.TotalStores = len(storesResp.Stores)
+		data.quickStats.TotalStores = len(storesResp.Stores)
 		for _, s := range storesResp.Stores {
 			if s.Stats != nil {
-				data.QuickStats.TotalFiles += s.Stats.DocumentCount
-				data.QuickStats.TotalChunks += s.Stats.ChunkCount
+				data.quickStats.TotalFiles += s.Stats.DocumentCount
+				data.quickStats.TotalChunks += s.Stats.ChunkCount
 			}
 		}
 	}
@@ -290,7 +291,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 				activeCount++
 			}
 		}
-		data.QuickStats.ActiveConnections = activeCount
+		data.quickStats.ActiveConnections = activeCount
 	}
 
 	// System info
@@ -311,7 +312,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	})
 	if err == nil && filesResp != nil {
 		for _, f := range filesResp.Files {
-			data.RecentFiles = append(data.RecentFiles, RecentFile{
+			data.RecentFiles = append(data.RecentFiles, components.RecentFile{
 				Path:      f.Path,
 				Language:  f.Language,
 				Chunks:    int(f.ChunkCount),
@@ -326,7 +327,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		history := h.metrics.TimeSeries.SearchRate.GetHistoryWithCurrent()
 		for i := len(history) - 1; i >= 0 && len(data.RecentSearches) < 5; i-- {
 			if history[i].Value > 0 {
-				data.RecentSearches = append(data.RecentSearches, RecentSearch{
+				data.RecentSearches = append(data.RecentSearches, components.RecentSearch{
 					Query:     fmt.Sprintf("%.0f searches", history[i].Value),
 					Store:     "all",
 					Results:   int(history[i].Value),
@@ -337,7 +338,7 @@ func (h *Handler) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := DashboardPage(data).Render(ctx, w); err != nil {
+	if err := components.DashboardPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render dashboard", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -363,11 +364,11 @@ func (h *Handler) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get connections for filter
-	var connections []ConnectionOption
+	var connections []components.ConnectionOption
 	if h.connSvc != nil {
 		conns, _ := h.connSvc.ListAllConnections(ctx)
 		for _, c := range conns {
-			connections = append(connections, ConnectionOption{
+			connections = append(connections, components.ConnectionOption{
 				ID:   c.ID,
 				Name: c.Name,
 			})
@@ -379,7 +380,7 @@ func (h *Handler) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 		Store:       r.URL.Query().Get("store"),
 		Stores:      stores,
 		Connections: connections,
-		Options: SearchOptions{
+		Options: components.SearchOptions{
 			TopK:            20,
 			EnableReranking: true,
 			RerankTopK:      50,
@@ -403,7 +404,7 @@ func (h *Handler) handleSearchPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SearchPage(data).Render(ctx, w); err != nil {
+	if err := components.SearchPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render search page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -471,9 +472,9 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert results
-	results := make([]SearchResult, len(resp.Results))
+	results := make([]components.SearchResult, len(resp.Results))
 	for i, res := range resp.Results {
-		sr := SearchResult{
+		sr := components.SearchResult{
 			ID:        res.Id,
 			Path:      res.Path,
 			Language:  res.Language,
@@ -505,7 +506,7 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) renderSearchResults(w http.ResponseWriter, r *http.Request, data SearchPageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SearchResults(data).Render(r.Context(), w); err != nil {
+	if err := components.SearchResults(data).Render(r.Context(), w); err != nil {
 		h.log.Error("Failed to render search results", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -528,8 +529,8 @@ func (h *Handler) handleStoresPage(w http.ResponseWriter, r *http.Request) {
 		data.Error = err.Error()
 	} else {
 		for _, s := range storesResp.Stores {
-			store := StoreWithConnections{
-				Store: StoreInfo{
+			store := components.StoreWithConnections{
+				Store: components.StoreInfo{
 					Name:        s.Name,
 					DisplayName: s.DisplayName,
 					Description: s.Description,
@@ -548,7 +549,7 @@ func (h *Handler) handleStoresPage(w http.ResponseWriter, r *http.Request) {
 			if h.connSvc != nil {
 				conns, _ := h.connSvc.GetConnectionsForStore(ctx, s.Name)
 				for _, c := range conns {
-					store.Connections = append(store.Connections, ConnectionSummary{
+					store.Connections = append(store.Connections, components.ConnectionSummary{
 						ID:       c.ID,
 						Name:     c.Name,
 						LastSeen: c.LastSeenAt,
@@ -562,7 +563,7 @@ func (h *Handler) handleStoresPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := StoresPage(data).Render(ctx, w); err != nil {
+	if err := components.StoresPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render stores page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -581,7 +582,7 @@ func (h *Handler) handleStoreDetail(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data.Error = fmt.Sprintf("Failed to get store: %v", err)
 	} else if storeResp != nil {
-		data.Store = StoreInfo{
+		data.Store = components.StoreInfo{
 			Name:        storeResp.Name,
 			DisplayName: storeResp.DisplayName,
 			Description: storeResp.Description,
@@ -607,7 +608,7 @@ func (h *Handler) handleStoreDetail(w http.ResponseWriter, r *http.Request) {
 		conns, err := h.connSvc.GetConnectionsForStore(ctx, name)
 		if err == nil {
 			for _, c := range conns {
-				conn := ConnectionDetail{
+				conn := components.ConnectionDetail{
 					ID:           c.ID,
 					Name:         c.Name,
 					FilesIndexed: c.IndexedFiles,
@@ -615,7 +616,7 @@ func (h *Handler) handleStoreDetail(w http.ResponseWriter, r *http.Request) {
 					LastSeen:     c.LastSeenAt,
 					LastIP:       c.LastIP,
 					CreatedAt:    c.CreatedAt,
-					PCInfo: PCInfoDisplay{
+					PCInfo: components.PCInfoDisplay{
 						Hostname: c.PCInfo.Hostname,
 						OS:       c.PCInfo.OS,
 						Arch:     c.PCInfo.Arch,
@@ -637,7 +638,7 @@ func (h *Handler) handleStoreDetail(w http.ResponseWriter, r *http.Request) {
 	})
 	if err == nil && filesResp != nil {
 		for _, f := range filesResp.Files {
-			file := IndexedFileInfo{
+			file := components.IndexedFileInfo{
 				Path:       f.Path,
 				Language:   f.Language,
 				Size:       f.Size,
@@ -653,7 +654,7 @@ func (h *Handler) handleStoreDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := StoreDetailPage(data).Render(ctx, w); err != nil {
+	if err := components.StoreDetailPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render store detail page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -681,7 +682,7 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 		Store:    store,
 		Page:     page,
 		PageSize: pageSize,
-		Filters: FileFilters{
+		Filters: components.FileFilters{
 			Store:        store,
 			PathPrefix:   r.URL.Query().Get("path"),
 			Language:     r.URL.Query().Get("language"),
@@ -702,7 +703,7 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 				} else if name == "" {
 					name = c.ID
 				}
-				data.Connections = append(data.Connections, ConnectionOption{
+				data.Connections = append(data.Connections, components.ConnectionOption{
 					ID:   c.ID,
 					Name: name,
 				})
@@ -726,7 +727,7 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Convert protobuf files to display format
 		for _, f := range resp.Files {
-			data.Files = append(data.Files, IndexedFileInfo{
+			data.Files = append(data.Files, components.IndexedFileInfo{
 				Path:      f.Path,
 				Language:  f.Language,
 				Size:      f.Size,
@@ -740,7 +741,7 @@ func (h *Handler) handleFilesPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := FilesPage(data).Render(ctx, w); err != nil {
+	if err := components.FilesPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render files page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -773,7 +774,7 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 		f := filesResp.Files[0]
 		// Only use if exact match
 		if f.Path == filePath {
-			data.File = IndexedFileInfo{
+			data.File = components.IndexedFileInfo{
 				Path:         f.Path,
 				Language:     f.Language,
 				Size:         f.Size,
@@ -790,7 +791,7 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 			if h.connSvc != nil && f.ConnectionId != "" {
 				conn, err := h.connSvc.GetConnection(ctx, f.ConnectionId)
 				if err == nil && conn != nil {
-					data.Connection = ConnectionDetail{
+					data.Connection = components.ConnectionDetail{
 						ID:           conn.ID,
 						Name:         conn.Name,
 						FilesIndexed: conn.IndexedFiles,
@@ -798,7 +799,7 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 						LastSeen:     conn.LastSeenAt,
 						LastIP:       conn.LastIP,
 						CreatedAt:    conn.CreatedAt,
-						PCInfo: PCInfoDisplay{
+						PCInfo: components.PCInfoDisplay{
 							Hostname: conn.PCInfo.Hostname,
 							OS:       conn.PCInfo.OS,
 							Arch:     conn.PCInfo.Arch,
@@ -817,9 +818,9 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				h.log.Warn("Failed to get chunks for file", "path", filePath, "error", err)
 			} else if chunksResp != nil && len(chunksResp.Chunks) > 0 {
-				data.Chunks = make([]ChunkInfo, 0, len(chunksResp.Chunks))
+				data.Chunks = make([]components.ChunkInfo, 0, len(chunksResp.Chunks))
 				for _, chunk := range chunksResp.Chunks {
-					data.Chunks = append(data.Chunks, ChunkInfo{
+					data.Chunks = append(data.Chunks, components.ChunkInfo{
 						ID:        chunk.Id,
 						StartLine: int(chunk.StartLine),
 						EndLine:   int(chunk.EndLine),
@@ -837,7 +838,7 @@ func (h *Handler) handleFileDetail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := FileDetailPage(data).Render(ctx, w); err != nil {
+	if err := components.FileDetailPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render file detail page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -853,7 +854,7 @@ func (h *Handler) handleReindexFile(w http.ResponseWriter, r *http.Request) {
 	// Users should re-index through the CLI or API with the actual file content.
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusBadRequest)
-	if err := ErrorMessage("Cannot re-index from Web UI. Re-indexing requires the original file content. Please use the CLI (rice-search index <path>) or API to re-index this file.").Render(ctx, w); err != nil {
+	if err := components.ErrorMessage("Cannot re-index from Web UI. Re-indexing requires the original file content. Please use the CLI (rice-search index <path>) or API to re-index this file.").Render(ctx, w); err != nil {
 		h.log.Error("Failed to render error message", "error", err)
 	}
 }
@@ -880,7 +881,7 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	if err != nil {
 		h.log.Error("Failed to delete file", "error", err, "path", filePath, "store", store)
-		if err := ErrorMessage(fmt.Sprintf("Failed to delete %s: %v", filePath, err)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to delete %s: %v", filePath, err)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error message", "error", err)
 		}
 		return
@@ -888,11 +889,11 @@ func (h *Handler) handleDeleteFile(w http.ResponseWriter, r *http.Request) {
 
 	// Success - show confirmation message
 	if resp.Deleted > 0 {
-		if err := SuccessMessage(fmt.Sprintf("Successfully deleted %s (%d chunk(s) removed)", filePath, resp.Deleted)).Render(ctx, w); err != nil {
+		if err := components.SuccessMessage(fmt.Sprintf("Successfully deleted %s (%d chunk(s) removed)", filePath, resp.Deleted)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render success message", "error", err)
 		}
 	} else {
-		if err := ErrorMessage(fmt.Sprintf("File not found: %s", filePath)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("File not found: %s", filePath)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error message", "error", err)
 		}
 	}
@@ -988,7 +989,7 @@ func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleModelsPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	data := ModelsPageData{
+	data := components.ModelsPageData{
 		Layout: h.getLayoutData(ctx, "Model Management", "/admin/models"),
 	}
 
@@ -996,7 +997,7 @@ func (h *Handler) handleModelsPage(w http.ResponseWriter, r *http.Request) {
 		// Get all models
 		allModels := h.modelReg.ListAllModels()
 		for _, m := range allModels {
-			data.Models = append(data.Models, ModelInfoDisplay{
+			data.Models = append(data.Models, components.ModelInfoDisplay{
 				ID:          m.ID,
 				Type:        string(m.Type),
 				DisplayName: m.DisplayName,
@@ -1015,7 +1016,7 @@ func (h *Handler) handleModelsPage(w http.ResponseWriter, r *http.Request) {
 			cfg := h.modelReg.GetTypeConfig(t)
 			if cfg != nil {
 				displayName, description := getModelTypeInfo(t)
-				data.TypeConfigs = append(data.TypeConfigs, ModelTypeConfigDisplay{
+				data.TypeConfigs = append(data.TypeConfigs, components.ModelTypeConfigDisplay{
 					Type:         string(cfg.Type),
 					DisplayName:  displayName,
 					DefaultModel: cfg.DefaultModel,
@@ -1027,7 +1028,7 @@ func (h *Handler) handleModelsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := AdminModelsPage(data).Render(ctx, w); err != nil {
+	if err := components.AdminModelsPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render models page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -1060,7 +1061,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 
 	if modelID == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1068,7 +1069,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 
 	if h.modelReg == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1086,7 +1087,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 				if err != nil {
 					h.log.Error("Failed to start model download/export", "model", modelID, "error", err)
 					w.Header().Set("Content-Type", "text/html; charset=utf-8")
-					if err := ErrorMessage(fmt.Sprintf("Failed to download model: %s", err.Error())).Render(ctx, w); err != nil {
+					if err := components.ErrorMessage(fmt.Sprintf("Failed to download model: %s", err.Error())).Render(ctx, w); err != nil {
 						h.log.Error("Failed to render error", "error", err)
 					}
 					return
@@ -1106,7 +1107,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 				// Return appropriate message
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				msg := fmt.Sprintf("Download started for %s. Check export status for progress.", modelID)
-				if err := SuccessMessage(msg).Render(ctx, w); err != nil {
+				if err := components.SuccessMessage(msg).Render(ctx, w); err != nil {
 					h.log.Error("Failed to render success message", "error", err)
 				}
 				return
@@ -1119,7 +1120,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Error("Model not found", "model", modelID, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Model not found: %s", modelID)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Model not found: %s", modelID)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1130,7 +1131,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Error("Failed to start model download", "model", modelID, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to download model: %s", err.Error())).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to download model: %s", err.Error())).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1149,7 +1150,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 
 	// Return success message
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("Download started for model: %s", modelID)).Render(ctx, w); err != nil {
+	if err := components.SuccessMessage(fmt.Sprintf("Download started for model: %s", modelID)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -1160,7 +1161,7 @@ func (h *Handler) handleSetDefaultModel(w http.ResponseWriter, r *http.Request) 
 
 	if modelID == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1168,7 +1169,7 @@ func (h *Handler) handleSetDefaultModel(w http.ResponseWriter, r *http.Request) 
 
 	if h.modelReg == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1179,7 +1180,7 @@ func (h *Handler) handleSetDefaultModel(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		h.log.Error("Failed to get model", "model", modelID, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Model not found: %s", modelID)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Model not found: %s", modelID)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1190,7 +1191,7 @@ func (h *Handler) handleSetDefaultModel(w http.ResponseWriter, r *http.Request) 
 	if err != nil {
 		h.log.Error("Failed to set default model", "model", modelID, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to set default: %s", err.Error())).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to set default: %s", err.Error())).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1198,7 +1199,7 @@ func (h *Handler) handleSetDefaultModel(w http.ResponseWriter, r *http.Request) 
 
 	// Return success message
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("Set %s as default for %s", model.DisplayName, model.Type)).Render(ctx, w); err != nil {
+	if err := components.SuccessMessage(fmt.Sprintf("Set %s as default for %s", model.DisplayName, model.Type)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -1209,7 +1210,7 @@ func (h *Handler) handleToggleModelGPU(w http.ResponseWriter, r *http.Request) {
 
 	if modelID == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1217,7 +1218,7 @@ func (h *Handler) handleToggleModelGPU(w http.ResponseWriter, r *http.Request) {
 
 	if h.modelReg == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1226,7 +1227,7 @@ func (h *Handler) handleToggleModelGPU(w http.ResponseWriter, r *http.Request) {
 	// Parse form to get enabled status (HTMX sends this in hx-vals)
 	if err := r.ParseForm(); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1239,7 +1240,7 @@ func (h *Handler) handleToggleModelGPU(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Error("Failed to toggle GPU", "model", modelID, "enabled", enabled, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to toggle GPU: %s", err.Error())).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to toggle GPU: %s", err.Error())).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1251,7 +1252,7 @@ func (h *Handler) handleToggleModelGPU(w http.ResponseWriter, r *http.Request) {
 		status = "enabled"
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("GPU %s for model: %s", status, modelID)).Render(ctx, w); err != nil {
+	if err := components.SuccessMessage(fmt.Sprintf("GPU %s for model: %s", status, modelID)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -1262,7 +1263,7 @@ func (h *Handler) handleDeleteModel(w http.ResponseWriter, r *http.Request) {
 
 	if modelID == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1270,7 +1271,7 @@ func (h *Handler) handleDeleteModel(w http.ResponseWriter, r *http.Request) {
 
 	if h.modelReg == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1281,7 +1282,7 @@ func (h *Handler) handleDeleteModel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Error("Failed to delete model", "model", modelID, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to delete model: %s", err.Error())).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to delete model: %s", err.Error())).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1289,7 +1290,7 @@ func (h *Handler) handleDeleteModel(w http.ResponseWriter, r *http.Request) {
 
 	// Return success message
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("Deleted model: %s", modelID)).Render(ctx, w); err != nil {
+	if err := components.SuccessMessage(fmt.Sprintf("Deleted model: %s", modelID)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -1300,7 +1301,7 @@ func (h *Handler) handleToggleTypeGPU(w http.ResponseWriter, r *http.Request) {
 
 	if modelType == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model type is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model type is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1308,7 +1309,7 @@ func (h *Handler) handleToggleTypeGPU(w http.ResponseWriter, r *http.Request) {
 
 	if h.modelReg == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1317,7 +1318,7 @@ func (h *Handler) handleToggleTypeGPU(w http.ResponseWriter, r *http.Request) {
 	// Parse form to get enabled status
 	if err := r.ParseForm(); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1330,7 +1331,7 @@ func (h *Handler) handleToggleTypeGPU(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Error("Failed to toggle type GPU", "type", modelType, "enabled", enabled, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to toggle GPU: %s", err.Error())).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to toggle GPU: %s", err.Error())).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1341,7 +1342,7 @@ func (h *Handler) handleToggleTypeGPU(w http.ResponseWriter, r *http.Request) {
 		status = "enabled"
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("GPU %s for %s models", status, modelType)).Render(ctx, w); err != nil {
+	if err := components.SuccessMessage(fmt.Sprintf("GPU %s for %s models", status, modelType)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -1352,7 +1353,7 @@ func (h *Handler) handleToggleTypeEnabled(w http.ResponseWriter, r *http.Request
 
 	if modelType == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model type is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model type is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1360,7 +1361,7 @@ func (h *Handler) handleToggleTypeEnabled(w http.ResponseWriter, r *http.Request
 
 	if h.modelReg == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1371,14 +1372,14 @@ func (h *Handler) handleToggleTypeEnabled(w http.ResponseWriter, r *http.Request
 	if err != nil {
 		h.log.Error("Failed to toggle type enabled", "type", modelType, "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to toggle: %s", err.Error())).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to toggle: %s", err.Error())).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("Toggled %s model type", modelType)).Render(ctx, w); err != nil {
+	if err := components.SuccessMessage(fmt.Sprintf("Toggled %s model type", modelType)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -1390,7 +1391,7 @@ func (h *Handler) handleToggleTypeEnabled(w http.ResponseWriter, r *http.Request
 func (h *Handler) handleHFModelSearchPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	data := HFSearchPageData{
+	data := components.HFSearchPageData{
 		Layout:            h.getLayoutData(ctx, "Search HuggingFace Models", "/admin/models/search"),
 		ExporterAvailable: h.modelReg != nil && h.modelReg.IsExporterAvailable(),
 	}
@@ -1399,7 +1400,7 @@ func (h *Handler) handleHFModelSearchPage(w http.ResponseWriter, r *http.Request
 	if h.modelReg != nil {
 		jobs := h.modelReg.ListActiveExportJobs()
 		for _, j := range jobs {
-			data.ActiveJobs = append(data.ActiveJobs, ExportJobDisplay{
+			data.ActiveJobs = append(data.ActiveJobs, components.ExportJobDisplay{
 				ID:            j.ID,
 				ModelID:       j.ModelID,
 				Status:        j.Status,
@@ -1412,7 +1413,7 @@ func (h *Handler) handleHFModelSearchPage(w http.ResponseWriter, r *http.Request
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := HFModelSearchPage(data).Render(ctx, w); err != nil {
+	if err := components.HFModelSearchPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render HF search page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -1423,7 +1424,7 @@ func (h *Handler) handleHFModelSearch(w http.ResponseWriter, r *http.Request) {
 
 	if h.modelReg == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1431,7 +1432,7 @@ func (h *Handler) handleHFModelSearch(w http.ResponseWriter, r *http.Request) {
 
 	if err := r.ParseForm(); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1459,16 +1460,16 @@ func (h *Handler) handleHFModelSearch(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.log.Error("HuggingFace search failed", "error", err)
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Search failed: %s", err.Error())).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Search failed: %s", err.Error())).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	// Check which models have ONNX (for non-ONNX-only searches)
-	displayResults := make([]HFModelDisplay, 0, len(results))
+	displayResults := make([]components.HFModelDisplay, 0, len(results))
 	for _, m := range results {
-		display := HFModelDisplay{
+		display := components.HFModelDisplay{
 			ID:          m.ID,
 			Author:      m.Author,
 			Downloads:   m.Downloads,
@@ -1511,9 +1512,9 @@ func (h *Handler) handleExportJobsStatus(w http.ResponseWriter, r *http.Request)
 	}
 
 	jobs := h.modelReg.ListActiveExportJobs()
-	displayJobs := make([]ExportJobDisplay, 0, len(jobs))
+	displayJobs := make([]components.ExportJobDisplay, 0, len(jobs))
 	for _, j := range jobs {
-		displayJobs = append(displayJobs, ExportJobDisplay{
+		displayJobs = append(displayJobs, components.ExportJobDisplay{
 			ID:            j.ID,
 			ModelID:       j.ModelID,
 			Status:        j.Status,
@@ -1528,7 +1529,7 @@ func (h *Handler) handleExportJobsStatus(w http.ResponseWriter, r *http.Request)
 
 	// Return as HTMX partial
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ExportJobsList(displayJobs).Render(ctx, w); err != nil {
+	if err := components.ExportJobsList(displayJobs).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render export jobs", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -1558,7 +1559,7 @@ func (h *Handler) handleExportJobStatus(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	display := ExportJobDisplay{
+	display := components.ExportJobDisplay{
 		ID:            job.ID,
 		ModelID:       job.ModelID,
 		Status:        job.Status,
@@ -1571,7 +1572,7 @@ func (h *Handler) handleExportJobStatus(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := ExportJobCard(display).Render(ctx, w); err != nil {
+	if err := components.ExportJobCard(display).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render export job", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -1584,14 +1585,14 @@ func (h *Handler) handleExportJobStatus(w http.ResponseWriter, r *http.Request) 
 func (h *Handler) handleMappersPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	data := MappersPageData{
+	data := components.MappersPageData{
 		Layout: h.getLayoutData(ctx, "Model Mappers", "/admin/mappers"),
 	}
 
 	if h.mapperSvc != nil {
 		mappers, _ := h.mapperSvc.ListMappers(ctx)
 		for _, m := range mappers {
-			data.Mappers = append(data.Mappers, ModelMapperDisplay{
+			data.Mappers = append(data.Mappers, components.ModelMapperDisplay{
 				ID:             m.ID,
 				Name:           m.Name,
 				ModelID:        m.ModelID,
@@ -1606,7 +1607,7 @@ func (h *Handler) handleMappersPage(w http.ResponseWriter, r *http.Request) {
 	// Get models for the editor
 	if h.modelReg != nil {
 		for _, m := range h.modelReg.ListAllModels() {
-			data.Models = append(data.Models, ModelInfoDisplay{
+			data.Models = append(data.Models, components.ModelInfoDisplay{
 				ID:          m.ID,
 				Type:        string(m.Type),
 				DisplayName: m.DisplayName,
@@ -1615,7 +1616,7 @@ func (h *Handler) handleMappersPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := AdminMappersPage(data).Render(ctx, w); err != nil {
+	if err := components.AdminMappersPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render mappers page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -1803,7 +1804,7 @@ func (h *Handler) handleEditMapperModal(w http.ResponseWriter, r *http.Request) 
 
 	if h.mapperSvc == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Mapper service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Mapper service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1812,7 +1813,7 @@ func (h *Handler) handleEditMapperModal(w http.ResponseWriter, r *http.Request) 
 	mapperID := r.PathValue("id")
 	if mapperID == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Mapper ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Mapper ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1822,17 +1823,17 @@ func (h *Handler) handleEditMapperModal(w http.ResponseWriter, r *http.Request) 
 	mapper, err := h.mapperSvc.GetMapper(ctx, mapperID)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(err.Error()).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(err.Error()).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	// Get models for the editor
-	var models []ModelInfoDisplay
+	var models []components.ModelInfoDisplay
 	if h.modelReg != nil {
 		for _, m := range h.modelReg.ListAllModels() {
-			models = append(models, ModelInfoDisplay{
+			models = append(models, components.ModelInfoDisplay{
 				ID:          m.ID,
 				Type:        string(m.Type),
 				DisplayName: m.DisplayName,
@@ -1841,7 +1842,7 @@ func (h *Handler) handleEditMapperModal(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Convert mapper to display format
-	mapperDisplay := &ModelMapperDisplay{
+	mapperDisplay := &components.ModelMapperDisplay{
 		ID:             mapper.ID,
 		Name:           mapper.Name,
 		ModelID:        mapper.ModelID,
@@ -1851,10 +1852,10 @@ func (h *Handler) handleEditMapperModal(w http.ResponseWriter, r *http.Request) 
 		OutputMapping:  mapper.OutputMapping,
 	}
 
-	// Render modal with mapper data
+	// Render components.Modal with mapper data
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := MapperEditorModal(models, mapperDisplay).Render(ctx, w); err != nil {
-		h.log.Error("Failed to render mapper editor modal", "error", err)
+	if err := components.MapperEditorModal(models, mapperDisplay).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render mapper editor components.Modal", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -1864,7 +1865,7 @@ func (h *Handler) handleMapperYAML(w http.ResponseWriter, r *http.Request) {
 
 	if h.mapperSvc == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Mapper service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Mapper service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1873,7 +1874,7 @@ func (h *Handler) handleMapperYAML(w http.ResponseWriter, r *http.Request) {
 	mapperID := r.PathValue("id")
 	if mapperID == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Mapper ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Mapper ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1883,7 +1884,7 @@ func (h *Handler) handleMapperYAML(w http.ResponseWriter, r *http.Request) {
 	mapper, err := h.mapperSvc.GetMapper(ctx, mapperID)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(err.Error()).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(err.Error()).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1893,7 +1894,7 @@ func (h *Handler) handleMapperYAML(w http.ResponseWriter, r *http.Request) {
 	yamlData, err := yaml.Marshal(mapper)
 	if err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Failed to generate YAML").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Failed to generate YAML").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -1901,7 +1902,7 @@ func (h *Handler) handleMapperYAML(w http.ResponseWriter, r *http.Request) {
 
 	// Render YAML content
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := YAMLContent(string(yamlData)).Render(ctx, w); err != nil {
+	if err := components.YAMLContent(string(yamlData)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render YAML content", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -1937,10 +1938,10 @@ func (h *Handler) handleGenerateMapper(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get models list for dropdown
-	var modelsList []ModelInfoDisplay
+	var modelsList []components.ModelInfoDisplay
 	if h.modelReg != nil {
 		for _, m := range h.modelReg.ListAllModels() {
-			modelsList = append(modelsList, ModelInfoDisplay{
+			modelsList = append(modelsList, components.ModelInfoDisplay{
 				ID:          m.ID,
 				Type:        string(m.Type),
 				DisplayName: m.DisplayName,
@@ -1949,7 +1950,7 @@ func (h *Handler) handleGenerateMapper(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Convert to display struct
-	mapperDisplay := &ModelMapperDisplay{
+	mapperDisplay := &components.ModelMapperDisplay{
 		ID:             mapper.ID,
 		Name:           mapper.Name,
 		ModelID:        mapper.ModelID,
@@ -1961,10 +1962,10 @@ func (h *Handler) handleGenerateMapper(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:      mapper.UpdatedAt,
 	}
 
-	// Render the mapper editor modal with pre-filled data
+	// Render the mapper editor components.Modal with pre-filled data
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := MapperEditorModal(modelsList, mapperDisplay).Render(ctx, w); err != nil {
-		h.log.Error("Failed to render mapper editor modal", "error", err)
+	if err := components.MapperEditorModal(modelsList, mapperDisplay).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render mapper editor components.Modal", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
@@ -1973,11 +1974,11 @@ func (h *Handler) handleGenerateMapper(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) refreshMappersList(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var mappers []ModelMapperDisplay
+	var mappers []components.ModelMapperDisplay
 	if h.mapperSvc != nil {
-		mappersList, _ := h.mapperSvc.ListMappers(ctx)
-		for _, m := range mappersList {
-			mappers = append(mappers, ModelMapperDisplay{
+		components.MappersList, _ := h.mapperSvc.ListMappers(ctx)
+		for _, m := range components.MappersList {
+			mappers = append(mappers, components.ModelMapperDisplay{
 				ID:             m.ID,
 				Name:           m.Name,
 				ModelID:        m.ModelID,
@@ -1996,11 +1997,11 @@ func (h *Handler) refreshMappersList(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) renderMappersListWithError(w http.ResponseWriter, r *http.Request, errMsg string) {
 	ctx := r.Context()
 
-	var mappers []ModelMapperDisplay
+	var mappers []components.ModelMapperDisplay
 	if h.mapperSvc != nil {
-		mappersList, _ := h.mapperSvc.ListMappers(ctx)
-		for _, m := range mappersList {
-			mappers = append(mappers, ModelMapperDisplay{
+		components.MappersList, _ := h.mapperSvc.ListMappers(ctx)
+		for _, m := range components.MappersList {
+			mappers = append(mappers, components.ModelMapperDisplay{
 				ID:             m.ID,
 				Name:           m.Name,
 				ModelID:        m.ModelID,
@@ -2016,16 +2017,16 @@ func (h *Handler) renderMappersListWithError(w http.ResponseWriter, r *http.Requ
 }
 
 // renderMappersList renders the mappers list component.
-func (h *Handler) renderMappersList(w http.ResponseWriter, r *http.Request, mappers []ModelMapperDisplay, errMsg string) {
+func (h *Handler) renderMappersList(w http.ResponseWriter, r *http.Request, mappers []components.ModelMapperDisplay, errMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if errMsg != "" {
-		if err := ErrorMessage(errMsg).Render(r.Context(), w); err != nil {
+		if err := components.ErrorMessage(errMsg).Render(r.Context(), w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 	}
 
-	if err := MappersList(mappers).Render(r.Context(), w); err != nil {
+	if err := components.MappersList(mappers).Render(r.Context(), w); err != nil {
 		h.log.Error("Failed to render mappers list", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -2038,7 +2039,7 @@ func (h *Handler) renderMappersList(w http.ResponseWriter, r *http.Request, mapp
 func (h *Handler) handleConnectionsPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	data := ConnectionsPageData{
+	data := components.ConnectionsPageData{
 		Layout: h.getLayoutData(ctx, "Connections", "/admin/connections"),
 	}
 
@@ -2048,7 +2049,7 @@ func (h *Handler) handleConnectionsPage(w http.ResponseWriter, r *http.Request) 
 			data.Error = err.Error()
 		} else {
 			for _, c := range conns {
-				conn := ConnectionDisplay{
+				conn := components.ConnectionDisplay{
 					ID:        c.ID,
 					Name:      c.Name,
 					IsActive:  c.IsActive,
@@ -2070,7 +2071,7 @@ func (h *Handler) handleConnectionsPage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := AdminConnectionsPage(data).Render(ctx, w); err != nil {
+	if err := components.AdminConnectionsPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render connections page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -2082,7 +2083,7 @@ func (h *Handler) handleEnableConnection(w http.ResponseWriter, r *http.Request)
 
 	if id == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2090,7 +2091,7 @@ func (h *Handler) handleEnableConnection(w http.ResponseWriter, r *http.Request)
 
 	if h.connSvc == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2098,14 +2099,14 @@ func (h *Handler) handleEnableConnection(w http.ResponseWriter, r *http.Request)
 
 	if err := h.connSvc.SetActive(ctx, id, true); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to enable connection: %v", err)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to enable connection: %v", err)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage("Connection enabled successfully").Render(ctx, w); err != nil {
+	if err := components.SuccessMessage("Connection enabled successfully").Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -2116,7 +2117,7 @@ func (h *Handler) handleDisableConnection(w http.ResponseWriter, r *http.Request
 
 	if id == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2124,7 +2125,7 @@ func (h *Handler) handleDisableConnection(w http.ResponseWriter, r *http.Request
 
 	if h.connSvc == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2132,14 +2133,14 @@ func (h *Handler) handleDisableConnection(w http.ResponseWriter, r *http.Request
 
 	if err := h.connSvc.SetActive(ctx, id, false); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to disable connection: %v", err)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to disable connection: %v", err)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage("Connection disabled successfully").Render(ctx, w); err != nil {
+	if err := components.SuccessMessage("Connection disabled successfully").Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -2150,7 +2151,7 @@ func (h *Handler) handleDeleteConnection(w http.ResponseWriter, r *http.Request)
 
 	if id == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2158,7 +2159,7 @@ func (h *Handler) handleDeleteConnection(w http.ResponseWriter, r *http.Request)
 
 	if h.connSvc == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2166,14 +2167,14 @@ func (h *Handler) handleDeleteConnection(w http.ResponseWriter, r *http.Request)
 
 	if err := h.connSvc.DeleteConnection(ctx, id); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to delete connection: %v", err)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to delete connection: %v", err)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage("Connection deleted successfully").Render(ctx, w); err != nil {
+	if err := components.SuccessMessage("Connection deleted successfully").Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -2184,7 +2185,7 @@ func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request)
 
 	if h.connSvc == nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2193,7 +2194,7 @@ func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request)
 	// Parse form to get connection ID and new name
 	if err := r.ParseForm(); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Invalid form data").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2202,7 +2203,7 @@ func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request)
 	id := strings.TrimSpace(r.FormValue("connection_id"))
 	if id == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Connection ID is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2211,7 +2212,7 @@ func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request)
 	newName := strings.TrimSpace(r.FormValue("name"))
 	if newName == "" {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage("New name is required").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("New name is required").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2219,14 +2220,14 @@ func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request)
 
 	if err := h.connSvc.RenameConnection(ctx, id, newName); err != nil {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		if err := ErrorMessage(fmt.Sprintf("Failed to rename connection: %v", err)).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to rename connection: %v", err)).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := SuccessMessage(fmt.Sprintf("Connection renamed to '%s' successfully", newName)).Render(ctx, w); err != nil {
+	if err := components.SuccessMessage(fmt.Sprintf("Connection renamed to '%s' successfully", newName)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -2238,12 +2239,12 @@ func (h *Handler) handleRenameConnection(w http.ResponseWriter, r *http.Request)
 func (h *Handler) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	data := SettingsPageData{
+	data := components.SettingsPageData{
 		Layout: h.getLayoutData(ctx, "Settings", "/admin/settings"),
 	}
 
 	if h.cfg != nil {
-		data.Config = RuntimeConfig{
+		data.Config = components.RuntimeConfig{
 			ServerHost:        h.cfg.Host,
 			ServerPort:        h.cfg.Port,
 			LogLevel:          h.cfg.Log.Level,
@@ -2270,7 +2271,7 @@ func (h *Handler) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := AdminSettingsPage(data).Render(ctx, w); err != nil {
+	if err := components.AdminSettingsPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render settings page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -2278,8 +2279,8 @@ func (h *Handler) handleSettingsPage(w http.ResponseWriter, r *http.Request) {
 
 // determineSettingSources checks each setting to determine if it came from
 // admin override, environment variable, config file, or default value
-func (h *Handler) determineSettingSources(ctx context.Context) SettingSources {
-	sources := SettingSources{}
+func (h *Handler) determineSettingSources(ctx context.Context) components.SettingSources {
+	sources := components.SettingSources{}
 
 	// Helper to check if env var is set
 	envSet := func(key string) bool {
@@ -2357,14 +2358,14 @@ func (h *Handler) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if err := r.ParseForm(); err != nil {
-		if err := ErrorMessage("Failed to parse form: "+err.Error()).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Failed to parse form: "+err.Error()).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error message", "error", err)
 		}
 		return
 	}
 
-	// Build RuntimeConfig from form values
-	cfg := settings.RuntimeConfig{
+	// Build components.RuntimeConfig from form values
+	cfg := settings.components.RuntimeConfig{
 		// Server
 		ServerHost: r.FormValue("server_host"),
 		ServerPort: parseIntOr(r.FormValue("server_port"), 8080),
@@ -2414,14 +2415,14 @@ func (h *Handler) handleSaveSettings(w http.ResponseWriter, r *http.Request) {
 	// Save settings
 	if h.settingsSvc != nil {
 		if err := h.settingsSvc.Update(ctx, cfg, "admin"); err != nil {
-			if err := ErrorMessage("Failed to save settings: "+err.Error()).Render(ctx, w); err != nil {
+			if err := components.ErrorMessage("Failed to save settings: "+err.Error()).Render(ctx, w); err != nil {
 				h.log.Error("Failed to render error message", "error", err)
 			}
 			return
 		}
 	}
 
-	if err := SuccessMessage("Settings saved successfully").Render(ctx, w); err != nil {
+	if err := components.SuccessMessage("Settings saved successfully").Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
 }
@@ -2470,7 +2471,7 @@ func (h *Handler) handleImportSettings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if h.settingsSvc == nil {
-		if err := ErrorMessage("Settings service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Settings service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2478,7 +2479,7 @@ func (h *Handler) handleImportSettings(w http.ResponseWriter, r *http.Request) {
 
 	// Parse multipart form for file upload
 	if err := r.ParseMultipartForm(1 << 20); err != nil { // 1MB max
-		if err := ErrorMessage("Failed to parse form: "+err.Error()).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Failed to parse form: "+err.Error()).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2486,7 +2487,7 @@ func (h *Handler) handleImportSettings(w http.ResponseWriter, r *http.Request) {
 
 	file, header, err := r.FormFile("settings_file")
 	if err != nil {
-		if err := ErrorMessage("No file uploaded").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("No file uploaded").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2496,7 +2497,7 @@ func (h *Handler) handleImportSettings(w http.ResponseWriter, r *http.Request) {
 	// Read file content
 	data := make([]byte, header.Size)
 	if _, err := file.Read(data); err != nil {
-		if err := ErrorMessage("Failed to read file: "+err.Error()).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Failed to read file: "+err.Error()).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
@@ -2511,13 +2512,13 @@ func (h *Handler) handleImportSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if importErr != nil {
-		if err := ErrorMessage("Failed to import settings: "+importErr.Error()).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Failed to import settings: "+importErr.Error()).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
-	if err := SuccessMessage("Settings imported successfully").Render(ctx, w); err != nil {
+	if err := components.SuccessMessage("Settings imported successfully").Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success", "error", err)
 	}
 }
@@ -2527,20 +2528,20 @@ func (h *Handler) handleResetSettings(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if h.settingsSvc == nil {
-		if err := ErrorMessage("Settings service not available").Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Settings service not available").Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
 	if err := h.settingsSvc.Reset(ctx, "admin-reset"); err != nil {
-		if err := ErrorMessage("Failed to reset settings: "+err.Error()).Render(ctx, w); err != nil {
+		if err := components.ErrorMessage("Failed to reset settings: "+err.Error()).Render(ctx, w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 		return
 	}
 
-	if err := SuccessMessage("Settings reset to defaults").Render(ctx, w); err != nil {
+	if err := components.SuccessMessage("Settings reset to defaults").Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success", "error", err)
 	}
 }
@@ -2584,7 +2585,7 @@ func (h *Handler) handleAPIPutSettings(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Parse JSON body
-	var cfg settings.RuntimeConfig
+	var cfg settings.components.RuntimeConfig
 	if err := json.NewDecoder(r.Body).Decode(&cfg); err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid JSON: " + err.Error()})
@@ -2743,7 +2744,7 @@ func (h *Handler) handleStatsPage(w http.ResponseWriter, r *http.Request) {
 	data.Layout = h.getLayoutData(ctx, "Stats", "/stats")
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := StatsPage(data).Render(ctx, w); err != nil {
+	if err := components.StatsPage(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render stats page", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -2756,15 +2757,15 @@ func (h *Handler) handleStatsRefresh(w http.ResponseWriter, r *http.Request) {
 	data := h.getStatsData(ctx, store, timeRange)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	if err := StatsContent(data).Render(ctx, w); err != nil {
+	if err := components.StatsContent(data).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render stats content", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
-func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange string) StatsPageData {
-	data := StatsPageData{
-		Components: make(map[string]HealthStatus),
+func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange string) components.StatsPageData {
+	data := components.StatsPageData{
+		Components: make(map[string]components.HealthStatus),
 		Store:      storeFilter,
 		TimeRange:  timeRange,
 	}
@@ -2796,7 +2797,7 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 			if comp.Latency != nil {
 				latency = comp.Latency.AsDuration().Milliseconds()
 			}
-			healthStatus := HealthStatus{
+			healthStatus := components.HealthStatus{
 				Status:  status,
 				Message: comp.Message,
 				Latency: latency,
@@ -2808,10 +2809,10 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 				healthStatus.DeviceFallback = comp.DeviceInfo.DeviceFallback
 				healthStatus.RuntimeAvail = comp.DeviceInfo.RuntimeAvailable
 			}
-			data.Components[name] = healthStatus
+			data.Components[name] = components.HealthStatus
 		}
 	} else {
-		data.Components["server"] = HealthStatus{
+		data.Components["server"] = components.HealthStatus{
 			Status:  "unhealthy",
 			Message: err.Error(),
 		}
@@ -2852,7 +2853,7 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 
 		// Build per-connection metrics
 		for _, c := range conns {
-			data.FilesByConnection = append(data.FilesByConnection, ConnectionMetric{
+			data.FilesByConnection = append(data.FilesByConnection, components.ConnectionMetric{
 				ConnectionID:   c.ID,
 				ConnectionName: c.Name,
 				FilesIndexed:   c.IndexedFiles,
@@ -2867,7 +2868,7 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 		// Searches over time (5-minute buckets)
 		searchRateHistory := h.metrics.TimeSeries.SearchRate.GetHistoryWithCurrent()
 		for _, dp := range searchRateHistory {
-			data.SearchesOverTime = append(data.SearchesOverTime, TimeSeriesPoint{
+			data.SearchesOverTime = append(data.SearchesOverTime, components.TimeSeriesPoint{
 				Timestamp: dp.Timestamp,
 				Value:     dp.Value,
 				Label:     dp.Timestamp.Format("15:04"),
@@ -2877,7 +2878,7 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 		// Indexing over time
 		indexRateHistory := h.metrics.TimeSeries.IndexRate.GetHistoryWithCurrent()
 		for _, dp := range indexRateHistory {
-			data.IndexingOverTime = append(data.IndexingOverTime, TimeSeriesPoint{
+			data.IndexingOverTime = append(data.IndexingOverTime, components.TimeSeriesPoint{
 				Timestamp: dp.Timestamp,
 				Value:     dp.Value,
 				Label:     dp.Timestamp.Format("15:04"),
@@ -2887,7 +2888,7 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 		// Latency over time (average search latency per bucket)
 		latencyHistory := h.metrics.TimeSeries.SearchLatency.GetHistoryWithCurrent()
 		for _, dp := range latencyHistory {
-			data.LatencyOverTime = append(data.LatencyOverTime, TimeSeriesPoint{
+			data.LatencyOverTime = append(data.LatencyOverTime, components.TimeSeriesPoint{
 				Timestamp: dp.Timestamp,
 				Value:     dp.Value,
 				Label:     dp.Timestamp.Format("15:04"),
@@ -2928,7 +2929,7 @@ func (h *Handler) getStatsData(ctx context.Context, storeFilter, timeRange strin
 				continue
 			}
 
-			metric := StoreMetric{
+			metric := components.StoreMetric{
 				Store: s.Name,
 			}
 			if s.Stats != nil {
@@ -3379,10 +3380,10 @@ func (h *Handler) refreshStoresGrid(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var stores []StoreWithConnections
+	var stores []components.StoreWithConnections
 	for _, s := range storesResp.Stores {
-		store := StoreWithConnections{
-			Store: StoreInfo{
+		store := components.StoreWithConnections{
+			Store: components.StoreInfo{
 				Name:        s.Name,
 				DisplayName: s.DisplayName,
 				Description: s.Description,
@@ -3399,16 +3400,16 @@ func (h *Handler) refreshStoresGrid(w http.ResponseWriter, r *http.Request) {
 	h.renderStoresGrid(w, r, stores, "")
 }
 
-func (h *Handler) renderStoresGrid(w http.ResponseWriter, r *http.Request, stores []StoreWithConnections, errMsg string) {
+func (h *Handler) renderStoresGrid(w http.ResponseWriter, r *http.Request, stores []components.StoreWithConnections, errMsg string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
 	if errMsg != "" {
-		if err := ErrorMessage(errMsg).Render(r.Context(), w); err != nil {
+		if err := components.ErrorMessage(errMsg).Render(r.Context(), w); err != nil {
 			h.log.Error("Failed to render error", "error", err)
 		}
 	}
 
-	if err := StoresGrid(stores).Render(r.Context(), w); err != nil {
+	if err := components.StoresGrid(stores).Render(r.Context(), w); err != nil {
 		h.log.Error("Failed to render stores grid", "error", err)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
@@ -3476,7 +3477,7 @@ func calculateGrowth(current, previous int64) float64 {
 }
 
 // getLanguageBreakdown aggregates file counts by programming language
-func (h *Handler) getLanguageBreakdown(ctx context.Context, storeFilter string, storesResp *pb.ListStoresResponse) []LanguageMetric {
+func (h *Handler) getLanguageBreakdown(ctx context.Context, storeFilter string, storesResp *pb.ListStoresResponse) []components.LanguageMetric {
 	// For now, return a placeholder implementation
 	// TODO: Implement proper language aggregation by:
 	// 1. Option A: Query Qdrant for language field aggregation (expensive)
@@ -3509,9 +3510,9 @@ func (h *Handler) getLanguageBreakdown(ctx context.Context, storeFilter string, 
 	}
 
 	// Build sorted language metrics
-	var metrics []LanguageMetric
+	var metrics []components.LanguageMetric
 	for lang, count := range languageCounts {
-		metrics = append(metrics, LanguageMetric{
+		metrics = append(metrics, components.LanguageMetric{
 			Language:   lang,
 			FileCount:  count,
 			ChunkCount: 0, // Would be populated from actual data

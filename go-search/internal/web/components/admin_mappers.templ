@@ -1,0 +1,216 @@
+package components
+
+import (
+	"fmt"
+	"time"
+)
+
+// ModelMapperDisplay represents a model mapper for display
+type ModelMapperDisplay struct {
+	ID             string
+	Name           string
+	ModelID        string
+	ModelName      string
+	Type           string
+	PromptTemplate string
+	InputMapping   map[string]string
+	OutputMapping  map[string]string
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// MappersPageData holds data for the mappers page
+type MappersPageData struct {
+	Layout  LayoutData
+	Mappers []ModelMapperDisplay
+	Models  []ModelInfoDisplay // for dropdown
+	Error   string
+	Success string
+}
+
+// AdminMappersPage renders the model mapper management page
+templ AdminMappersPage(data MappersPageData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Header -->
+			<div class="sm:flex sm:items-center">
+				<div class="sm:flex-auto">
+					<h1 class="text-2xl font-semibold text-gray-900">Model Mappers</h1>
+					<p class="mt-2 text-sm text-gray-700">
+						Define how to map inputs and outputs to ML models. Mappers control prompt templates and field mappings.
+					</p>
+				</div>
+				<div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+					<button
+						type="button"
+						onclick="document.getElementById('mapper-editor-modal').classList.remove('hidden')"
+						class="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500"
+					>
+						<svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+							<path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
+						</svg>
+						Create Mapper
+					</button>
+				</div>
+			</div>
+
+			<!-- Messages -->
+			<div id="mapper-messages" class="mt-4">
+				if data.Error != "" {
+					@ErrorMessage(data.Error)
+				}
+				if data.Success != "" {
+					@SuccessMessage(data.Success)
+				}
+			</div>
+
+			<!-- Mappers List -->
+			<div id="mappers-list" class="mt-8">
+				@MappersList(data.Mappers)
+			</div>
+
+			<!-- Mapper Editor Modal -->
+			@MapperEditorModal(data.Models, nil)
+		</div>
+	}
+}
+
+// MappersList renders the list of mappers
+templ MappersList(mappers []ModelMapperDisplay) {
+	if len(mappers) == 0 {
+		@EmptyState("No mappers", "Create a new mapper to define model input/output mappings")
+	} else {
+		<div class="overflow-hidden bg-white shadow sm:rounded-lg">
+			<ul role="list" class="divide-y divide-gray-200">
+				for _, mapper := range mappers {
+					@MapperRow(mapper)
+				}
+			</ul>
+		</div>
+	}
+}
+
+// MapperRow renders a single mapper row
+templ MapperRow(mapper ModelMapperDisplay) {
+	<li class="px-6 py-4 hover:bg-gray-50">
+		<div class="flex items-center justify-between">
+			<div class="flex-1">
+				<!-- Mapper Name & Model -->
+				<div class="flex items-center space-x-3">
+					<h3 class="text-sm font-medium text-gray-900">{ mapper.Name }</h3>
+					<span class={ "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium",
+						templ.KV("bg-purple-100 text-purple-800", mapper.Type == "embed"),
+						templ.KV("bg-green-100 text-green-800", mapper.Type == "rerank"),
+						templ.KV("bg-primary-100 text-primary-800", mapper.Type == "query_understand") }>
+						{ mapper.Type }
+					</span>
+				</div>
+				<div class="mt-1 flex items-center space-x-4 text-xs text-gray-500">
+					<span>Model: { mapper.ModelName }</span>
+					<span>•</span>
+					<span>Updated: { mapper.UpdatedAt.Format("2006-01-02 15:04") }</span>
+				</div>
+
+				<!-- Mapping Info -->
+				<div class="mt-2 grid grid-cols-2 gap-4 text-xs">
+					<div>
+						<span class="font-medium text-gray-700">Input Mapping:</span>
+						<div class="mt-1 space-y-0.5">
+							for key, value := range mapper.InputMapping {
+								<div class="text-gray-600">
+									<span class="font-mono">{ key }</span> → <span class="font-mono">{ value }</span>
+								</div>
+							}
+						</div>
+					</div>
+					<div>
+						<span class="font-medium text-gray-700">Output Mapping:</span>
+						<div class="mt-1 space-y-0.5">
+							for key, value := range mapper.OutputMapping {
+								<div class="text-gray-600">
+									<span class="font-mono">{ key }</span> → <span class="font-mono">{ value }</span>
+								</div>
+							}
+						</div>
+					</div>
+				</div>
+
+				<!-- Prompt Template (if exists) -->
+				if mapper.PromptTemplate != "" {
+					<div class="mt-2">
+						<details class="text-xs">
+							<summary class="cursor-pointer font-medium text-gray-700 hover:text-gray-900">
+								Prompt Template
+							</summary>
+							<pre class="mt-1 rounded bg-gray-50 p-2 text-gray-600 overflow-x-auto">{ mapper.PromptTemplate }</pre>
+						</details>
+					</div>
+				}
+			</div>
+
+			<!-- Actions -->
+			<div class="ml-4 flex space-x-2">
+				<button
+					hx-get={ fmt.Sprintf("/admin/mappers/%s/edit", mapper.ID) }
+					hx-target="#mapper-editor-modal"
+					hx-swap="outerHTML"
+					onclick="document.getElementById('mapper-editor-modal').classList.remove('hidden')"
+					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+				>
+					Edit
+				</button>
+				<button
+					hx-get={ fmt.Sprintf("/admin/mappers/%s/yaml", mapper.ID) }
+					hx-target="#yaml-preview"
+					hx-swap="innerHTML"
+					onclick="document.getElementById('yaml-modal').classList.remove('hidden')"
+					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+				>
+					YAML
+				</button>
+				<button
+					hx-delete={ fmt.Sprintf("/admin/mappers/%s", mapper.ID) }
+					hx-target="#mappers-list"
+					hx-swap="outerHTML"
+					hx-confirm={ fmt.Sprintf("Delete mapper '%s'?", mapper.Name) }
+					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm ring-1 ring-inset ring-red-300 hover:bg-red-50"
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</li>
+}
+
+// YAML Preview Modal
+templ YAMLModal() {
+	<div id="yaml-modal" class="hidden relative z-10" aria-labelledby="yaml-title" role="dialog" aria-modal="true">
+		<div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+		<div class="fixed inset-0 z-10 overflow-y-auto">
+			<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+				<div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-2xl sm:p-6">
+					<div>
+						<h3 class="text-lg font-medium leading-6 text-gray-900" id="yaml-title">Mapper YAML</h3>
+						<div id="yaml-preview" class="mt-4 overflow-x-auto">
+							<!-- YAML content loaded via HTMX -->
+						</div>
+					</div>
+					<div class="mt-5 sm:mt-6">
+						<button
+							type="button"
+							onclick="document.getElementById('yaml-modal').classList.add('hidden')"
+							class="inline-flex w-full justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500"
+						>
+							Close
+						</button>
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+}
+
+// YAMLContent renders YAML content
+templ YAMLContent(yaml string) {
+	<pre class="rounded bg-gray-50 p-4 text-xs font-mono text-gray-800 overflow-x-auto">{ yaml }</pre>
+}

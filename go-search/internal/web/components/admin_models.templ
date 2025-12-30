@@ -1,0 +1,297 @@
+package components
+
+import "fmt"
+
+// ModelInfoDisplay represents model information for display
+type ModelInfoDisplay struct {
+	ID          string
+	Type        string // embed, rerank, query_understand
+	DisplayName string
+	Description string
+	OutputDim   int
+	MaxTokens   int
+	Downloaded  bool
+	IsDefault   bool
+	GPUEnabled  bool
+	Size        string // formatted size
+	Status      string // ready, downloading, not_downloaded
+}
+
+// ModelTypeConfigDisplay represents model type configuration for display
+type ModelTypeConfigDisplay struct {
+	Type         string
+	DisplayName  string
+	DefaultModel string
+	GPUEnabled   bool
+	Description  string
+}
+
+// ModelsPageData holds data for the models management page
+type ModelsPageData struct {
+	Layout      LayoutData
+	Models      []ModelInfoDisplay
+	TypeConfigs []ModelTypeConfigDisplay
+	Error       string
+	Success     string
+}
+
+// AdminModelsPage renders the model management page
+templ AdminModelsPage(data ModelsPageData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Header -->
+			<div class="sm:flex sm:items-center sm:justify-between">
+				<div class="sm:flex-auto">
+					<h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Model Management</h1>
+					<p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+						Manage ML models for embeddings, reranking, and query understanding.
+					</p>
+				</div>
+				<div class="mt-4 sm:mt-0">
+					<a href="/admin/models/search" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+						<svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+						</svg>
+						Import from HuggingFace
+					</a>
+				</div>
+			</div>
+
+			<!-- Messages -->
+			<div id="model-messages" class="mt-4">
+				if data.Error != "" {
+					@ErrorMessage(data.Error)
+				}
+				if data.Success != "" {
+					@SuccessMessage(data.Success)
+				}
+			</div>
+
+			<!-- Models by Type -->
+			<div class="mt-8 space-y-8">
+				@ModelsSection("Embeddings", "embed", data.Models, data.TypeConfigs)
+				@ModelsSection("Reranking", "rerank", data.Models, data.TypeConfigs)
+				@ModelsSection("Query Understanding", "query_understand", data.Models, data.TypeConfigs)
+			</div>
+		</div>
+	}
+}
+
+// ModelsSection renders models grouped by type
+templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay, typeConfigs []ModelTypeConfigDisplay) {
+	<div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+		<div class="px-4 py-5 sm:p-6">
+			<!-- Section Header -->
+			<div class="flex items-center justify-between mb-4">
+				<div>
+					<h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">{ displayName }</h3>
+					if typeConfig := getTypeConfig(modelType, typeConfigs); typeConfig != nil {
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{ typeConfig.Description }</p>
+					}
+				</div>
+				
+				<!-- Type-level GPU toggle -->
+				if typeConfig := getTypeConfig(modelType, typeConfigs); typeConfig != nil {
+					<div class="flex items-center space-x-2">
+						<span class="text-sm text-gray-700">GPU:</span>
+						<button
+							hx-post={ fmt.Sprintf("/admin/models/type/%s/gpu", modelType) }
+							hx-vals={ fmt.Sprintf(`{"enabled": %t}`, !typeConfig.GPUEnabled) }
+							hx-target="#model-messages"
+							hx-swap="innerHTML"
+							class={ "relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-primary-600 focus:ring-offset-2", 
+								templ.KV("bg-primary-600", typeConfig.GPUEnabled), 
+								templ.KV("bg-gray-200 dark:bg-gray-600", !typeConfig.GPUEnabled) }
+						>
+							<span class={ "pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+								templ.KV("translate-x-5", typeConfig.GPUEnabled),
+								templ.KV("translate-x-0", !typeConfig.GPUEnabled) }></span>
+						</button>
+						<span class={ "text-sm font-medium", templ.KV("text-primary-600 dark:text-primary-400", typeConfig.GPUEnabled), templ.KV("text-gray-500 dark:text-gray-400", !typeConfig.GPUEnabled) }>
+							if typeConfig.GPUEnabled {
+								Enabled
+							} else {
+								Disabled
+							}
+						</span>
+					</div>
+				}
+			</div>
+
+			<!-- Query Understanding Enable/Disable -->
+			if modelType == "query_understand" {
+				if typeConfig := getTypeConfig(modelType, typeConfigs); typeConfig != nil {
+					<div class="mb-4 p-4 bg-gray-50 rounded-lg">
+						<div class="flex items-center justify-between">
+							<div>
+								<p class="text-sm font-medium text-gray-900 dark:text-white">Use Model for Query Understanding</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+									if !typeConfig.GPUEnabled {
+										Currently using heuristic-based fallback (Option C)
+									} else {
+										Using ML model for query understanding
+									}
+								</p>
+							</div>
+							<button
+								hx-post={ fmt.Sprintf("/admin/models/type/%s/toggle", modelType) }
+								hx-target="#model-messages"
+								hx-swap="innerHTML"
+								class={ "px-4 py-2 text-sm font-medium rounded-md",
+									templ.KV("bg-primary-600 text-white hover:bg-primary-700", typeConfig.GPUEnabled),
+									templ.KV("bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500", !typeConfig.GPUEnabled) }
+							>
+								if typeConfig.GPUEnabled {
+									Disable Model
+								} else {
+									Enable Model
+								}
+							</button>
+						</div>
+					</div>
+				}
+			}
+
+			<!-- Models List -->
+			<div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+				for _, model := range allModels {
+					if model.Type == modelType {
+						@ModelCard(model)
+					}
+				}
+			</div>
+		</div>
+	</div>
+}
+
+// ModelCard renders a single model card
+templ ModelCard(model ModelInfoDisplay) {
+	<div class="relative rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-4 shadow-sm hover:border-gray-400 dark:hover:border-gray-500">
+		<!-- Default Badge -->
+		if model.IsDefault {
+			<div class="absolute top-2 right-2">
+				<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+					Default
+				</span>
+			</div>
+		}
+
+		<!-- Model Name & Description -->
+		<div class="mb-3">
+			<h4 class="text-sm font-medium text-gray-900 dark:text-white pr-16">{ model.DisplayName }</h4>
+			<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{ model.Description }</p>
+		</div>
+
+		<!-- Model Info -->
+		<div class="mb-3 space-y-1">
+			if model.OutputDim > 0 {
+				<div class="flex justify-between text-xs">
+					<span class="text-gray-500 dark:text-gray-400">Dimensions:</span>
+					<span class="text-gray-900 dark:text-gray-200">{ fmt.Sprint(model.OutputDim) }</span>
+				</div>
+			}
+			<div class="flex justify-between text-xs">
+				<span class="text-gray-500 dark:text-gray-400">Max Tokens:</span>
+				<span class="text-gray-900 dark:text-gray-200">{ fmt.Sprint(model.MaxTokens) }</span>
+			</div>
+			<div class="flex justify-between text-xs">
+				<span class="text-gray-500 dark:text-gray-400">Size:</span>
+				<span class="text-gray-900 dark:text-gray-200">{ model.Size }</span>
+			</div>
+		</div>
+
+		<!-- Status -->
+		<div class="mb-3">
+			if model.Status == "ready" || model.Downloaded {
+				<div class="flex items-center text-xs text-green-600">
+					<svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
+						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
+					</svg>
+					Downloaded
+				</div>
+			} else if model.Status == "downloading" {
+				<div class="flex items-center text-xs text-primary-600">
+					<svg class="animate-spin h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24">
+						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					</svg>
+					Downloading...
+				</div>
+				<!-- Progress bar -->
+				<div class="mt-2 w-full bg-gray-200 rounded-full h-1.5">
+					<div id={ fmt.Sprintf("progress-%s", model.ID) } class="bg-primary-600 h-1.5 rounded-full" style="width: 45%"></div>
+				</div>
+			} else {
+				<div class="flex items-center text-xs text-gray-500">
+					<svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+					</svg>
+					Not Downloaded
+				</div>
+			}
+		</div>
+
+		<!-- GPU Status -->
+		<div class="mb-3 flex items-center justify-between text-xs">
+			<span class="text-gray-500">GPU:</span>
+			<button
+				hx-post={ fmt.Sprintf("/admin/models/gpu/%s", model.ID) }
+				hx-vals={ fmt.Sprintf(`{"enabled": %t}`, !model.GPUEnabled) }
+				hx-target="#model-messages"
+				hx-swap="innerHTML"
+				class={ "relative inline-flex h-4 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
+					templ.KV("bg-primary-600", model.GPUEnabled),
+					templ.KV("bg-gray-200", !model.GPUEnabled) }
+			>
+				<span class={ "pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
+					templ.KV("translate-x-4", model.GPUEnabled),
+					templ.KV("translate-x-0", !model.GPUEnabled) }></span>
+			</button>
+		</div>
+
+		<!-- Actions -->
+		<div class="flex space-x-2">
+			if !model.Downloaded && model.Status != "downloading" {
+				<button
+					hx-post={ fmt.Sprintf("/admin/models/download/%s", model.ID) }
+					hx-target="#model-messages"
+					hx-swap="innerHTML"
+					class="flex-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-primary-500"
+				>
+					Download
+				</button>
+			}
+			if !model.IsDefault && model.Downloaded {
+				<button
+					hx-post={ fmt.Sprintf("/admin/models/default/%s", model.ID) }
+					hx-target="#model-messages"
+					hx-swap="innerHTML"
+					class="flex-1 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+				>
+					Set Default
+				</button>
+			}
+			if !model.IsDefault {
+				<button
+					hx-post={ fmt.Sprintf("/admin/models/delete/%s", model.ID) }
+					hx-target="#model-messages"
+					hx-swap="innerHTML"
+					hx-confirm={ fmt.Sprintf("Delete %s?", model.DisplayName) }
+					class="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm ring-1 ring-inset ring-red-300 hover:bg-red-50"
+				>
+					Delete
+				</button>
+			}
+		</div>
+	</div>
+}
+
+// Helper function to get type config (Go helper)
+func getTypeConfig(modelType string, configs []ModelTypeConfigDisplay) *ModelTypeConfigDisplay {
+	for i := range configs {
+		if configs[i].Type == modelType {
+			return &configs[i]
+		}
+	}
+	return nil
+}

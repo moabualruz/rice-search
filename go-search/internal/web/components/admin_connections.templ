@@ -1,0 +1,369 @@
+package components
+
+import (
+	"fmt"
+	"time"
+)
+
+// ConnectionDisplay represents a connection for display
+type ConnectionDisplay struct {
+	ID           string
+	Name         string
+	Hostname     string
+	OS           string
+	Arch         string
+	Username     string
+	LastSeen     time.Time
+	LastIP       string
+	IndexedFiles int64
+	SearchCount  int64
+	IsActive     bool
+	StoreAccess  []string
+	CreatedAt    time.Time
+}
+
+// ConnectionsPageData holds data for the connections page
+type ConnectionsPageData struct {
+	Layout      LayoutData
+	Connections []ConnectionDisplay
+	Total       int
+	ActiveCount int
+	Error       string
+	Success     string
+}
+
+// AdminConnectionsPage renders the connection management page
+templ AdminConnectionsPage(data ConnectionsPageData) {
+	@Layout(data.Layout) {
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+			<!-- Header -->
+			<div class="sm:flex sm:items-center">
+				<div class="sm:flex-auto">
+					<h1 class="text-2xl font-semibold text-gray-900">Connections</h1>
+					<p class="mt-2 text-sm text-gray-700">
+						Manage client connections (ricegrep CLI instances) accessing the search system.
+					</p>
+				</div>
+			</div>
+
+			<!-- Stats -->
+			<div class="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3">
+				<div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+					<dt class="truncate text-sm font-medium text-gray-500">Total Connections</dt>
+					<dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{ fmt.Sprint(data.Total) }</dd>
+				</div>
+				<div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+					<dt class="truncate text-sm font-medium text-gray-500">Active Connections</dt>
+					<dd class="mt-1 text-3xl font-semibold tracking-tight text-green-600">{ fmt.Sprint(data.ActiveCount) }</dd>
+				</div>
+				<div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
+					<dt class="truncate text-sm font-medium text-gray-500">Inactive Connections</dt>
+					<dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-400">{ fmt.Sprint(data.Total - data.ActiveCount) }</dd>
+				</div>
+			</div>
+
+			<!-- Messages -->
+			<div id="connection-messages" class="mt-4">
+				if data.Error != "" {
+					@ErrorMessage(data.Error)
+				}
+				if data.Success != "" {
+					@SuccessMessage(data.Success)
+				}
+			</div>
+
+			<!-- Filters -->
+			<div class="mt-6 flex items-center space-x-4">
+				<div class="flex items-center">
+					<input
+						id="active-only"
+						type="checkbox"
+						hx-get="/admin/connections"
+						hx-include="[name='store']"
+						hx-target="#connections-list"
+						hx-swap="outerHTML"
+						class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-600"
+					/>
+					<label for="active-only" class="ml-2 text-sm text-gray-700">Show active only</label>
+				</div>
+				<div class="flex items-center space-x-2">
+					<label for="store-filter" class="text-sm text-gray-700">Store:</label>
+					<select
+						id="store-filter"
+						name="store"
+						hx-get="/admin/connections"
+						hx-include="[name='active-only']:checked"
+						hx-target="#connections-list"
+						hx-swap="outerHTML"
+						class="rounded-md border-gray-300 py-1 px-3 text-sm focus:border-primary-500 focus:ring-primary-500"
+					>
+						<option value="">All stores</option>
+						<!-- Stores populated by handler -->
+					</select>
+				</div>
+			</div>
+
+			<!-- Connections List -->
+			<div id="connections-list" class="mt-6">
+				@ConnectionsList(data.Connections)
+			</div>
+		</div>
+	}
+}
+
+// ConnectionsList renders the list of connections
+templ ConnectionsList(connections []ConnectionDisplay) {
+	if len(connections) == 0 {
+		@EmptyState("No connections", "Connections will appear here when clients connect to the system")
+	} else {
+		<div class="overflow-hidden bg-white shadow sm:rounded-lg">
+			<ul role="list" class="divide-y divide-gray-200">
+				for _, conn := range connections {
+					@ConnectionRow(conn)
+				}
+			</ul>
+		</div>
+	}
+}
+
+// ConnectionRow renders a single connection row with expandable details
+templ ConnectionRow(conn ConnectionDisplay) {
+	<li class="px-6 py-4">
+		<div class="flex items-center justify-between">
+			<div class="flex-1">
+				<!-- Connection Header -->
+				<div class="flex items-center space-x-3">
+					<!-- Status indicator -->
+					<div class={ "h-3 w-3 rounded-full", 
+						templ.KV("bg-green-500", conn.IsActive && isRecentlySeen(conn.LastSeen)),
+						templ.KV("bg-yellow-500", conn.IsActive && !isRecentlySeen(conn.LastSeen)),
+						templ.KV("bg-gray-400", !conn.IsActive) }></div>
+					
+					<div class="flex-1">
+						<div class="flex items-center space-x-2">
+							<h3 class="text-sm font-medium text-gray-900">{ conn.Name }</h3>
+							<span class="text-xs text-gray-500">({ conn.Hostname })</span>
+							if !conn.IsActive {
+								<span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+									Disabled
+								</span>
+							}
+						</div>
+						<div class="mt-1 flex items-center space-x-4 text-xs text-gray-500">
+							<span>{ conn.OS }/{ conn.Arch }</span>
+							if conn.Username != "" {
+								<span>•</span>
+								<span>{ conn.Username }</span>
+							}
+							<span>•</span>
+							<span>Last seen: { formatTimeSince(conn.LastSeen) }</span>
+							if conn.LastIP != "" {
+								<span>•</span>
+								<span>{ conn.LastIP }</span>
+							}
+						</div>
+					</div>
+				</div>
+
+				<!-- Stats -->
+				<div class="mt-2 flex items-center space-x-6 text-xs text-gray-600">
+					<div class="flex items-center space-x-1">
+						<svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+						</svg>
+						<span>{ fmt.Sprint(conn.IndexedFiles) } files indexed</span>
+					</div>
+					<div class="flex items-center space-x-1">
+						<svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+						</svg>
+						<span>{ fmt.Sprint(conn.SearchCount) } searches</span>
+					</div>
+				</div>
+
+				<!-- Store Access -->
+				<div class="mt-2">
+					<details class="group">
+						<summary class="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900">
+							<span class="inline-flex items-center">
+								Store Access
+								<svg class="ml-1 h-4 w-4 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+								</svg>
+							</span>
+						</summary>
+						<div class="mt-2 pl-4">
+							if len(conn.StoreAccess) == 0 {
+								<p class="text-xs text-gray-500">Access to all stores</p>
+							} else {
+								<div class="flex flex-wrap gap-1">
+									for _, store := range conn.StoreAccess {
+										<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+											{ store }
+										</span>
+									}
+								</div>
+							}
+						</div>
+					</details>
+				</div>
+
+				<!-- Full Details (expandable) -->
+				<div class="mt-3">
+					<details class="group">
+						<summary class="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900">
+							<span class="inline-flex items-center">
+								More Details
+								<svg class="ml-1 h-4 w-4 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+								</svg>
+							</span>
+						</summary>
+						<div class="mt-2 rounded bg-gray-50 p-3 text-xs space-y-1">
+							<div class="flex justify-between">
+								<span class="text-gray-600">Connection ID:</span>
+								<span class="font-mono text-gray-900">{ conn.ID }</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-gray-600">Created:</span>
+								<span class="text-gray-900">{ conn.CreatedAt.Format("2006-01-02 15:04:05") }</span>
+							</div>
+							<div class="flex justify-between">
+								<span class="text-gray-600">Last Activity:</span>
+								<span class="text-gray-900">{ conn.LastSeen.Format("2006-01-02 15:04:05") }</span>
+							</div>
+						</div>
+					</details>
+				</div>
+			</div>
+
+			<!-- Actions -->
+			<div class="ml-4 flex flex-col space-y-2">
+				<button
+					onclick="renameConnection(this.dataset.id)"
+					data-id={ conn.ID }
+					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+				>
+					Rename
+				</button>
+				if conn.IsActive {
+					<button
+						hx-post={ fmt.Sprintf("/admin/connections/%s/disable", conn.ID) }
+						hx-target="#connections-list"
+						hx-swap="outerHTML"
+						class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-yellow-600 shadow-sm ring-1 ring-inset ring-yellow-300 hover:bg-yellow-50"
+					>
+						Disable
+					</button>
+				} else {
+					<button
+						hx-post={ fmt.Sprintf("/admin/connections/%s/enable", conn.ID) }
+						hx-target="#connections-list"
+						hx-swap="outerHTML"
+						class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-green-600 shadow-sm ring-1 ring-inset ring-green-300 hover:bg-green-50"
+					>
+						Enable
+					</button>
+				}
+				<button
+					hx-delete={ fmt.Sprintf("/admin/connections/%s", conn.ID) }
+					hx-target="#connections-list"
+					hx-swap="outerHTML"
+					hx-confirm={ fmt.Sprintf("Delete connection '%s'? This will remove all associated data.", conn.Name) }
+					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm ring-1 ring-inset ring-red-300 hover:bg-red-50"
+				>
+					Delete
+				</button>
+			</div>
+		</div>
+	</li>
+}
+
+// Rename Connection Modal
+templ RenameConnectionModal() {
+	<div id="rename-modal" class="hidden relative z-10" aria-labelledby="rename-title" role="dialog" aria-modal="true">
+		<div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+		<div class="fixed inset-0 z-10 overflow-y-auto">
+			<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
+				<div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+					<form
+						id="rename-form"
+						hx-put="/admin/connections/rename"
+						hx-target="#connections-list"
+						hx-swap="outerHTML"
+						hx-on::after-request="if(event.detail.successful) document.getElementById('rename-modal').classList.add('hidden')"
+					>
+						<input type="hidden" name="connection_id" id="rename-connection-id"/>
+						<div>
+							<h3 class="text-lg font-medium leading-6 text-gray-900" id="rename-title">Rename Connection</h3>
+							<div class="mt-4">
+								<label for="rename-name" class="block text-sm font-medium text-gray-700">New Name</label>
+								<input
+									type="text"
+									name="name"
+									id="rename-name"
+									required
+									pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"
+									placeholder="my-machine"
+									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+								/>
+								<p class="mt-1 text-sm text-gray-500">Alphanumeric, hyphens, and underscores only</p>
+							</div>
+						</div>
+						<div class="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
+							<button
+								type="submit"
+								class="inline-flex w-full justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 sm:col-start-2"
+							>
+								Rename
+							</button>
+							<button
+								type="button"
+								onclick="document.getElementById('rename-modal').classList.add('hidden')"
+								class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:col-start-1 sm:mt-0"
+							>
+								Cancel
+							</button>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+	</div>
+
+	<script>
+		function renameConnection(connectionId) {
+			document.getElementById('rename-connection-id').value = connectionId;
+			document.getElementById('rename-modal').classList.remove('hidden');
+		}
+	</script>
+}
+
+// Helper functions
+func isRecentlySeen(lastSeen time.Time) bool {
+	return time.Since(lastSeen) < 5*time.Minute
+}
+
+func formatTimeSince(t time.Time) string {
+	duration := time.Since(t)
+	
+	if duration < time.Minute {
+		return "just now"
+	}
+	
+	if duration < time.Hour {
+		minutes := int(duration.Minutes())
+		return fmt.Sprintf("%dm ago", minutes)
+	}
+	
+	if duration < 24*time.Hour {
+		hours := int(duration.Hours())
+		return fmt.Sprintf("%dh ago", hours)
+	}
+	
+	days := int(duration.Hours() / 24)
+	if days == 1 {
+		return "1 day ago"
+	}
+	return fmt.Sprintf("%d days ago", days)
+}
