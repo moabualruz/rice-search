@@ -90,6 +90,14 @@ func New(cfg Config, log *logger.Logger, mlSvc ml.Service, qc *qdrant.Client, st
 		cfg = DefaultConfig()
 	}
 
+	// Ensure limits are set (if 0, use defaults)
+	if cfg.MaxRecvMsgSize <= 0 {
+		cfg.MaxRecvMsgSize = 16 * 1024 * 1024 // 16MB
+	}
+	if cfg.MaxSendMsgSize <= 0 {
+		cfg.MaxSendMsgSize = 16 * 1024 * 1024 // 16MB
+	}
+
 	return &Server{
 		cfg:       cfg,
 		log:       log,

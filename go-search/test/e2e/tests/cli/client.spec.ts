@@ -26,5 +26,29 @@ test.describe("CLI Client", () => {
     expect(stdout).toContain("Available Commands:");
   });
 
-  // Add more commands: index, search, etc.
+  test("should support answer mode (-a)", async () => {
+    // 1. Index playwright.config.ts
+    const indexCmd = `${binaryPath} index playwright.config.ts -S localhost:50052 -s default`;
+    await execAsync(indexCmd);
+
+    // Allow indexing
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // 2. Search
+    const searchCmd = `${binaryPath} search "defineConfig" -a -S localhost:50052`;
+    const { stdout } = await execAsync(searchCmd);
+
+    expect(stdout).toContain("Based on the indexed files");
+    expect(stdout).toContain('<cite i="1"/>');
+  });
+
+  test("should support verbose mode (-v)", async () => {
+    // Reuse index
+    const searchCmd = `${binaryPath} search "defineConfig" -v -S localhost:50052`;
+    const { stdout } = await execAsync(searchCmd);
+
+    expect(stdout).toContain("Timing Breakdown:");
+    expect(stdout).toContain("Embed:");
+    expect(stdout).toContain("Retrieve:");
+  });
 });

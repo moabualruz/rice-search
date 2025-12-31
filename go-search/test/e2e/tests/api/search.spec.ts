@@ -56,4 +56,55 @@ test.describe("Search API", () => {
     expect(body.results.length).toBeGreaterThan(0);
     expect(body.results[0].language).toBe("go");
   });
+  test("should expand abbreviations (cfg -> configuration)", async ({
+    request,
+  }) => {
+    // 1. Index
+    await request.post("/v1/stores/default/index", {
+      data: {
+        files: [
+          {
+            path: "test/config.go",
+            content: "func LoadConfiguration() { }",
+            language: "go",
+          },
+        ],
+      },
+    });
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // 2. Search for "cfg"
+    const response = await request.post("/v1/stores/default/search", {
+      data: { query: "load cfg" },
+    });
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body.results.length).toBeGreaterThan(0);
+    expect(body.results[0].path).toBe("test/config.go");
+  });
+
+  test("should split cases (getUser -> get user)", async ({ request }) => {
+    // 1. Index
+    await request.post("/v1/stores/default/index", {
+      data: {
+        files: [
+          {
+            path: "test/user.py",
+            content: "def get_user(): pass",
+            language: "python",
+          },
+        ],
+      },
+    });
+    await new Promise((r) => setTimeout(r, 1000));
+
+    // 2. Search for "getUser"
+    const response = await request.post("/v1/stores/default/search", {
+      data: { query: "getUser" },
+    });
+    expect(response.ok()).toBeTruthy();
+    const body = await response.json();
+    expect(body.results.length).toBeGreaterThan(0);
+    expect(body.results[0].path).toBe("test/user.py");
+  });
 });
