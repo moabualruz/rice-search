@@ -28,6 +28,11 @@ class Settings(BaseSettings):
     MCP_TCP_PORT: int = 9090
     MCP_SSE_PORT: int = 9091
 
+    # AST Parsing (Phase 12)
+    AST_PARSING_ENABLED: bool = True
+    AST_LANGUAGES: List[str] = ["py", "js", "ts", "go", "rs", "java", "cpp"]
+    AST_MAX_CHUNK_LINES: int = 200
+
     class Config:
         env_file = ".env"
 

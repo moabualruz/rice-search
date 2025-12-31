@@ -44,7 +44,7 @@ def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: s
     if not text.strip():
         return {"status": "skipped", "message": "Empty file"}
 
-    # 2. Chunk
+    # 2. Chunk (AST-aware for code, fallback to text)
     self.update_state(state='STARTED', meta={'step': 'Chunking'})
     base_metadata = {
         "file_path": file_path,
@@ -52,7 +52,36 @@ def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: s
         "org_id": org_id,  # Phase 7 Multi-tenancy
         "doc_id": str(uuid.uuid4())
     }
-    chunks = chunker.chunk_text(text, base_metadata)
+    
+    # Try AST parsing for code files (Phase 12)
+    chunks = []
+    ast_used = False
+    if settings.AST_PARSING_ENABLED:
+        from pathlib import Path
+        from src.services.ingestion.ast_parser import get_ast_parser
+        parser = get_ast_parser()
+        path = Path(file_path)
+        if parser.can_parse(path):
+            ast_chunks = parser.parse_file(path, text)
+            if ast_chunks:
+                ast_used = True
+                for i, ast_chunk in enumerate(ast_chunks):
+                    chunks.append({
+                        "content": ast_chunk.content,
+                        "chunk_index": i,
+                        "metadata": {
+                            **base_metadata,
+                            "language": ast_chunk.language,
+                            "chunk_type": ast_chunk.chunk_type,
+                            "symbols": ast_chunk.symbols,
+                            "start_line": ast_chunk.start_line,
+                            "end_line": ast_chunk.end_line,
+                        }
+                    })
+    
+    # Fallback to text chunking
+    if not chunks:
+        chunks = chunker.chunk_text(text, base_metadata)
 
     # 3. Embed (Dense)
     self.update_state(state='STARTED', meta={'step': 'Embedding (Dense)'})
