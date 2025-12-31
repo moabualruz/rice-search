@@ -18,7 +18,7 @@ chunker = DocumentChunker()
 COLLECTION_NAME = "rice_codebase"
 
 @celery_app.task(bind=True)
-def ingest_file_task(self, file_path: str, repo_name: str = "default"):
+def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: str = "public"):
     """
     Full pipeline: Parse -> Chunk -> Embed -> Upsert
     """
@@ -38,6 +38,7 @@ def ingest_file_task(self, file_path: str, repo_name: str = "default"):
     base_metadata = {
         "file_path": file_path,
         "repo_name": repo_name,
+        "org_id": org_id, # Phase 7 Multi-tenancy
         "doc_id": str(uuid.uuid4())
     }
     chunks = chunker.chunk_text(text, base_metadata)

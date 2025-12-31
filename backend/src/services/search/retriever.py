@@ -9,7 +9,7 @@ COLLECTION_NAME = "rice_codebase"
 
 class Retriever:
     @staticmethod
-    def search(query: str, limit: int = 5) -> List[Dict]:
+    def search(query: str, limit: int = 5, org_id: str = "public") -> List[Dict]:
         """
         Semantic search. Encodes query and searches Qdrant.
         """
@@ -20,9 +20,20 @@ class Retriever:
         # We assume collection exists (created by ingestion). 
         # If not, return empty list safely.
         try:
+             # Construct Filter for Multi-tenancy
+             query_filter = Filter(
+                 must=[
+                     {
+                         "key": "org_id",
+                         "match": {"value": org_id}
+                     }
+                 ]
+             )
+             
              results = qdrant.search(
                 collection_name=COLLECTION_NAME,
                 query_vector=vector,
+                query_filter=query_filter, # Apply org_id filter
                 limit=limit
             )
         except Exception:

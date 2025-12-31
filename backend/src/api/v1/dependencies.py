@@ -7,6 +7,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 async def get_current_user(token: str = Depends(oauth2_scheme)):
     keys = await get_public_keys()
     payload = verify_token(token, keys)
+    
+    # Extract Organization ID (Phase 7 Multi-tenancy)
+    # Default to 'public' if not present in token attributes
+    org_id = payload.get("org_id", "public") 
+    
+    # Inject into user dict for downstream use
+    payload["org_id"] = org_id
+    
     return payload
 
 async def verify_admin(user: dict = Depends(get_current_user)):

@@ -38,12 +38,12 @@ class RAGEngine:
         
         self.chain = self.prompt | self.llm | StrOutputParser()
 
-    def ask(self, query: str) -> Dict:
+    def ask(self, query: str, org_id: str = "public") -> Dict:
         """
         End-to-end RAG pipeline.
         """
         # 1. Retrieve
-        docs = self.retriever.search(query, limit=3)
+        docs = self.retriever.search(query, limit=3, org_id=org_id)
         
         if not docs:
             return {

@@ -31,14 +31,18 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account }) {
-      if (account) {
+    async jwt({ token, account, profile }) {
+      if (account && profile) {
         token.accessToken = account.access_token;
+        // Phase 7: Extract org_id from Keycloak Profile/Token
+        // Note: Keycloak mappers needed to expose this in ID Token
+        token.org_id = (profile as any).org_id || "public";
       }
       return token;
     },
     async session({ session, token }) {
       session.accessToken = token.accessToken as string;
+      (session.user as any).org_id = token.org_id as string;
       return session;
     },
   },

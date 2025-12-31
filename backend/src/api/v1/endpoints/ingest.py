@@ -45,7 +45,11 @@ async def upload_file(
              file.file.seek(0)
              shutil.copyfileobj(file.file, buffer)
 
-        task = ingest_file_task.delay(shared_path, repo_name="upload")
+        # Extract org_id from authenticated user (injected by verify_admin -> get_current_user)
+        # Default to 'public' if somehow missing (though dependency ensures it)
+        org_id = admin.get("org_id", "public")
+
+        task = ingest_file_task.delay(shared_path, repo_name="upload", org_id=org_id)
         
         return {"status": "queued", "task_id": str(task.id), "file": file.filename}
 
