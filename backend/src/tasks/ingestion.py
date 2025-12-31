@@ -52,10 +52,13 @@ def ingest_file_task(self, file_path: str, repo_name: str = "default"):
     points = []
     
     # Ensure collection exists
-    qdrant.recreate_collection(
-        collection_name=COLLECTION_NAME,
-        vectors_config={"size": 384, "distance": "Cosine"}
-    )
+    try:
+        qdrant.get_collection(COLLECTION_NAME)
+    except Exception:
+        qdrant.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config={"size": 384, "distance": "Cosine"}
+        )
     
     for i, chunk in enumerate(chunks):
         points.append(PointStruct(

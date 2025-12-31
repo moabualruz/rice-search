@@ -14,7 +14,11 @@
     "react-dom": "^18",
     "@mantine/core": "^7.5.0",
     "@mantine/hooks": "^7.5.0",
-    "tabler-icons-react": "^1.56.0"
+    "tabler-icons-react": "^1.56.0",
+    "lucide-react": "^0.309.0",
+    "react-markdown": "^9.0.1",
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.1"
   },
   "devDependencies": {
     "typescript": "^5",
