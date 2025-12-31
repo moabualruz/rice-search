@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     AST_LANGUAGES: List[str] = ["py", "js", "ts", "go", "rs", "java", "cpp"]
     AST_MAX_CHUNK_LINES: int = 200
 
+    # Reranking (REQ-SRCH-03)
+    RERANK_ENABLED: bool = True
+    RERANK_MODEL: str = "BAAI/bge-reranker-base"
+    RERANK_TOP_K: int = 10  # Rerank top K results from initial retrieval
+
     class Config:
         env_file = ".env"
 

@@ -48,27 +48,41 @@ class Retriever:
         query: str, 
         limit: int = 5, 
         org_id: str = "public",
-        hybrid: bool = None
+        hybrid: bool = None,
+        rerank: bool = None
     ) -> List[Dict]:
         """
-        Search using dense or hybrid mode.
+        Search using dense or hybrid mode with optional reranking.
         
         Args:
             query: Search query
             limit: Max results
             org_id: Organization ID for multi-tenancy filtering
             hybrid: Enable hybrid search (default: from settings)
+            rerank: Enable reranking (default: from settings)
             
         Returns:
             List of search results with score, text, and metadata
         """
         # Determine if hybrid search should be used
         use_hybrid = hybrid if hybrid is not None else settings.SPARSE_ENABLED
+        use_rerank = rerank if rerank is not None else settings.RERANK_ENABLED
+        
+        # If reranking, over-fetch for better results
+        fetch_limit = limit * 3 if use_rerank else limit
         
         if use_hybrid:
-            return Retriever.hybrid_search(query, limit, org_id)
+            results = Retriever.hybrid_search(query, fetch_limit, org_id)
         else:
-            return Retriever.dense_search(query, limit, org_id)
+            results = Retriever.dense_search(query, fetch_limit, org_id)
+        
+        # Apply reranking if enabled
+        if use_rerank and results:
+            from src.services.search.reranker import rerank_results
+            results = rerank_results(query, results, top_k=limit)
+        
+        # Ensure we return only the requested limit
+        return results[:limit]
     
     @staticmethod
     def dense_search(query: str, limit: int = 5, org_id: str = "public") -> List[Dict]:

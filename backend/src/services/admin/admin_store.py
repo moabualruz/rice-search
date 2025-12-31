@@ -153,6 +153,8 @@ class AdminStore:
             "mcp_enabled": overrides.get("mcp_enabled", settings.MCP_ENABLED),
             "mcp_transport": settings.MCP_TRANSPORT,
             "mcp_tcp_port": settings.MCP_TCP_PORT,
+            "rerank_enabled": overrides.get("rerank_enabled", settings.RERANK_ENABLED),
+            "rerank_model": settings.RERANK_MODEL,
             "qdrant_url": settings.QDRANT_URL,
             "redis_url": settings.REDIS_URL
         }
