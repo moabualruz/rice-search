@@ -21,6 +21,7 @@ import (
 	"github.com/ricesearch/rice-search/internal/connection"
 	"github.com/ricesearch/rice-search/internal/grpcserver"
 	"github.com/ricesearch/rice-search/internal/index"
+	"github.com/ricesearch/rice-search/internal/mcp"
 	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/ml"
 	"github.com/ricesearch/rice-search/internal/models"
@@ -370,6 +371,25 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	})
 	log.Info("Initialized detailed health checker")
 
+	// Initialize and start MCP server
+	mcpHandler := mcp.NewHandler(mcp.HandlerConfig{
+		SearchService: searchSvc,
+		IndexService:  indexSvc,
+		StoreService:  storeSvc,
+	})
+	mcpServer := mcp.NewServer(mcp.ServerConfig{
+		Handler: mcpHandler,
+	})
+
+	srvCtx, srvCancel := context.WithCancel(context.Background())
+	defer srvCancel()
+
+	go func() {
+		if err := mcpServer.Start(srvCtx); err != nil {
+			log.Error("MCP server error", "error", err)
+		}
+	}()
+
 	// Start gRPC server
 	grpcCfg := grpcserver.Config{
 		TCPAddr:        fmt.Sprintf("%s:%d", host, grpcPort),
@@ -480,9 +500,13 @@ func runServer(cmd *cobra.Command, _ []string) error {
 
 	grpcSrv.Stop()
 
+	// MCP server shuts down via context cancellation (srvCtx)
+
 	log.Info("Server stopped")
 	return nil
 }
+
+// ... helper functions ...
 
 // parseQdrantURL extracts host and gRPC port from a Qdrant URL.
 func parseQdrantURL(rawURL string) (string, int, error) {
