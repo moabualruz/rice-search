@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from 'react';
+import Image from 'next/image';
 import { Button, Input, Card } from '@/components/ui-elements';
 import { Search, Sparkles, Database, FileText, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -42,7 +43,16 @@ export default function Home() {
       {/* Hero */}
       <div className="w-full max-w-4xl space-y-8 text-center">
         <div className="space-y-4">
-          <h1 className="text-5xl font-extrabold tracking-tight sm:text-7xl bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
+          <div className="flex items-center justify-center gap-4 mb-4">
+            <Image 
+              src="/logo.svg" 
+              alt="Rice Search" 
+              width={64} 
+              height={64}
+              className="rounded-xl"
+            />
+          </div>
+          <h1 className="text-5xl font-extrabold tracking-tight sm:text-7xl text-primary">
             Rice Search
           </h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
@@ -53,7 +63,7 @@ export default function Home() {
         {/* Search Bar */}
         <form onSubmit={handleSearch} className="relative max-w-2xl mx-auto">
           <div className="relative group">
-            <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl opacity-50 group-hover:opacity-100 transition duration-200 blur"></div>
+            <div className="absolute -inset-0.5 bg-gradient-to-r from-primary to-accent rounded-xl opacity-50 group-hover:opacity-100 transition duration-200 blur"></div>
             <div className="relative flex items-center bg-slate-900 rounded-xl p-2 gap-2">
                <div className="pl-3 text-slate-400">
                   {mode === 'rag' ? <Sparkles size={20} /> : <Search size={20} />}

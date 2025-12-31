@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 
 const navItems = [
@@ -23,11 +24,19 @@ export default function AdminLayout({
       {/* Sidebar */}
       <aside className="w-64 bg-slate-800 border-r border-slate-700">
         <div className="p-6">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl">🍚</span>
-            <span className="text-xl font-bold text-white">Rice Search</span>
+          <Link href="/" className="flex items-center gap-3">
+            <Image 
+              src="/logo.svg" 
+              alt="Rice Search" 
+              width={40} 
+              height={40}
+              className="rounded-lg"
+            />
+            <div>
+              <span className="text-xl font-bold text-white">Rice Search</span>
+              <p className="text-slate-400 text-sm">Admin Console</p>
+            </div>
           </Link>
-          <p className="text-slate-400 text-sm mt-1">Admin Console</p>
         </div>
 
         <nav className="px-4">
@@ -41,7 +50,7 @@ export default function AdminLayout({
                 href={item.href}
                 className={`flex items-center gap-3 px-4 py-3 rounded-lg mb-1 transition-colors ${
                   isActive
-                    ? 'bg-green-600/20 text-green-400 border border-green-600/30'
+                    ? 'bg-primary/20 text-primary border border-primary/30'
                     : 'text-slate-300 hover:bg-slate-700/50'
                 }`}
               >
