@@ -95,7 +95,7 @@ func NewHandler(
 // RegisterRoutes registers all web routes on the given mux.
 func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Main Pages
-	mux.HandleFunc("GET /", h.handleDashboard)
+	mux.HandleFunc("GET /{$}", h.handleDashboard)
 	mux.HandleFunc("GET /search", h.handleSearchPage)
 	mux.HandleFunc("GET /stores", h.handleStoresPage)
 	mux.HandleFunc("GET /stores/{name}", h.handleStoreDetail)
@@ -108,6 +108,11 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /files/reindex/{path...}", h.handleReindexFile)
 	mux.HandleFunc("DELETE /files/{path...}", h.handleDeleteFile)
 	mux.HandleFunc("GET /stores/{name}/files/export", h.handleExportFiles)
+
+	// Static Files
+	// Serve static files from ./internal/web/static
+	// Note: In production this might need to be adjusted or embedded
+	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./internal/web/static"))))
 
 	// Admin Pages
 	mux.HandleFunc("GET /admin", h.handleAdminPage)

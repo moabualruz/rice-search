@@ -18,9 +18,9 @@ templ Layout(data LayoutData) {
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ data.Title } - Rice Search</title>
 			<!-- Google Fonts: Inter & JetBrains Mono -->
-			<link rel="preconnect" href="https://fonts.googleapis.com">
-			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+			<link rel="preconnect" href="https://fonts.googleapis.com" />
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+			<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
 			
 			<!-- Tailwind CSS via CDN -->
 			<script src="https://cdn.tailwindcss.com"></script>
@@ -72,77 +72,14 @@ templ Layout(data LayoutData) {
 					}
 				}
 			</script>
+			
 			<!-- HTMX -->
 			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 			<script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
+			
 			<!-- Custom Premium Styles -->
-			<style>
-				:root {
-					--bg-primary: #f8fafc; /* Slate 50 */
-					--text-primary: #0f172a; /* Slate 900 */
-					--glass-bg: rgba(255, 255, 255, 0.7);
-					--glass-border: rgba(255, 255, 255, 0.2);
-					--sidebar-bg: rgba(255, 255, 255, 0.8);
-				}
-				
-				html.dark {
-					--bg-primary: #1e293b; /* Slate 800 - Matte Navy */
-					--text-primary: #f8fafc; /* Slate 50 - High Contrast White */
-					--glass-bg: rgba(30, 41, 59, 0.6); /* Slate 800 with opacity */
-					--glass-border: rgba(255, 255, 255, 0.08); /* Subtle white border */
-					--sidebar-bg: rgba(15, 23, 42, 0.7); /* Slate 900 Glass */
-				}
-				
-				body {
-					background-color: var(--bg-primary);
-					color: var(--text-primary);
-					font-family: 'Inter', sans-serif;
-					-webkit-font-smoothing: antialiased;
-				}
-
-				/* Glassmorphism Classes */
-				.glass {
-					background: var(--glass-bg);
-					backdrop-filter: blur(12px);
-					-webkit-backdrop-filter: blur(12px);
-					border: 1px solid var(--glass-border);
-					box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-				}
-				
-				.glass-panel {
-					background: var(--glass-bg);
-					backdrop-filter: blur(16px);
-					border: 1px solid var(--glass-border);
-					border-radius: 6px; /* Reduced from V2 (was likely 12px) as requested */
-				}
-
-				.glass-hover:hover {
-					background: rgba(255, 255, 255, 0.05);
-					border-color: rgba(255, 255, 255, 0.2);
-					transition: all 0.2s ease;
-				}
-				
-				/* Sidebar Styles */
-				.sidebar-glass {
-					background: var(--sidebar-bg);
-					backdrop-filter: blur(20px);
-					border-right: 1px solid var(--glass-border);
-				}
-
-				.htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
-				.htmx-request .htmx-indicator { opacity: 1; }
-				.htmx-request.htmx-indicator { opacity: 1; }
-				
-				/* Animations */
-				@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-				.animate-fade-in { animation: fadeIn 0.3s ease-out; }
-				
-				/* Scrollbar */
-				::-webkit-scrollbar { width: 8px; height: 8px; }
-				::-webkit-scrollbar-track { background: transparent; }
-				::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.3); border-radius: 4px; }
-				::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.5); }
-			</style>
+			<link href="/static/css/premium.css" rel="stylesheet" />
+			
 			<!-- Theme toggle script -->
 			<script>
 				function getTheme() {
@@ -241,6 +178,7 @@ templ Layout(data LayoutData) {
 					<!-- Footer / Theme Toggle -->
 					<div class="p-4 border-t border-glass-border">
 						<button 
+							id="theme-toggle"
 							onclick="cycleTheme()"
 							class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm"
 						>
@@ -269,6 +207,10 @@ templ Layout(data LayoutData) {
 									<span class="opacity-80">{ healthLabel(data.HealthStatus) }</span>
 								</div>
 								
+								<div id="global-status" class="hidden flex items-center gap-2 text-primary-400">
+									<!-- Content injected via SSE -->
+								</div>
+
 								<div class="w-px h-3 bg-white/20"></div>
 
 								<!-- Version -->
@@ -281,7 +223,7 @@ templ Layout(data LayoutData) {
 							</div>
 							
 							<!-- Mobile Menu Button (Visible only on small screens) -->
-							<button class="md:hidden p-2 rounded-md hover:bg-white/10">
+							<button class="md:hidden p-2 rounded-md hover:bg-white/10" onclick="document.querySelector('aside').classList.toggle('hidden'); document.querySelector('aside').classList.toggle('absolute'); document.querySelector('aside').classList.toggle('bg-black/90'); document.querySelector('aside').classList.toggle('w-full'); document.querySelector('aside').classList.toggle('h-full')">
 								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
 								</svg>
@@ -295,8 +237,6 @@ templ Layout(data LayoutData) {
 					</main>
 				</div>
 			</div>
-
-			<!-- Mobile Sidebar Overlay (TODO: specific mobile menu implementation) -->
 		</body>
 	</html>
 }
@@ -347,7 +287,7 @@ templ EmptyState(title, message string) {
 
 // Error message component
 templ ErrorMessage(message string) {
-	<div class="rounded-md bg-red-50 p-4">
+	<div class="rounded-md bg-red-50 dark:bg-red-900/10 p-4 border border-red-200 dark:border-red-900/20">
 		<div class="flex">
 			<div class="flex-shrink-0">
 				<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -355,7 +295,7 @@ templ ErrorMessage(message string) {
 				</svg>
 			</div>
 			<div class="ml-3">
-				<p class="text-sm font-medium text-red-800">{ message }</p>
+				<p class="text-sm font-medium text-red-800 dark:text-red-300">{ message }</p>
 			</div>
 		</div>
 	</div>
@@ -363,7 +303,7 @@ templ ErrorMessage(message string) {
 
 // Success message component
 templ SuccessMessage(message string) {
-	<div class="rounded-md bg-green-50 p-4">
+	<div class="rounded-md bg-green-50 dark:bg-green-900/10 p-4 border border-green-200 dark:border-green-900/20">
 		<div class="flex">
 			<div class="flex-shrink-0">
 				<svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
@@ -371,7 +311,7 @@ templ SuccessMessage(message string) {
 				</svg>
 			</div>
 			<div class="ml-3">
-				<p class="text-sm font-medium text-green-800">{ message }</p>
+				<p class="text-sm font-medium text-green-800 dark:text-green-300">{ message }</p>
 			</div>
 		</div>
 	</div>

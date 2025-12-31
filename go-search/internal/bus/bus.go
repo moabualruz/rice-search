@@ -80,6 +80,7 @@ const (
 	TopicIndexRequest  = "index.request"
 	TopicIndexResponse = "index.response"
 	TopicChunkCreated  = "index.chunk.created"
+	TopicIndexProgress = "index.progress"
 
 	// Store service topics.
 	TopicStoreCreated = "store.created"

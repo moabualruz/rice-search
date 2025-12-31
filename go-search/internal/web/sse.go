@@ -32,23 +32,34 @@ func (h *Handler) handleSSEEvents(w http.ResponseWriter, r *http.Request) {
 
 	// Create a channel for events
 	eventChan := make(chan bus.Event, 10)
-	
+
 	// Subscribe to model progress events
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
 
 	if h.bus != nil {
+		// Subscribe to model progress
 		err := h.bus.Subscribe(ctx, bus.TopicModelProgress, func(ctx context.Context, event bus.Event) error {
 			select {
 			case eventChan <- event:
 			default:
-				// Drop event if channel full
 			}
 			return nil
 		})
 		if err != nil {
-			h.log.Error("Failed to subscribe to SSE events", "error", err)
-			return
+			h.log.Error("Failed to subscribe to model progress events", "error", err)
+		}
+
+		// Subscribe to index progress
+		err = h.bus.Subscribe(ctx, bus.TopicIndexProgress, func(ctx context.Context, event bus.Event) error {
+			select {
+			case eventChan <- event:
+			default:
+			}
+			return nil
+		})
+		if err != nil {
+			h.log.Error("Failed to subscribe to index progress events", "error", err)
 		}
 	}
 
@@ -66,28 +77,46 @@ func (h *Handler) handleSSEEvents(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		case event := <-eventChan:
 			// Format event for SSE
-			// We expect the payload to be models.DownloadProgress
-			progress, ok := event.Payload.(models.DownloadProgress)
-			if !ok {
-				// Try to cast if it was deserialized as map (unlikely within same process but possible with JSON bus)
-				continue
-			}
 
-			// Render the progress bar component
-			// <div id="progress-{id}" ...>
-			sanitizedID := strings.ReplaceAll(progress.ModelID, "/", "_")
-			html := fmt.Sprintf(`<div id="progress-%s" class="bg-primary-600 h-1.5 rounded-full transition-all duration-300" style="width: %.1f%%"></div>`,
-				sanitizedID, progress.Percent)
+			switch event.Type {
+			case bus.TopicModelProgress:
+				progress, ok := event.Payload.(models.DownloadProgress)
+				if !ok {
+					continue
+				}
+				sanitizedID := strings.ReplaceAll(progress.ModelID, "/", "_")
+				html := fmt.Sprintf(`<div id="progress-%s" class="bg-primary-600 h-1.5 rounded-full transition-all duration-300" style="width: %.1f%%"></div>`,
+					sanitizedID, progress.Percent)
+				fmt.Fprintf(w, "event: model.progress\ndata: %s\n\n", html)
 
-			// If complete, we might want to trigger a full refresh or replace the "Downloading..." text
-			if progress.Complete {
-				// Trigger a reload of the model list or verify status
-				fmt.Fprintf(w, "event: model.progress\ndata: %s\n\n", html)
-				// Also send a special event to reload the card?
-				// For now, just filling the bar is good visual feedback.
-				// The user can refresh or we can use OOB swap to check status.
-			} else {
-				fmt.Fprintf(w, "event: model.progress\ndata: %s\n\n", html)
+			case bus.TopicIndexProgress:
+				payload, ok := event.Payload.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				percent := 0
+				if p, ok := payload["percentage"].(int); ok {
+					percent = p
+				} else if p, ok := payload["percentage"].(float64); ok {
+					percent = int(p)
+				}
+
+				// Show status in header
+				// If 100%, show brief success then hide, or just hide?
+				// For continuous indexing, seeing "Indexing 100%" then "Indexing 0%" might be weird.
+				// Let's just show "Indexing: XX%"
+
+				displayClass := "flex"
+				if percent >= 100 {
+					// Fade out after a moment? SSE can't easily wait.
+					// We can send a "hidden" class if we want to hide it.
+					// But let's just show 100% for now.
+				}
+
+				html := fmt.Sprintf(`<div id="global-status" class="%s items-center gap-2 text-primary-400 font-medium whitespace-nowrap"><span class="animate-pulse">●</span> Indexing: %d%%</div>`,
+					displayClass, percent)
+
+				fmt.Fprintf(w, "event: index.progress\ndata: %s\n\n", html)
 			}
 
 			flusher.Flush()

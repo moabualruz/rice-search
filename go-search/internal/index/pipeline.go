@@ -162,6 +162,10 @@ func (p *Pipeline) Index(ctx context.Context, req IndexRequest) (*IndexResult, e
 	}
 
 	// Process documents in batches
+	p.publishIndexEvent(ctx, &IndexResult{ // Send initial "started" event or just rely on progress?
+		// Actually let's use the new progress event
+	})
+
 	chunks, docInfos, errs := p.processDocuments(ctx, req.Store, toIndex)
 	result.Errors = append(result.Errors, errs...)
 	result.Failed += len(errs)
@@ -232,6 +236,34 @@ func (p *Pipeline) publishIndexEvent(ctx context.Context, result *IndexResult) {
 	}
 }
 
+// publishIndexProgress publishes an index progress event.
+func (p *Pipeline) publishIndexProgress(ctx context.Context, store, stage string, current, total int) {
+	if p.bus == nil {
+		return
+	}
+
+	percent := 0
+	if total > 0 {
+		percent = int(float64(current) / float64(total) * 100)
+	}
+
+	event := bus.Event{
+		Type:   bus.TopicIndexProgress,
+		Source: "index",
+		Payload: map[string]interface{}{
+			"store":      store,
+			"stage":      stage,
+			"current":    current,
+			"total":      total,
+			"percentage": percent,
+		},
+	}
+	// Use fire-and-forget to avoid blocking
+	go func() {
+		_ = p.bus.Publish(context.Background(), bus.TopicIndexProgress, event)
+	}()
+}
+
 // publishChunkCreatedEvent publishes a chunk.created event to the event bus.
 func (p *Pipeline) publishChunkCreatedEvent(ctx context.Context, chunk *Chunk) {
 	if p.bus == nil {
@@ -265,7 +297,12 @@ func (p *Pipeline) processDocuments(ctx context.Context, store string, docs []*D
 	var infos []DocInfo
 	var errs []IndexError
 
-	for _, doc := range docs {
+	for i, doc := range docs {
+		// Publish progress every 10 docs or if last
+		if i%10 == 0 || i == len(docs)-1 {
+			p.publishIndexProgress(ctx, store, "processing", i+1, len(docs))
+		}
+
 		// Extract symbols for the document
 		doc.Symbols = ExtractSymbols(doc.Content, doc.Language)
 

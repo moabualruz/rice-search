@@ -1,0 +1,87 @@
+package components
+
+
+
+// GlassPanel renders a container with glassmorphism styling
+templ GlassPanel(class string) {
+	<div class={ "glass-panel", class }>
+		{ children... }
+	</div>
+}
+
+// GlassCard renders a card with glassmorphism styling and optional hover effect
+templ GlassCard(class string, hover bool) {
+	<div class={ "glass-panel p-6 flex flex-col transition-all duration-200", 
+		templ.KV("hover:border-primary-500/30 hover:bg-white/10 hover:shadow-lg hover:-translate-y-0.5", hover),
+		class }>
+		{ children... }
+	</div>
+}
+
+// GlassHeader renders a standardized header section for glass cards
+templ GlassHeader(title, subtitle string, icon string) {
+	<div class="flex items-center justify-between mb-4">
+		<div>
+			<h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white">{ title }</h3>
+			if subtitle != "" {
+				<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{ subtitle }</p>
+			}
+		</div>
+		if icon != "" {
+			<div class="flex items-center justify-center h-10 w-10 rounded-lg bg-primary-500/10 text-xl text-primary-600 dark:text-primary-400">
+				{ icon }
+			</div>
+		}
+	</div>
+	{ children... }
+}
+
+// GlassButton renders a button with glass styling
+templ GlassButton(href, label, icon string, primary bool) {
+	if href != "" {
+		<a 
+			href={ templ.SafeURL(href) }
+			class={ "inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500",
+				templ.KV("bg-primary-600 hover:bg-primary-500 text-white border border-transparent", primary),
+				templ.KV("bg-white/5 hover:bg-white/10 text-gray-700 dark:text-gray-200 border border-glass-border", !primary) }
+		>
+			if icon != "" {
+				<span class="mr-2">{ icon }</span> 
+			}
+			{ label }
+		</a>
+	} else {
+		<button 
+			type="button"
+			class={ "inline-flex items-center justify-center px-4 py-2 rounded-md text-sm font-medium transition-colors shadow-sm focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500",
+				templ.KV("bg-primary-600 hover:bg-primary-500 text-white border border-transparent", primary),
+				templ.KV("bg-white/5 hover:bg-white/10 text-gray-700 dark:text-gray-200 border border-glass-border", !primary) }
+		>
+			if icon != "" {
+				<span class="mr-2">{ icon }</span> 
+			}
+			{ label }
+			{ children... }
+		</button>
+	}
+}
+
+// GlassGrid renders a responsive grid for stats/cards
+templ GlassGrid() {
+	<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+		{ children... }
+	</div>
+}
+
+// GlassStat renders a single stat item
+templ GlassStat(label string, value string, icon string) {
+	<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+		<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+			if icon != "" {
+				<span class="text-primary-500">{ icon }</span>
+			}
+			{ label }
+		</dt>
+		<dd class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{ value }</dd>
+	</div>
+}

@@ -1,36 +1,92 @@
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.174+01:00 level=INFO msg="Starting Rice Search Server" version=dev grpc_port=50052 http_port=8081
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.174+01:00 level=INFO msg="Initialized metrics" persistence=memory
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.174+01:00 level=INFO msg="Event logging disabled"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.174+01:00 level=INFO msg="Event bus instrumented with metrics"
+
+[1A[2K[WebServer] 2025/12/31 03:06:22 WARN Client version is not compatible with server version. Major versions should match and minor version difference must not exceed 1. Set SkipCompatibilityCheck=true to skip version check. clientVersion=v1.16.2 serverVersion=1.13.0
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.235+01:00 level=INFO msg="Connected to Qdrant" host=localhost port=6334
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Loading ML models..."
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Loading embedder on GPU" device=cuda
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Loading sparse encoder on GPU" device=cuda
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Loading reranker on GPU" device=cuda
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Registered ML event handlers (embed, sparse, rerank)"
+
+[1A[2K[WebServer] 2025/12/31 03:06:22 [INFO] ML Mock Mode Enabled (RICE_SEARCH_MOCK_ML=true)
+[WebServer] 2025/12/31 03:06:22 WARN Tree-Sitter not available (CGO disabled), using fallback parser
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Registered metrics event subscriber (13 topics)"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Wired ML metrics (operations + cache)"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Initialized query understanding service"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Initialized observability service"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Multi-pass reranker attached to search service"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.236+01:00 level=INFO msg="Initialized multi-pass reranker (two-pass with early exit)"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Initialized model registry"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Initialized mapper service"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Initialized connection service"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Initialized settings service"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Connection monitoring service started"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Initialized connection monitoring service" search_spike_multiplier=3 inactivity_threshold=2h0m0s
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Monitoring service attached to search service"
+[2m[WebServer] [22mtime=2025-12-31T03:06:22.237+01:00 level=INFO msg="Initialized detailed health checker"
+
+
+[1A[2K[WebServer] 2025/12/31 03:06:22 INFO MCP server listening component=mcp network=unix addr=C:\Users\mkh\.local\run\rice-search\mcp.sock
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.238+01:00 level=INFO msg="gRPC server listening on TCP" addr=0.0.0.0:50052
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T03:06:22.240+01:00 level=INFO msg="Starting HTTP server" addr=0.0.0.0:8081 web_ui=enabled
+
 
 Running 1 test using 1 worker
 
-[1A[2K[1/1] [chromium] ΓÇ║ tests\web\admin_models.spec.ts:8:7 ΓÇ║ Admin Models ΓÇ║ should show downloading state when download clicked
-[1A[2K  1) [chromium] ΓÇ║ tests\web\admin_models.spec.ts:8:7 ΓÇ║ Admin Models ΓÇ║ should show downloading state when download clicked 
+[1A[2K[1/1] [chromium] ΓÇ║ tests\cli\watch.spec.ts:64:7 ΓÇ║ CLI Watch Mode ΓÇ║ should watch and sync changes
+[1A[2K[chromium] ΓÇ║ tests\cli\watch.spec.ts:64:7 ΓÇ║ CLI Watch Mode ΓÇ║ should watch and sync changes
+Starting watcher daemon...
 
-    Error: [2mexpect([22m[31mlocator[39m[2m).[22mtoBeVisible[2m([22m[2m)[22m failed
-
-    Locator: getByText('Downloading...')
-    Expected: visible
-    Timeout: 5000ms
-    Error: element(s) not found
-
-    Call log:
-    [2m  - Expect "toBeVisible" with timeout 5000ms[22m
-    [2m  - waiting for getByText('Downloading...')[22m
+[1A[2KWatch start stdout: Watcher started with PID 41356
+Stop with: rice-search watch stop 41356
 
 
-      24 |     // Expect "Downloading..." to appear in the card
-      25 |     // The OOB swap replaces the button with "Downloading..." status
-    > 26 |     await expect(page.getByText("Downloading...")).toBeVisible();
-         |                                                    ^
-      27 |
-      28 |     // We can also check if the progress bar appears
-      29 |     const progressBar = page.locator('[id^="progress-"]');
-        at F:\work\rice-search\go-search\test\e2e\tests\web\admin_models.spec.ts:26:52
+[1A[2KWatch start stderr: 
 
-    attachment #1: screenshot (image/png) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-    test-results\web-admin_models-Admin-Mod-f3abb-state-when-download-clicked-chromium\test-failed-1.png
-    ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+[1A[2KListing watchers...
 
-    Error Context: test-results\web-admin_models-Admin-Mod-f3abb-state-when-download-clicked-chromium\error-context.md
+[1A[2KList output: No active watchers
+
+
+[1A[2KWatcher not listed yet, waiting...
+
+[1A[2KList retry output: No active watchers
+
+
+[1A[2K  1) [chromium] ΓÇ║ tests\cli\watch.spec.ts:64:7 ΓÇ║ CLI Watch Mode ΓÇ║ should watch and sync changes ΓöÇΓöÇΓöÇΓöÇ
+
+    Error: [2mexpect([22m[31mreceived[39m[2m).[22mtoContain[2m([22m[32mexpected[39m[2m) // indexOf[22m
+
+    Expected substring: [32m"watch-test-store-1767146783050"[39m
+    Received string:    [31m"No active watchers[39m
+    [31m"[39m
+
+       98 |       );
+       99 |       console.log("List retry output:", listRetry.stdout);
+    > 100 |       expect(listRetry.stdout).toContain(storeName);
+          |                                ^
+      101 |     }
+      102 |
+      103 |     // 4. Wait for initial sync
+        at F:\work\rice-search\go-search\test\e2e\tests\cli\watch.spec.ts:100:32
 
 
 [1A[2K  1 failed
-    [chromium] ΓÇ║ tests\web\admin_models.spec.ts:8:7 ΓÇ║ Admin Models ΓÇ║ should show downloading state when download clicked 
+    [chromium] ΓÇ║ tests\cli\watch.spec.ts:64:7 ΓÇ║ CLI Watch Mode ΓÇ║ should watch and sync changes ΓöÇΓöÇΓöÇΓöÇΓöÇ
+
+To open last HTML report run:
+[36m[39m
+[36m  npx playwright show-report[39m
+[36m[39m
