@@ -1,0 +1,93 @@
+version: "3.8"
+
+services:
+  # ---------------------------------------------------------------------------
+  # INFRASTRUCTURE
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: always
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    restart: always
+
+  # ---------------------------------------------------------------------------
+  # PYTHON MONOLITH (API & WORKER)
+  # ---------------------------------------------------------------------------
+  # In production, these run from the same image.
+  # In dev, we mount volume for hot reload.
+
+  backend-api:
+    build: 
+      context: ../backend
+      dockerfile: Dockerfile
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - MINIO_ENDPOINT=minio:9000
+    volumes:
+      - ../backend:/app
+    depends_on:
+      - redis
+      - qdrant
+
+  backend-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: celery -A src.worker.celery_app worker --loglevel=info
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - MINIO_ENDPOINT=minio:9000
+    volumes:
+      - ../backend:/app
+    depends_on:
+      - redis
+      - qdrant
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND (NEXT.JS)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+
+volumes:
+  qdrant_data:
+  redis_data:
+  minio_data:

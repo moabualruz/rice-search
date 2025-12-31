@@ -9,7 +9,7 @@
 
 ## 1. Project Vision
 
-Rice Search V3 is a **general-purpose neural search and intelligence platform**, optimized for source code but capable of ingesting any structured or unstructured data (code, documentation, configs, logs).
+Rice Search is a **general-purpose neural search and intelligence platform**, optimized for source code but capable of ingesting any structured or unstructured data (code, documentation, configs, logs).
 
 The system exists to:
 

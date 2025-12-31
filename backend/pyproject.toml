@@ -1,0 +1,33 @@
+[project]
+name = "rice-search-backend"
+version = "0.1.0"
+description = "Enterprise Neural Search Backend"
+authors = [{name = "Rice Search Team"}]
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "celery>=5.3.6",
+    "redis>=5.0.1",
+    "qdrant-client>=1.7.0",
+    "langchain>=0.1.0",
+    "unstructured>=0.12.0",
+    "pydantic-settings>=2.1.0",
+    "httpx>=0.26.0",
+    "python-multipart>=0.0.6"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "black>=24.1.0",
+    "isort>=5.13.0",
+    "flake8>=7.0.0"
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
