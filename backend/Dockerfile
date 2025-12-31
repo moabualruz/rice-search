@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml .
+# Explicitly install deps to resolve potential pip resolution issues (Updated versions)
+RUN pip install --no-cache-dir "opentelemetry-api>=1.25.0" "opentelemetry-sdk>=1.25.0" "opentelemetry-instrumentation-fastapi>=0.46b0" "opentelemetry-instrumentation-requests>=0.46b0"
 RUN pip install --no-cache-dir .
 
 COPY . .
