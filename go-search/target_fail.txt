@@ -1,0 +1,46 @@
+=== RUN   TestDetectTargetType
+=== RUN   TestDetectTargetType/find_the_function
+=== RUN   TestDetectTargetType/locate_method_implementation
+=== RUN   TestDetectTargetType/class_definition
+=== RUN   TestDetectTargetType/struct_fields
+=== RUN   TestDetectTargetType/variable_scope
+=== RUN   TestDetectTargetType/const_values
+=== RUN   TestDetectTargetType/error_handling
+=== RUN   TestDetectTargetType/exception_caught
+=== RUN   TestDetectTargetType/test_cases
+=== RUN   TestDetectTargetType/unittest_suite
+=== RUN   TestDetectTargetType/config_file
+    code_terms_test.go:136: expected target "config" for "config file", got "file"
+=== RUN   TestDetectTargetType/settings_panel
+=== RUN   TestDetectTargetType/api_endpoint
+=== RUN   TestDetectTargetType/route_handler
+=== RUN   TestDetectTargetType/database_query
+=== RUN   TestDetectTargetType/db_connection
+=== RUN   TestDetectTargetType/authentication_flow
+=== RUN   TestDetectTargetType/login_system
+=== RUN   TestDetectTargetType/random_text
+=== RUN   TestDetectTargetType/#00
+--- FAIL: TestDetectTargetType (0.00s)
+    --- PASS: TestDetectTargetType/find_the_function (0.00s)
+    --- PASS: TestDetectTargetType/locate_method_implementation (0.00s)
+    --- PASS: TestDetectTargetType/class_definition (0.00s)
+    --- PASS: TestDetectTargetType/struct_fields (0.00s)
+    --- PASS: TestDetectTargetType/variable_scope (0.00s)
+    --- PASS: TestDetectTargetType/const_values (0.00s)
+    --- PASS: TestDetectTargetType/error_handling (0.00s)
+    --- PASS: TestDetectTargetType/exception_caught (0.00s)
+    --- PASS: TestDetectTargetType/test_cases (0.00s)
+    --- PASS: TestDetectTargetType/unittest_suite (0.00s)
+    --- FAIL: TestDetectTargetType/config_file (0.00s)
+    --- PASS: TestDetectTargetType/settings_panel (0.00s)
+    --- PASS: TestDetectTargetType/api_endpoint (0.00s)
+    --- PASS: TestDetectTargetType/route_handler (0.00s)
+    --- PASS: TestDetectTargetType/database_query (0.00s)
+    --- PASS: TestDetectTargetType/db_connection (0.00s)
+    --- PASS: TestDetectTargetType/authentication_flow (0.00s)
+    --- PASS: TestDetectTargetType/login_system (0.00s)
+    --- PASS: TestDetectTargetType/random_text (0.00s)
+    --- PASS: TestDetectTargetType/#00 (0.00s)
+FAIL
+FAIL	github.com/ricesearch/rice-search/internal/query	0.400s
+FAIL

@@ -19,12 +19,14 @@ import (
 	"github.com/ricesearch/rice-search/internal/bus"
 	"github.com/ricesearch/rice-search/internal/config"
 	"github.com/ricesearch/rice-search/internal/connection"
+	"github.com/ricesearch/rice-search/internal/evaluation"
 	"github.com/ricesearch/rice-search/internal/grpcserver"
 	"github.com/ricesearch/rice-search/internal/index"
 	"github.com/ricesearch/rice-search/internal/mcp"
 	"github.com/ricesearch/rice-search/internal/metrics"
 	"github.com/ricesearch/rice-search/internal/ml"
 	"github.com/ricesearch/rice-search/internal/models"
+	"github.com/ricesearch/rice-search/internal/observability"
 	apperrors "github.com/ricesearch/rice-search/internal/pkg/errors"
 	"github.com/ricesearch/rice-search/internal/pkg/logger"
 	"github.com/ricesearch/rice-search/internal/pkg/middleware"
@@ -249,6 +251,10 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	querySvc := query.NewService(log)
 	log.Info("Initialized query understanding service")
 
+	// Initialize observability service
+	obsSvc := observability.NewService(log)
+	log.Info("Initialized observability service")
+
 	// Initialize search service with query understanding, event bus, and metrics
 	searchCfg := search.DefaultConfig()
 	searchSvc := search.NewService(mlSvc, qc, log, searchCfg, querySvc, eventBus, metricsSvc)
@@ -424,7 +430,7 @@ func runServer(cmd *cobra.Command, _ []string) error {
 	webHandler.RegisterRoutes(mux)
 
 	// Register REST API routes
-	registerAPIRoutes(mux, searchSvc, storeSvc, indexSvc, mlSvc, modelReg, qc, log, version, detailedHealthChecker)
+	registerAPIRoutes(mux, searchSvc, storeSvc, indexSvc, mlSvc, modelReg, qc, log, version, detailedHealthChecker, obsSvc)
 
 	// Build middleware chain
 	handler := http.Handler(mux)
@@ -535,7 +541,7 @@ func parseQdrantURL(rawURL string) (string, int, error) {
 }
 
 // registerAPIRoutes registers REST API endpoints.
-func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, modelReg *models.Registry, _ *qdrant.Client, _ *logger.Logger, version string, detailedHealthChecker *search.DetailedHealthChecker) {
+func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *store.Service, indexSvc *index.Pipeline, mlSvc ml.Service, modelReg *models.Registry, _ *qdrant.Client, _ *logger.Logger, version string, detailedHealthChecker *search.DetailedHealthChecker, obsSvc *observability.Service) {
 	// Health endpoints
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -597,8 +603,13 @@ func registerAPIRoutes(mux *http.ServeMux, searchSvc *search.Service, storeSvc *
 	})
 
 	// Search handler
-	searchHandler := search.NewHandler(searchSvc)
+	searchHandler := search.NewHandler(searchSvc, obsSvc)
 	searchHandler.RegisterRoutes(mux)
+
+	// Evaluation handler
+	evaluator := evaluation.NewEvaluator(searchSvc)
+	evalHandler := evaluation.NewHandler(evaluator)
+	evalHandler.RegisterRoutes(mux)
 
 	// Store handler
 	mux.HandleFunc("GET /v1/stores", func(w http.ResponseWriter, r *http.Request) {

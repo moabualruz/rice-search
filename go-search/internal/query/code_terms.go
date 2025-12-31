@@ -1,6 +1,9 @@
 package query
 
-import "strings"
+import (
+	"sort"
+	"strings"
+)
 
 // CodeTerms maps code-specific terms to their synonyms.
 var CodeTerms = map[string][]string{
@@ -22,6 +25,150 @@ var CodeTerms = map[string][]string{
 	"http":      {"web", "rest", "request", "response"},
 	"query":     {"search", "find", "lookup"},
 	"index":     {"indexing", "catalog", "registry"},
+}
+
+// CodeAbbreviations maps common abbreviations to their full forms.
+// These are uni-directional: abbreviation -> expansions.
+var CodeAbbreviations = map[string][]string{
+	// Authentication & Security
+	"auth":   {"authentication", "authorization"},
+	"authn":  {"authentication"},
+	"authz":  {"authorization"},
+	"cred":   {"credential", "credentials"},
+	"creds":  {"credentials"},
+	"pwd":    {"password"},
+	"passwd": {"password"},
+	"perm":   {"permission", "permissions"},
+	"perms":  {"permissions"},
+	"sec":    {"security", "secure"},
+
+	// Configuration
+	"cfg":    {"config", "configuration"},
+	"conf":   {"config", "configuration"},
+	"config": {"configuration"},
+	"env":    {"environment"},
+	"opt":    {"option", "options"},
+	"opts":   {"options"},
+	"param":  {"parameter"},
+	"params": {"parameters"},
+	"prop":   {"property", "properties"},
+	"props":  {"properties"},
+
+	// UI & Components
+	"btn":   {"button"},
+	"nav":   {"navigation", "navbar"},
+	"hdr":   {"header"},
+	"ftr":   {"footer"},
+	"dlg":   {"dialog"},
+	"comp":  {"component"},
+	"comps": {"components"},
+	"el":    {"element"},
+	"elem":  {"element"},
+	"tpl":   {"template"},
+	"tmpl":  {"template"},
+	"img":   {"image"},
+
+	// Data & Database
+	"db":    {"database"},
+	"repo":  {"repository"},
+	"repos": {"repositories"},
+	"tbl":   {"table"},
+	"col":   {"column"},
+	"cols":  {"columns"},
+	"idx":   {"index"},
+	"rec":   {"record"},
+	"recs":  {"records"},
+	"doc":   {"document"},
+	"docs":  {"documents", "documentation"},
+
+	// Functions & Methods
+	"fn":    {"function"},
+	"func":  {"function"},
+	"funcs": {"functions"},
+	"meth":  {"method"},
+	"proc":  {"procedure", "process"},
+	"cb":    {"callback"},
+	"hdlr":  {"handler"},
+	"impl":  {"implementation", "implement"},
+	"init":  {"initialize", "initialization"},
+	"ctor":  {"constructor"},
+
+	// Types & Structures
+	"str":   {"string"},
+	"int":   {"integer"},
+	"num":   {"number"},
+	"bool":  {"boolean"},
+	"arr":   {"array"},
+	"obj":   {"object"},
+	"dict":  {"dictionary"},
+	"ptr":   {"pointer"},
+	"ref":   {"reference"},
+	"iface": {"interface"},
+
+	// Operations
+	"req":  {"request"},
+	"reqs": {"requests"},
+	"res":  {"response", "result"},
+	"resp": {"response"},
+	"ret":  {"return"},
+	"args": {"arguments"},
+	"arg":  {"argument"},
+	"msg":  {"message"},
+	"msgs": {"messages"},
+	"err":  {"error"},
+	"errs": {"errors"},
+	"exc":  {"exception"},
+	"warn": {"warning"},
+
+	// Files & Paths
+	"dir":  {"directory"},
+	"dirs": {"directories"},
+	"src":  {"source"},
+	"dest": {"destination"},
+	"dst":  {"destination"},
+	"tmp":  {"temporary", "temp"},
+	"temp": {"temporary"},
+
+	// Network & API
+	"api":  {"endpoint"},
+	"url":  {"link"},
+	"ws":   {"websocket"},
+	"rpc":  {"remote procedure call"},
+	"srv":  {"server", "service"},
+	"svc":  {"service"},
+	"svcs": {"services"},
+	"cli":  {"client", "command line"},
+
+	// Async & Concurrency
+	"async": {"asynchronous"},
+	"sync":  {"synchronous", "synchronize"},
+	"chan":  {"channel"},
+	"ctx":   {"context"},
+	"mut":   {"mutex", "mutable"},
+	"wg":    {"waitgroup"},
+
+	// Misc
+	"util":  {"utility"},
+	"utils": {"utilities"},
+	"lib":   {"library"},
+	"libs":  {"libraries"},
+	"pkg":   {"package"},
+	"pkgs":  {"packages"},
+	"mod":   {"module", "modifier"},
+	"ext":   {"extension", "external"},
+	"info":  {"information"},
+	"max":   {"maximum"},
+	"min":   {"minimum"},
+	"avg":   {"average"},
+	"cnt":   {"count"},
+	"len":   {"length"},
+	"sz":    {"size"},
+	"pos":   {"position"},
+	"loc":   {"location"},
+	"prev":  {"previous"},
+	"cur":   {"current"},
+	"curr":  {"current"},
+	"nxt":   {"next"},
 }
 
 // ActionPatterns maps query patterns to intents.
@@ -114,10 +261,19 @@ func GetSynonyms(term string) []string {
 func DetectIntent(text string) QueryIntent {
 	lower := strings.ToLower(text)
 
+	// Collect and sort patterns by length (longest first) for specificity
+	patterns := make([]string, 0, len(ActionPatterns))
+	for cur := range ActionPatterns {
+		patterns = append(patterns, cur)
+	}
+	sort.Slice(patterns, func(i, j int) bool {
+		return len(patterns[i]) > len(patterns[j])
+	})
+
 	// Check patterns in order of specificity
-	for pattern, intent := range ActionPatterns {
+	for _, pattern := range patterns {
 		if strings.Contains(lower, pattern) {
-			return intent
+			return ActionPatterns[pattern]
 		}
 	}
 
@@ -128,12 +284,30 @@ func DetectIntent(text string) QueryIntent {
 func DetectTargetType(text string) string {
 	lower := strings.ToLower(text)
 
+	// Collect and sort patterns by length (longest first)
+	patterns := make([]string, 0, len(TargetPatterns))
+	for cur := range TargetPatterns {
+		patterns = append(patterns, cur)
+	}
+	sort.Slice(patterns, func(i, j int) bool {
+		return len(patterns[i]) > len(patterns[j])
+	})
+
 	// Check for target patterns
-	for pattern, target := range TargetPatterns {
+	for _, pattern := range patterns {
 		if strings.Contains(lower, pattern) {
-			return target
+			return TargetPatterns[pattern]
 		}
 	}
 
 	return TargetUnknown
+}
+
+// GetAbbreviationExpansions returns expansions for an abbreviation.
+func GetAbbreviationExpansions(term string) []string {
+	lower := strings.ToLower(term)
+	if expansions, ok := CodeAbbreviations[lower]; ok {
+		return expansions
+	}
+	return nil
 }

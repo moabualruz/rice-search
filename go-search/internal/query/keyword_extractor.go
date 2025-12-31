@@ -48,6 +48,9 @@ func (e *KeywordExtractor) Parse(ctx context.Context, query string) (*ParsedQuer
 	// Calculate confidence
 	confidence := calculateConfidence(intent, targetType, len(keywords))
 
+	// Detect query type
+	queryType := DetectQueryType(query)
+
 	result := &ParsedQuery{
 		Original:     query,
 		Normalized:   normalized,
@@ -59,6 +62,7 @@ func (e *KeywordExtractor) Parse(ctx context.Context, query string) (*ParsedQuer
 		SearchQuery:  searchQuery,
 		Confidence:   confidence,
 		UsedModel:    false,
+		QueryType:    queryType,
 	}
 
 	e.log.Debug("Parsed query",
@@ -155,16 +159,26 @@ func extractCodeTerms(keywords []string) []string {
 	return codeTerms
 }
 
-// expandWithSynonyms expands keywords with synonyms.
+// expandWithSynonyms expands keywords with synonyms, abbreviations, and case splits.
 func expandWithSynonyms(keywords, codeTerms []string) []string {
 	expanded := make([]string, 0)
 	seen := make(map[string]bool)
 
-	// Add original keywords
+	// Add original keywords first (highest priority)
 	for _, kw := range keywords {
 		if !seen[kw] {
 			expanded = append(expanded, kw)
 			seen[kw] = true
+		}
+	}
+
+	// Add case-split parts for compound terms
+	for _, kw := range keywords {
+		for _, part := range SplitCases(kw) {
+			if !seen[part] && part != kw {
+				expanded = append(expanded, part)
+				seen[part] = true
+			}
 		}
 	}
 
@@ -175,6 +189,17 @@ func expandWithSynonyms(keywords, codeTerms []string) []string {
 			if !seen[syn] {
 				expanded = append(expanded, syn)
 				seen[syn] = true
+			}
+		}
+	}
+
+	// Add abbreviation expansions
+	for _, kw := range keywords {
+		expansions := GetAbbreviationExpansions(kw)
+		for _, exp := range expansions {
+			if !seen[exp] {
+				expanded = append(expanded, exp)
+				seen[exp] = true
 			}
 		}
 	}

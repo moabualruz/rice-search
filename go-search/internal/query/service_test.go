@@ -96,10 +96,11 @@ func TestServiceModelToggle(t *testing.T) {
 		t.Error("expected model to be disabled initially")
 	}
 
-	// Enable model
+	// Enable model without initialization
 	service.SetModelEnabled(true)
-	if !service.IsModelEnabled() {
-		t.Error("expected model to be enabled after SetModelEnabled(true)")
+	// Should still be false because it requires ML service
+	if service.IsModelEnabled() {
+		t.Error("expected model to remain disabled (IsModelEnabled=false) if ML service not initialized")
 	}
 
 	// Disable model

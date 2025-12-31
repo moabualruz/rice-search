@@ -184,6 +184,9 @@ func (m *ModelBasedUnderstanding) Parse(ctx context.Context, query string) (*Par
 	// Build search query
 	searchQuery := buildSearchQuery(normalized, keywords, expanded, intent)
 
+	// Detect query type
+	queryType := DetectQueryType(query)
+
 	result := &ParsedQuery{
 		Original:     query,
 		Normalized:   normalized,
@@ -195,6 +198,7 @@ func (m *ModelBasedUnderstanding) Parse(ctx context.Context, query string) (*Par
 		SearchQuery:  searchQuery,
 		Confidence:   confidence,
 		UsedModel:    true,
+		QueryType:    queryType,
 	}
 
 	m.log.Debug("Parsed query with model",

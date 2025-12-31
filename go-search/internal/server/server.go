@@ -235,7 +235,7 @@ func New(cfg Config, appCfg config.Config, log *logger.Logger) (*Server, error) 
 	}
 
 	// Initialize handlers
-	s.searchHandler = search.NewHandler(s.search)
+	s.searchHandler = search.NewHandler(s.search, nil)
 	healthChecker := search.NewHealthChecker(s.ml, s.qdrant)
 	s.healthHandler = search.NewHealthHandler(healthChecker, cfg.Version)
 	s.storeHandler = NewStoreHandler(s.store)

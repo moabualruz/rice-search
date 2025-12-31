@@ -1,0 +1,4 @@
+# github.com/ricesearch/rice-search/internal/server
+internal\server\server.go:238:38: not enough arguments in call to search.NewHandler
+	have (*search.Service)
+	want (*search.Service, *observability.Service)

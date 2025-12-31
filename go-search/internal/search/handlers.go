@@ -3,16 +3,23 @@ package search
 import (
 	"encoding/json"
 	"net/http"
+	"time"
+
+	"github.com/ricesearch/rice-search/internal/observability"
 )
 
 // Handler provides HTTP handlers for search operations.
 type Handler struct {
-	svc *Service
+	svc           *Service
+	observability *observability.Service
 }
 
 // NewHandler creates a new search handler.
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, obs *observability.Service) *Handler {
+	return &Handler{
+		svc:           svc,
+		observability: obs,
+	}
 }
 
 // SearchRequest is the JSON request body for search.
@@ -95,7 +102,6 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 		DenseWeight:     req.DenseWeight,
 	}
 
-	// Execute search
 	resp, err := h.svc.Search(r.Context(), searchReq)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
@@ -109,6 +115,25 @@ func (h *Handler) HandleSearch(w http.ResponseWriter, r *http.Request) {
 			maxPerFile = 3
 		}
 		resp.Results = GroupByFile(resp.Results, maxPerFile)
+	}
+
+	// Log query
+	if h.observability != nil {
+		var intent string
+		if resp.ParsedQuery != nil {
+			intent = string(resp.ParsedQuery.ActionIntent)
+		}
+
+		go h.observability.LogQuery(observability.QueryLogEntry{
+			Timestamp:       time.Now(),
+			Store:           store,
+			Query:           req.Query,
+			Intent:          intent,
+			ResultCount:     len(resp.Results),
+			LatencyMs:       resp.Metadata.SearchTimeMs,
+			RerankEnabled:   req.EnableReranking != nil && *req.EnableReranking,
+			RerankLatencyMs: resp.Metadata.RerankTimeMs,
+		})
 	}
 
 	writeJSON(w, http.StatusOK, resp)
@@ -216,6 +241,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /v1/stores/{store}/search", h.HandleSearch)
 	mux.HandleFunc("POST /v1/stores/{store}/search/dense", h.HandleDenseSearch)
 	mux.HandleFunc("POST /v1/stores/{store}/search/sparse", h.HandleSparseSearch)
+	mux.HandleFunc("GET /v1/observability/export", h.handleObservabilityExport)
 }
 
 func (h *Handler) handleSearchWithStore(w http.ResponseWriter, r *http.Request, store string) {

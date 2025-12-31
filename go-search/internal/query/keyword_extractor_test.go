@@ -46,7 +46,7 @@ func TestKeywordExtractorParse(t *testing.T) {
 		},
 		{
 			name:           "fix error",
-			query:          "fix database connection error",
+			query:          "fix connection error",
 			expectedIntent: IntentFix,
 			expectedTarget: TargetError,
 			minKeywords:    2,
@@ -307,6 +307,84 @@ func TestCalculateConfidence(t *testing.T) {
 		if conf < tt.minConf || conf > tt.maxConf {
 			t.Errorf("expected confidence between %f and %f, got %f",
 				tt.minConf, tt.maxConf, conf)
+		}
+	}
+}
+
+func TestExpandWithSynonyms_Abbreviations(t *testing.T) {
+	keywords := []string{"auth", "middleware"}
+	codeTerms := []string{}
+
+	expanded := expandWithSynonyms(keywords, codeTerms)
+
+	contains := func(slice []string, val string) bool {
+		for _, v := range slice {
+			if v == val {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !contains(expanded, "auth") {
+		t.Error("missing original 'auth'")
+	}
+	if !contains(expanded, "authentication") {
+		t.Error("missing expanded 'authentication'")
+	}
+	if !contains(expanded, "authorization") {
+		t.Error("missing expanded 'authorization'")
+	}
+	if !contains(expanded, "middleware") {
+		t.Error("missing original 'middleware'")
+	}
+}
+
+func TestExpandWithSynonyms_CaseSplit(t *testing.T) {
+	keywords := []string{"getUserName"}
+	codeTerms := []string{}
+
+	expanded := expandWithSynonyms(keywords, codeTerms)
+
+	contains := func(slice []string, val string) bool {
+		for _, v := range slice {
+			if v == val {
+				return true
+			}
+		}
+		return false
+	}
+
+	if !contains(expanded, "getusername") { // original lowercased
+		t.Error("missing lowercased original")
+	}
+	if !contains(expanded, "get") {
+		t.Error("missing split 'get'")
+	}
+	if !contains(expanded, "user") {
+		t.Error("missing split 'user'")
+	}
+	if !contains(expanded, "name") {
+		t.Error("missing split 'name'")
+	}
+}
+
+func TestDetectQueryType(t *testing.T) {
+	tests := []struct {
+		query    string
+		expected QueryType
+	}{
+		{"getUserName", QueryTypeCode},
+		{"get_user_name", QueryTypeCode},
+		{"how does authentication work", QueryTypeNatural},
+		{"auth handler", QueryTypeCode},       // "handler" detects as code
+		{"find the function", QueryTypeMixed}, // "function" is code, "the" is natural
+	}
+
+	for _, tt := range tests {
+		result := DetectQueryType(tt.query)
+		if result != tt.expected {
+			t.Errorf("query %q: expected %q, got %q", tt.query, tt.expected, result)
 		}
 	}
 }

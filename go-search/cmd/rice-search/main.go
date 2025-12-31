@@ -153,6 +153,7 @@ Examples:
 	cmd.Flags().Bool("content", false, "include content in results")
 	cmd.Flags().String("path-prefix", "", "filter by path prefix")
 	cmd.Flags().StringSlice("lang", nil, "filter by language (e.g., go,typescript)")
+	cmd.Flags().BoolP("answer", "a", false, "format output for RAG/LLM")
 
 	return cmd
 }
@@ -167,6 +168,7 @@ func runSearch(cmd *cobra.Command, args []string) error {
 	languages, _ := cmd.Flags().GetStringSlice("lang")
 	verbose, _ := cmd.Flags().GetBool("verbose")
 	format, _ := cmd.Flags().GetString("format")
+	answer, _ := cmd.Flags().GetBool("answer")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -188,6 +190,11 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("search failed: %w", err)
 	}
 
+	if answer {
+		fmt.Print(formatAnswerResponse(resp))
+		return nil
+	}
+
 	if format == "json" {
 		data, _ := json.MarshalIndent(resp, "", "  ")
 		fmt.Println(string(data))
@@ -196,6 +203,11 @@ func runSearch(cmd *cobra.Command, args []string) error {
 
 	if len(resp.Results) == 0 {
 		fmt.Println("No results found.")
+		return nil
+	}
+
+	if verbose {
+		fmt.Print(formatVerboseResponse(resp))
 		return nil
 	}
 
@@ -208,10 +220,6 @@ func runSearch(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Printf("[%d] %s:%d-%d  score: %s\n",
 			i+1, r.Path, r.StartLine, r.EndLine, scoreStr)
-
-		if len(r.Symbols) > 0 && verbose {
-			fmt.Printf("    symbols: %s\n", strings.Join(r.Symbols, ", "))
-		}
 
 		if includeContent && r.Content != "" {
 			lines := strings.Split(r.Content, "\n")
@@ -230,17 +238,6 @@ func runSearch(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		fmt.Println()
-	}
-
-	if verbose {
-		fmt.Printf("---\n")
-		fmt.Printf("Timing: embed=%dms, retrieve=%dms",
-			resp.EmbedTimeMs, resp.RetrievalTimeMs)
-		if resp.RerankingApplied {
-			fmt.Printf(", rerank=%dms (%d candidates)",
-				resp.RerankTimeMs, resp.CandidatesReranked)
-		}
 		fmt.Println()
 	}
 

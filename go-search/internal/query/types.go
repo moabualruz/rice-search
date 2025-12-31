@@ -55,6 +55,9 @@ type ParsedQuery struct {
 
 	// UsedModel indicates if ML model was used for understanding.
 	UsedModel bool `json:"used_model"`
+
+	// QueryType indicates if query is code-like, natural, or mixed.
+	QueryType QueryType `json:"query_type"`
 }
 
 // TargetType constants for common code targets.

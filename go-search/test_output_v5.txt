@@ -1,0 +1,253 @@
+=== RUN   TestIsCodeTerm
+=== RUN   TestIsCodeTerm/function
+=== RUN   TestIsCodeTerm/class
+=== RUN   TestIsCodeTerm/error
+=== RUN   TestIsCodeTerm/variable
+=== RUN   TestIsCodeTerm/api
+=== RUN   TestIsCodeTerm/database
+=== RUN   TestIsCodeTerm/FUNCTION
+=== RUN   TestIsCodeTerm/Function
+=== RUN   TestIsCodeTerm/random
+=== RUN   TestIsCodeTerm/word
+=== RUN   TestIsCodeTerm/#00
+--- PASS: TestIsCodeTerm (0.00s)
+    --- PASS: TestIsCodeTerm/function (0.00s)
+    --- PASS: TestIsCodeTerm/class (0.00s)
+    --- PASS: TestIsCodeTerm/error (0.00s)
+    --- PASS: TestIsCodeTerm/variable (0.00s)
+    --- PASS: TestIsCodeTerm/api (0.00s)
+    --- PASS: TestIsCodeTerm/database (0.00s)
+    --- PASS: TestIsCodeTerm/FUNCTION (0.00s)
+    --- PASS: TestIsCodeTerm/Function (0.00s)
+    --- PASS: TestIsCodeTerm/random (0.00s)
+    --- PASS: TestIsCodeTerm/word (0.00s)
+    --- PASS: TestIsCodeTerm/#00 (0.00s)
+=== RUN   TestGetSynonyms
+=== RUN   TestGetSynonyms/function
+=== RUN   TestGetSynonyms/class
+=== RUN   TestGetSynonyms/error
+=== RUN   TestGetSynonyms/api
+=== RUN   TestGetSynonyms/random
+--- PASS: TestGetSynonyms (0.00s)
+    --- PASS: TestGetSynonyms/function (0.00s)
+    --- PASS: TestGetSynonyms/class (0.00s)
+    --- PASS: TestGetSynonyms/error (0.00s)
+    --- PASS: TestGetSynonyms/api (0.00s)
+    --- PASS: TestGetSynonyms/random (0.00s)
+=== RUN   TestDetectIntent
+=== RUN   TestDetectIntent/where_is_the_function
+=== RUN   TestDetectIntent/find_the_authentication_handler
+=== RUN   TestDetectIntent/locate_error_handling_code
+=== RUN   TestDetectIntent/how_does_this_work
+=== RUN   TestDetectIntent/explain_the_algorithm
+=== RUN   TestDetectIntent/what_is_the_purpose
+=== RUN   TestDetectIntent/list_all_tests
+=== RUN   TestDetectIntent/show_all_endpoints
+=== RUN   TestDetectIntent/enumerate_functions
+=== RUN   TestDetectIntent/fix_the_bug
+=== RUN   TestDetectIntent/debug_connection_issue
+=== RUN   TestDetectIntent/resolve_error
+=== RUN   TestDetectIntent/compare_implementations
+=== RUN   TestDetectIntent/difference_between_A_and_B
+=== RUN   TestDetectIntent/A_vs_B
+=== RUN   TestDetectIntent/random_query
+=== RUN   TestDetectIntent/#00
+--- PASS: TestDetectIntent (0.00s)
+    --- PASS: TestDetectIntent/where_is_the_function (0.00s)
+    --- PASS: TestDetectIntent/find_the_authentication_handler (0.00s)
+    --- PASS: TestDetectIntent/locate_error_handling_code (0.00s)
+    --- PASS: TestDetectIntent/how_does_this_work (0.00s)
+    --- PASS: TestDetectIntent/explain_the_algorithm (0.00s)
+    --- PASS: TestDetectIntent/what_is_the_purpose (0.00s)
+    --- PASS: TestDetectIntent/list_all_tests (0.00s)
+    --- PASS: TestDetectIntent/show_all_endpoints (0.00s)
+    --- PASS: TestDetectIntent/enumerate_functions (0.00s)
+    --- PASS: TestDetectIntent/fix_the_bug (0.00s)
+    --- PASS: TestDetectIntent/debug_connection_issue (0.00s)
+    --- PASS: TestDetectIntent/resolve_error (0.00s)
+    --- PASS: TestDetectIntent/compare_implementations (0.00s)
+    --- PASS: TestDetectIntent/difference_between_A_and_B (0.00s)
+    --- PASS: TestDetectIntent/A_vs_B (0.00s)
+    --- PASS: TestDetectIntent/random_query (0.00s)
+    --- PASS: TestDetectIntent/#00 (0.00s)
+=== RUN   TestDetectTargetType
+=== RUN   TestDetectTargetType/find_the_function
+=== RUN   TestDetectTargetType/locate_method_implementation
+=== RUN   TestDetectTargetType/class_definition
+=== RUN   TestDetectTargetType/struct_fields
+=== RUN   TestDetectTargetType/variable_scope
+=== RUN   TestDetectTargetType/const_values
+=== RUN   TestDetectTargetType/error_handling
+=== RUN   TestDetectTargetType/exception_caught
+=== RUN   TestDetectTargetType/test_cases
+=== RUN   TestDetectTargetType/unittest_suite
+=== RUN   TestDetectTargetType/config_file
+=== RUN   TestDetectTargetType/settings_panel
+=== RUN   TestDetectTargetType/api_endpoint
+=== RUN   TestDetectTargetType/route_handler
+=== RUN   TestDetectTargetType/database_query
+=== RUN   TestDetectTargetType/db_connection
+=== RUN   TestDetectTargetType/authentication_flow
+=== RUN   TestDetectTargetType/login_system
+=== RUN   TestDetectTargetType/random_text
+=== RUN   TestDetectTargetType/#00
+--- PASS: TestDetectTargetType (0.00s)
+    --- PASS: TestDetectTargetType/find_the_function (0.00s)
+    --- PASS: TestDetectTargetType/locate_method_implementation (0.00s)
+    --- PASS: TestDetectTargetType/class_definition (0.00s)
+    --- PASS: TestDetectTargetType/struct_fields (0.00s)
+    --- PASS: TestDetectTargetType/variable_scope (0.00s)
+    --- PASS: TestDetectTargetType/const_values (0.00s)
+    --- PASS: TestDetectTargetType/error_handling (0.00s)
+    --- PASS: TestDetectTargetType/exception_caught (0.00s)
+    --- PASS: TestDetectTargetType/test_cases (0.00s)
+    --- PASS: TestDetectTargetType/unittest_suite (0.00s)
+    --- PASS: TestDetectTargetType/config_file (0.00s)
+    --- PASS: TestDetectTargetType/settings_panel (0.00s)
+    --- PASS: TestDetectTargetType/api_endpoint (0.00s)
+    --- PASS: TestDetectTargetType/route_handler (0.00s)
+    --- PASS: TestDetectTargetType/database_query (0.00s)
+    --- PASS: TestDetectTargetType/db_connection (0.00s)
+    --- PASS: TestDetectTargetType/authentication_flow (0.00s)
+    --- PASS: TestDetectTargetType/login_system (0.00s)
+    --- PASS: TestDetectTargetType/random_text (0.00s)
+    --- PASS: TestDetectTargetType/#00 (0.00s)
+=== RUN   TestCodeTermsSynonyms
+--- PASS: TestCodeTermsSynonyms (0.00s)
+=== RUN   TestActionPatterns
+--- PASS: TestActionPatterns (0.00s)
+=== RUN   TestTargetPatterns
+--- PASS: TestTargetPatterns (0.00s)
+=== RUN   TestKeywordExtractorParse
+=== RUN   TestKeywordExtractorParse/find_function
+=== RUN   TestKeywordExtractorParse/explain_how
+=== RUN   TestKeywordExtractorParse/list_all_tests
+=== RUN   TestKeywordExtractorParse/fix_error
+=== RUN   TestKeywordExtractorParse/compare_implementations
+=== RUN   TestKeywordExtractorParse/simple_search
+=== RUN   TestKeywordExtractorParse/code_term_search
+--- PASS: TestKeywordExtractorParse (0.00s)
+    --- PASS: TestKeywordExtractorParse/find_function (0.00s)
+    --- PASS: TestKeywordExtractorParse/explain_how (0.00s)
+    --- PASS: TestKeywordExtractorParse/list_all_tests (0.00s)
+    --- PASS: TestKeywordExtractorParse/fix_error (0.00s)
+    --- PASS: TestKeywordExtractorParse/compare_implementations (0.00s)
+    --- PASS: TestKeywordExtractorParse/simple_search (0.00s)
+    --- PASS: TestKeywordExtractorParse/code_term_search (0.00s)
+=== RUN   TestKeywordExtractorEmptyQuery
+--- PASS: TestKeywordExtractorEmptyQuery (0.00s)
+=== RUN   TestNormalizeQuery
+=== RUN   TestNormalizeQuery/__hello___world__
+=== RUN   TestNormalizeQuery/Hello_World
+=== RUN   TestNormalizeQuery/where__is__the__function
+=== RUN   TestNormalizeQuery/Query_With_Newlines
+--- PASS: TestNormalizeQuery (0.00s)
+    --- PASS: TestNormalizeQuery/__hello___world__ (0.00s)
+    --- PASS: TestNormalizeQuery/Hello_World (0.00s)
+    --- PASS: TestNormalizeQuery/where__is__the__function (0.00s)
+    --- PASS: TestNormalizeQuery/Query_With_Newlines (0.00s)
+=== RUN   TestExtractKeywords
+=== RUN   TestExtractKeywords/find_the_authentication_function
+=== RUN   TestExtractKeywords/a_simple_test
+=== RUN   TestExtractKeywords/how_does_it_work
+--- PASS: TestExtractKeywords (0.00s)
+    --- PASS: TestExtractKeywords/find_the_authentication_function (0.00s)
+    --- PASS: TestExtractKeywords/a_simple_test (0.00s)
+    --- PASS: TestExtractKeywords/how_does_it_work (0.00s)
+=== RUN   TestExtractCodeTerms
+=== RUN   TestExtractCodeTerms/#00
+=== RUN   TestExtractCodeTerms/#01
+=== RUN   TestExtractCodeTerms/#02
+=== RUN   TestExtractCodeTerms/#03
+--- PASS: TestExtractCodeTerms (0.00s)
+    --- PASS: TestExtractCodeTerms/#00 (0.00s)
+    --- PASS: TestExtractCodeTerms/#01 (0.00s)
+    --- PASS: TestExtractCodeTerms/#02 (0.00s)
+    --- PASS: TestExtractCodeTerms/#03 (0.00s)
+=== RUN   TestExpandWithSynonyms
+--- PASS: TestExpandWithSynonyms (0.00s)
+=== RUN   TestBuildSearchQuery
+=== RUN   TestBuildSearchQuery/find_intent_strips_question
+=== RUN   TestBuildSearchQuery/explain_intent_keeps_context
+--- PASS: TestBuildSearchQuery (0.00s)
+    --- PASS: TestBuildSearchQuery/find_intent_strips_question (0.00s)
+    --- PASS: TestBuildSearchQuery/explain_intent_keeps_context (0.00s)
+=== RUN   TestCalculateConfidence
+--- PASS: TestCalculateConfidence (0.00s)
+=== RUN   TestExpandWithSynonyms_Abbreviations
+--- PASS: TestExpandWithSynonyms_Abbreviations (0.00s)
+=== RUN   TestExpandWithSynonyms_CaseSplit
+--- PASS: TestExpandWithSynonyms_CaseSplit (0.00s)
+=== RUN   TestDetectQueryType
+--- PASS: TestDetectQueryType (0.00s)
+=== RUN   TestModelBasedUnderstandingDisabled
+--- PASS: TestModelBasedUnderstandingDisabled (0.00s)
+=== RUN   TestModelBasedUnderstandingEnable
+time=2025-12-31T01:41:34.489+01:00 level=WARN msg="Model-based query understanding enabled but ML service not initialized"
+time=2025-12-31T01:41:34.489+01:00 level=INFO msg="Model-based query understanding disabled"
+--- PASS: TestModelBasedUnderstandingEnable (0.00s)
+=== RUN   TestModelBasedUnderstanding_Initialize
+time=2025-12-31T01:41:34.489+01:00 level=INFO msg="Initializing model-based query understanding"
+time=2025-12-31T01:41:34.489+01:00 level=INFO msg="Model-based query understanding initialized successfully" intent_embeddings=20
+    model_understanding_test.go:141: Pre-computed 20 intent embeddings
+--- PASS: TestModelBasedUnderstanding_Initialize (0.00s)
+=== RUN   TestModelBasedUnderstanding_Parse
+time=2025-12-31T01:41:34.489+01:00 level=INFO msg="Initializing model-based query understanding"
+time=2025-12-31T01:41:34.489+01:00 level=INFO msg="Model-based query understanding initialized successfully" intent_embeddings=20
+time=2025-12-31T01:41:34.490+01:00 level=INFO msg="Model-based query understanding enabled"
+=== RUN   TestModelBasedUnderstanding_Parse/find_query
+    model_understanding_test.go:241: Query: "where is the authentication function" => Intent: find, Confidence: 1.00, Keywords: [where authentication function]
+=== RUN   TestModelBasedUnderstanding_Parse/explain_query
+    model_understanding_test.go:241: Query: "how does error handling work" => Intent: explain, Confidence: 1.00, Keywords: [how does error handling work]
+=== RUN   TestModelBasedUnderstanding_Parse/list_query
+    model_understanding_test.go:241: Query: "list all api endpoints" => Intent: list, Confidence: 1.00, Keywords: [list all api endpoints]
+--- PASS: TestModelBasedUnderstanding_Parse (0.00s)
+    --- PASS: TestModelBasedUnderstanding_Parse/find_query (0.00s)
+    --- PASS: TestModelBasedUnderstanding_Parse/explain_query (0.00s)
+    --- PASS: TestModelBasedUnderstanding_Parse/list_query (0.00s)
+=== RUN   TestCosineSimilarity
+=== RUN   TestCosineSimilarity/identical_vectors
+=== RUN   TestCosineSimilarity/orthogonal_vectors
+--- PASS: TestCosineSimilarity (0.00s)
+    --- PASS: TestCosineSimilarity/identical_vectors (0.00s)
+    --- PASS: TestCosineSimilarity/orthogonal_vectors (0.00s)
+=== RUN   TestServiceParse
+=== RUN   TestServiceParse/basic_find_query
+=== RUN   TestServiceParse/explain_query
+=== RUN   TestServiceParse/list_query
+--- PASS: TestServiceParse (0.00s)
+    --- PASS: TestServiceParse/basic_find_query (0.00s)
+    --- PASS: TestServiceParse/explain_query (0.00s)
+    --- PASS: TestServiceParse/list_query (0.00s)
+=== RUN   TestServiceEmptyQuery
+--- PASS: TestServiceEmptyQuery (0.00s)
+=== RUN   TestServiceModelToggle
+time=2025-12-31T01:41:34.490+01:00 level=WARN msg="Model-based query understanding enabled but ML service not initialized"
+time=2025-12-31T01:41:34.490+01:00 level=INFO msg="Query understanding model mode changed" enabled=true
+time=2025-12-31T01:41:34.490+01:00 level=INFO msg="Model-based query understanding disabled"
+time=2025-12-31T01:41:34.490+01:00 level=INFO msg="Query understanding model mode changed" enabled=false
+--- PASS: TestServiceModelToggle (0.00s)
+=== RUN   TestServiceFallbackToKeywords
+time=2025-12-31T01:41:34.490+01:00 level=WARN msg="Model-based query understanding enabled but ML service not initialized"
+time=2025-12-31T01:41:34.490+01:00 level=INFO msg="Query understanding model mode changed" enabled=true
+--- PASS: TestServiceFallbackToKeywords (0.00s)
+=== RUN   TestServiceConsistency
+=== RUN   TestServiceConsistency/where_is_the_function
+=== RUN   TestServiceConsistency/how_does_error_handling_work
+=== RUN   TestServiceConsistency/list_all_tests
+--- PASS: TestServiceConsistency (0.00s)
+    --- PASS: TestServiceConsistency/where_is_the_function (0.00s)
+    --- PASS: TestServiceConsistency/how_does_error_handling_work (0.00s)
+    --- PASS: TestServiceConsistency/list_all_tests (0.00s)
+=== RUN   TestServiceComplexQueries
+=== RUN   TestServiceComplexQueries/multi-word_technical_query
+=== RUN   TestServiceComplexQueries/compound_query
+=== RUN   TestServiceComplexQueries/specific_code_location
+--- PASS: TestServiceComplexQueries (0.00s)
+    --- PASS: TestServiceComplexQueries/multi-word_technical_query (0.00s)
+    --- PASS: TestServiceComplexQueries/compound_query (0.00s)
+    --- PASS: TestServiceComplexQueries/specific_code_location (0.00s)
+=== RUN   TestServiceConcurrency
+--- PASS: TestServiceConcurrency (0.00s)
+PASS
+ok  	github.com/ricesearch/rice-search/internal/query	0.396s
