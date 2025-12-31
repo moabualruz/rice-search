@@ -9,17 +9,17 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@mantine/core": "^7.5.0",
-    "@mantine/hooks": "^7.5.0",
-    "clsx": "^2.1.0",
-    "lucide-react": "^0.309.0",
-    "next": "14.1.0",
-    "next-auth": "^4.24.13",
-    "react": "^18",
-    "react-dom": "^18",
+    "@mantine/core": "^7.12.0",
+    "@mantine/hooks": "^7.12.0",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.441.0",
+    "next": "14.2.15",
+    "next-auth": "^4.24.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1",
     "tabler-icons-react": "^1.56.0",
-    "tailwind-merge": "^2.2.1"
+    "tailwind-merge": "^2.5.2"
   },
   "devDependencies": {
     "@types/node": "^20",

@@ -5,29 +5,29 @@ description = "Enterprise Neural Search Backend"
 authors = [{name = "Rice Search Team"}]
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.109.0",
-    "uvicorn[standard]>=0.27.0",
-    "celery>=5.3.6",
-    "redis>=5.0.1",
-    "qdrant-client>=1.7.0",
-    "langchain",
-    "langchain-community",
-    "langchain-core",
-    "langchain-text-splitters",
-    "unstructured[local-inference]>=0.12.0",
-    "sentence-transformers>=2.3.0",
-    "torch>=2.2.0",
-    "python-jose[cryptography]",
-    "passlib[bcrypt]",
-    "pydantic-settings>=2.1.0",
-    "httpx>=0.26.0",
-    "python-multipart>=0.0.6"
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "celery>=5.4.0",
+    "redis>=5.0.8",
+    "qdrant-client>=1.11.0",
+    "langchain>=0.3.0",
+    "langchain-community>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-text-splitters>=0.3.0",
+    "unstructured[local-inference]>=0.15.0",
+    "sentence-transformers>=3.1.0",
+    "torch>=2.4.0",
+    "pyjwt[crypto]>=2.9.0",
+    "passlib[bcrypt]>=1.7.4",
+    "pydantic-settings>=2.4.0",
+    "httpx>=0.27.0",
+    "python-multipart>=0.0.9"
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
-    "black>=24.1.0",
+    "black>=24.0.0",
     "isort>=5.13.0",
     "flake8>=7.0.0"
 ]

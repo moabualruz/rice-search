@@ -1,14 +1,16 @@
-from fastapi import HTTPException, status
-from jose import jwt, JWTError
-import os
+import jwt
 import httpx
+from jwt.algorithms import RSAAlgorithm
+import json
+from fastapi import HTTPException, status
+import os
 
-# Settings - In production, these should be in config.py
+# Settings
 KEYCLOAK_URL = os.getenv("KEYCLOAK_URL", "http://keycloak:8080")
 REALM = os.getenv("KEYCLOAK_REALM", "rice-search")
 ALGORITHM = "RS256"
 
-# Cache for public keys
+# Cache
 jwks_cache = None
 
 async def get_public_keys():
@@ -33,19 +35,46 @@ def verify_token(token: str, jwks: dict) -> dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Auth configuration error"
         )
-
+    
     try:
-        # Verify signature using JWKS
+        # 1. Get Key ID (kid) from Header
+        header = jwt.get_unverified_header(token)
+        kid = header.get("kid")
+        
+        if not kid:
+            raise Exception("No 'kid' in header")
+
+        # 2. Find matching key in JWKS
+        key_data = None
+        for key in jwks.get("keys", []):
+            if key.get("kid") == kid:
+                key_data = key
+                break
+        
+        if not key_data:
+            raise Exception("Public key not found")
+
+        # 3. Convert JWK to PEM Public Key
+        public_key = RSAAlgorithm.from_jwk(json.dumps(key_data))
+
+        # 4. Verify & Decode
         payload = jwt.decode(
             token,
-            jwks,
+            public_key, # PyJWT expects the key object here, not dict
             algorithms=[ALGORITHM],
-            audience="account", # Default audience in Keycloak
-            options={"verify_aud": False} # Relax audience check for MVP
+            audience="account",
+            options={"verify_aud": False}
         )
         return payload
-    except JWTError as e:
+
+    except jwt.ExpiredSignatureError:
         raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {str(e)}",
             headers={"WWW-Authenticate": "Bearer"},

@@ -48,8 +48,12 @@ services:
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HOSTNAME_URL: http://localhost:8080
+      KC_PROXY: edge
     ports:
       - "8080:8080"
+    volumes:
+      - keycloak_data:/opt/keycloak/data/
     networks:
       - rice-net
 
@@ -116,6 +120,8 @@ services:
       - /app/node_modules
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+    extra_hosts:
+      - "localhost:host-gateway"
     networks:
       - rice-net
 
@@ -127,3 +133,4 @@ volumes:
   qdrant_data:
   redis_data:
   minio_data:
+  keycloak_data:
