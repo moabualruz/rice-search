@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+import time
 from src.core.config import settings
 from src.db.qdrant import get_qdrant_client
 from src.worker import celery_app, echo_task
@@ -10,6 +11,7 @@ app = FastAPI(
 )
 
 from src.api.v1.endpoints import ingest, search
+from src.api.v1.endpoints import metrics
 from src.api.v1.endpoints.admin import config as admin_config
 from src.api.v1.endpoints.admin import public as admin_public
 
@@ -17,6 +19,32 @@ app.include_router(ingest.router, prefix=f"{settings.API_V1_STR}/ingest", tags=[
 app.include_router(search.router, prefix=f"{settings.API_V1_STR}/search", tags=["search"])
 app.include_router(admin_config.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(admin_public.router, prefix=f"{settings.API_V1_STR}/admin/public", tags=["admin-public"])
+app.include_router(metrics.router, tags=["metrics"])
+
+# Request timing middleware
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    start = time.time()
+    response = await call_next(request)
+    duration_ms = (time.time() - start) * 1000
+    
+    # Record latency to Redis for dashboard
+    try:
+        from src.services.admin.admin_store import get_admin_store
+        store = get_admin_store()
+        store.record_request_latency(duration_ms)
+        store.increment_counter("requests_total")
+        
+        # Track specific request types
+        if "/search" in request.url.path:
+            store.increment_counter("search_requests")
+        elif "/ingest" in request.url.path:
+            store.increment_counter("ingest_requests")
+    except:
+        pass  # Don't fail request if metrics fail
+    
+    response.headers["X-Response-Time-Ms"] = f"{duration_ms:.2f}"
+    return response
 
 # CORS
 app.add_middleware(
@@ -57,3 +85,4 @@ def health_check():
 @app.get("/")
 def root():
     return {"message": "Welcome to Rice Search API"}
+

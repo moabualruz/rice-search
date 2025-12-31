@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 
 interface SystemStatus {
   status: string;
@@ -10,39 +11,77 @@ interface SystemStatus {
   };
 }
 
-interface ConfigData {
-  sparse_enabled: boolean;
-  sparse_model: string;
-  embedding_model: string;
-  rrf_k: number;
+interface AdminStatus {
+  status: string;
+  features: Record<string, boolean>;
+  models: Record<string, boolean>;
 }
+
+const API_BASE = 'http://localhost:8000/api/v1/admin/public';
 
 export default function AdminDashboard() {
   const [health, setHealth] = useState<SystemStatus | null>(null);
-  const [config, setConfig] = useState<ConfigData | null>(null);
+  const [adminStatus, setAdminStatus] = useState<AdminStatus | null>(null);
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const fetchData = async () => {
+    try {
+      const [healthRes, statusRes] = await Promise.all([
+        fetch('http://localhost:8000/health'),
+        fetch(`${API_BASE}/system/status`)
+      ]);
+      
+      if (healthRes.ok) setHealth(await healthRes.json());
+      if (statusRes.ok) setAdminStatus(await statusRes.json());
+    } catch (e) {
+      setHealth({ status: 'error', components: {} });
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        const healthRes = await fetch('http://localhost:8000/health');
-        const healthData = await healthRes.json();
-        setHealth(healthData);
-      } catch (e) {
-        setHealth({ status: 'error', components: {} });
-      }
-      setLoading(false);
-    }
     fetchData();
   }, []);
 
-  if (loading) {
-    return <div className="text-slate-400">Loading...</div>;
-  }
+  const showMessage = (type: 'success' | 'error', text: string) => {
+    setMessage({ type, text });
+    setTimeout(() => setMessage(null), 3000);
+  };
+
+  const rebuildIndex = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/system/rebuild-index`, { method: 'POST' });
+      if (res.ok) showMessage('success', 'Index rebuild triggered');
+    } catch (e) {
+      showMessage('error', 'Failed to trigger rebuild');
+    }
+  };
+
+  const clearCache = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/system/clear-cache`, { method: 'POST' });
+      if (res.ok) showMessage('success', 'Cache clear triggered');
+    } catch (e) {
+      showMessage('error', 'Failed to clear cache');
+    }
+  };
+
+  if (loading) return <div className="text-slate-400">Loading...</div>;
 
   return (
     <div>
       <h1 className="text-3xl font-bold text-white mb-8">Mission Control</h1>
+
+      {message && (
+        <div className={`mb-6 p-4 rounded-lg ${
+          message.type === 'success' 
+            ? 'bg-green-600/20 border border-green-500/30 text-green-400'
+            : 'bg-red-600/20 border border-red-500/30 text-red-400'
+        }`}>
+          {message.type === 'success' ? '✓' : '✗'} {message.text}
+        </div>
+      )}
 
       {/* System Status */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -72,24 +111,33 @@ export default function AdminDashboard() {
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
           <h2 className="text-xl font-semibold text-white mb-4">Active Features</h2>
           <div className="space-y-3">
-            <FeatureRow label="Hybrid Search (SPLADE)" enabled={true} />
-            <FeatureRow label="MCP Protocol" enabled={false} />
-            <FeatureRow label="AST Parsing" enabled={true} />
-            <FeatureRow label="OpenTelemetry" enabled={false} />
+            <FeatureRow label="Hybrid Search (SPLADE)" enabled={adminStatus?.features?.hybrid_search ?? true} />
+            <FeatureRow label="AST Parsing" enabled={adminStatus?.features?.ast_parsing ?? true} />
+            <FeatureRow label="MCP Protocol" enabled={adminStatus?.features?.mcp_protocol ?? false} />
+            <FeatureRow label="OpenTelemetry" enabled={adminStatus?.features?.opentelemetry ?? false} />
           </div>
         </div>
 
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
           <h2 className="text-xl font-semibold text-white mb-4">Quick Actions</h2>
           <div className="space-y-3">
-            <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+            <button 
+              onClick={rebuildIndex}
+              className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-accent transition-colors"
+            >
               Rebuild Index
             </button>
-            <button className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors">
+            <button 
+              onClick={clearCache}
+              className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            >
               Clear Cache
             </button>
-            <button className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors">
-              Export Config
+            <button 
+              onClick={fetchData}
+              className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors"
+            >
+              Refresh Status
             </button>
           </div>
         </div>

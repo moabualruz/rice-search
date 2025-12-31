@@ -1,43 +1,183 @@
 'use client';
 
+import { useState, useEffect } from 'react';
+
+interface AuditLog {
+  id: string;
+  timestamp: string;
+  action: string;
+  user: string;
+}
+
+interface Metrics {
+  search_latency_p50_ms: number;
+  search_latency_p95_ms: number;
+  search_latency_p99_ms: number;
+  index_rate_docs_per_sec: number;
+  active_connections: number;
+  gpu_memory_used_mb: number;
+  gpu_memory_total_mb: number;
+  cpu_usage_percent: number;
+  memory_usage_mb: number;
+}
+
+const API_BASE = 'http://localhost:8000/api/v1/admin/public';
+
 export default function ObservabilityPage() {
+  const [metrics, setMetrics] = useState<Metrics | null>(null);
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const fetchData = async () => {
+    try {
+      const [metricsRes, logsRes] = await Promise.all([
+        fetch(`${API_BASE}/metrics`),
+        fetch(`${API_BASE}/audit-log?limit=10`)
+      ]);
+      
+      if (metricsRes.ok) setMetrics(await metricsRes.json());
+      if (logsRes.ok) {
+        const data = await logsRes.json();
+        setLogs(data.logs || []);
+      }
+    } catch (e) {
+      console.error('Failed to fetch observability data', e);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    fetchData();
+    // Refresh every 10 seconds
+    const interval = setInterval(fetchData, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  if (loading) return <div className="text-slate-400">Loading...</div>;
+
   return (
     <div>
-      <h1 className="text-3xl font-bold text-white mb-2">Observability</h1>
-      <p className="text-slate-400 mb-8">System metrics and logs</p>
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Observability</h1>
+          <p className="text-slate-400">System metrics and logs (auto-refreshing)</p>
+        </div>
+        <button 
+          onClick={fetchData}
+          className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
+        >
+          Refresh Now
+        </button>
+      </div>
 
       {/* Metrics Overview */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        <MetricCard label="Search P95" value="187ms" status="good" />
-        <MetricCard label="Index Rate" value="52 MB/s" status="good" />
-        <MetricCard label="GPU Memory" value="4.2 GB" status="warning" />
-        <MetricCard label="Active Connections" value="12" status="good" />
+        <MetricCard 
+          label="Search P95" 
+          value={`${metrics?.search_latency_p95_ms ?? 0}ms`} 
+          status={metrics && metrics.search_latency_p95_ms < 200 ? 'good' : 'warning'} 
+        />
+        <MetricCard 
+          label="Index Rate" 
+          value={`${metrics?.index_rate_docs_per_sec ?? 0}/s`} 
+          status="good" 
+        />
+        <MetricCard 
+          label="GPU Memory" 
+          value={`${((metrics?.gpu_memory_used_mb ?? 0) / 1024).toFixed(1)} GB`} 
+          status={metrics && metrics.gpu_memory_used_mb > 6000 ? 'warning' : 'good'} 
+        />
+        <MetricCard 
+          label="Connections" 
+          value={`${metrics?.active_connections ?? 0}`} 
+          status="good" 
+        />
       </div>
 
-      {/* Charts placeholder */}
+      {/* Detailed Metrics */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
           <h3 className="text-lg font-semibold text-white mb-4">Search Latency</h3>
-          <div className="h-48 flex items-center justify-center text-slate-500 border border-dashed border-slate-600 rounded-lg">
-            📊 Prometheus integration pending
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">P50</span>
+              <span className="text-white font-mono">{metrics?.search_latency_p50_ms ?? 0}ms</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">P95</span>
+              <span className="text-white font-mono">{metrics?.search_latency_p95_ms ?? 0}ms</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">P99</span>
+              <span className="text-white font-mono">{metrics?.search_latency_p99_ms ?? 0}ms</span>
+            </div>
           </div>
         </div>
+        
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          <h3 className="text-lg font-semibold text-white mb-4">Indexing Throughput</h3>
-          <div className="h-48 flex items-center justify-center text-slate-500 border border-dashed border-slate-600 rounded-lg">
-            📈 Metrics visualization pending
+          <h3 className="text-lg font-semibold text-white mb-4">Resources</h3>
+          <div className="space-y-4">
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-slate-400">CPU</span>
+                <span className="text-white font-mono">{metrics?.cpu_usage_percent ?? 0}%</span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div 
+                  className="bg-primary h-2 rounded-full" 
+                  style={{ width: `${metrics?.cpu_usage_percent ?? 0}%` }}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-slate-400">Memory</span>
+                <span className="text-white font-mono">{((metrics?.memory_usage_mb ?? 0) / 1024).toFixed(1)} GB</span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div 
+                  className="bg-primary h-2 rounded-full" 
+                  style={{ width: `${Math.min((metrics?.memory_usage_mb ?? 0) / 80, 100)}%` }}
+                />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <span className="text-slate-400">GPU Memory</span>
+                <span className="text-white font-mono">
+                  {((metrics?.gpu_memory_used_mb ?? 0) / 1024).toFixed(1)} / {((metrics?.gpu_memory_total_mb ?? 0) / 1024).toFixed(0)} GB
+                </span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-2">
+                <div 
+                  className="bg-primary h-2 rounded-full" 
+                  style={{ width: `${((metrics?.gpu_memory_used_mb ?? 0) / (metrics?.gpu_memory_total_mb ?? 8000)) * 100}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Audit Log Preview */}
+      {/* Audit Log */}
       <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
         <h3 className="text-lg font-semibold text-white mb-4">Recent Activity</h3>
         <div className="space-y-3">
-          <LogEntry time="14:32:01" action="Config updated" user="admin" />
-          <LogEntry time="14:28:45" action="Index rebuild started" user="system" />
-          <LogEntry time="13:55:12" action="User login" user="admin" />
-          <LogEntry time="12:40:33" action="Model activated: splade-v3" user="admin" />
+          {logs.map((log) => (
+            <div key={log.id} className="flex items-center gap-4 text-sm">
+              <span className="text-slate-500 font-mono w-20">
+                {new Date(log.timestamp).toLocaleTimeString()}
+              </span>
+              <span className="text-white flex-1">{log.action}</span>
+              <span className={`px-2 py-1 rounded text-xs ${
+                log.user === 'admin' ? 'bg-primary/20 text-primary' :
+                log.user === 'system' ? 'bg-slate-700 text-slate-400' :
+                'bg-slate-700 text-slate-300'
+              }`}>
+                {log.user}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -55,16 +195,6 @@ function MetricCard({ label, value, status }: { label: string; value: string; st
     <div className="bg-slate-800 rounded-xl p-4 border border-slate-700">
       <p className="text-slate-400 text-sm">{label}</p>
       <p className={`text-2xl font-bold ${colorClass}`}>{value}</p>
-    </div>
-  );
-}
-
-function LogEntry({ time, action, user }: { time: string; action: string; user: string }) {
-  return (
-    <div className="flex items-center gap-4 text-sm">
-      <span className="text-slate-500 font-mono">{time}</span>
-      <span className="text-white">{action}</span>
-      <span className="text-slate-400">by {user}</span>
     </div>
   );
 }
