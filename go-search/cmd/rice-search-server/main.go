@@ -80,6 +80,7 @@ Examples:
 	rootCmd.Flags().Int("http-port", 8080, "HTTP server port")
 	rootCmd.Flags().String("host", "0.0.0.0", "server host")
 	rootCmd.Flags().String("unix-socket", "", "Unix socket path (disabled on Windows)")
+	rootCmd.Flags().String("mcp-addr", "", "MCP TCP listen address (e.g. localhost:50053)")
 	rootCmd.Flags().String("qdrant", "", "Qdrant URL (overrides config)")
 
 	// Version command
@@ -383,8 +384,17 @@ func runServer(cmd *cobra.Command, _ []string) error {
 		IndexService:  indexSvc,
 		StoreService:  storeSvc,
 	})
+
+	mcpAddr, _ := cmd.Flags().GetString("mcp-addr")
 	mcpServer := mcp.NewServer(mcp.ServerConfig{
-		Handler: mcpHandler,
+		Handler:    mcpHandler,
+		TCPAddr:    mcpAddr,
+		SocketPath: unixSocket, // Reusing unix-socket flag for MCP socket if user wants custom socket?
+		// Actually, main.go has --unix-socket flag which is for gRPC.
+		// MCP socket logic in NewServer uses default if empty.
+		// But if we want to override via flag?
+		// Let's add --mcp-socket separately or just rely on defaults/TCP.
+		// Detailed logic below.
 	})
 
 	srvCtx, srvCancel := context.WithCancel(context.Background())

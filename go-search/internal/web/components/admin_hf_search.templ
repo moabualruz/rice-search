@@ -48,17 +48,17 @@ type HFSearchResultsData struct {
 // HFModelSearchPage renders the HuggingFace model search page
 templ HFModelSearchPage(data HFSearchPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
 			<!-- Header -->
 			<div class="sm:flex sm:items-center sm:justify-between">
 				<div>
-					<h1 class="text-2xl font-semibold text-gray-900">Search HuggingFace Models</h1>
-					<p class="mt-2 text-sm text-gray-700">
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Search HuggingFace Models</h1>
+					<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
 						Search and import ML models from HuggingFace Hub. Models without ONNX files will be automatically exported.
 					</p>
 				</div>
 				<div class="mt-4 sm:mt-0">
-					<a href="/admin/models" class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">
+					<a href="/admin/models" class="inline-flex items-center px-4 py-2 border border-glass-border rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white/5 hover:bg-white/10 transition-colors">
 						← Back to Models
 					</a>
 				</div>
@@ -67,7 +67,7 @@ templ HFModelSearchPage(data HFSearchPageData) {
 			<!-- Exporter Status -->
 			<div class="mt-4">
 				if data.ExporterAvailable {
-					<div class="rounded-md bg-green-50 p-3">
+					<div class="rounded-md bg-green-50 dark:bg-green-900/20 p-3 border border-green-200 dark:border-green-900/30">
 						<div class="flex">
 							<div class="flex-shrink-0">
 								<svg class="h-5 w-5 text-green-400" viewBox="0 0 20 20" fill="currentColor">
@@ -75,14 +75,14 @@ templ HFModelSearchPage(data HFSearchPageData) {
 								</svg>
 							</div>
 							<div class="ml-3">
-								<p class="text-sm font-medium text-green-800">
+								<p class="text-sm font-medium text-green-800 dark:text-green-200">
 									ONNX Exporter available - PyTorch models can be automatically converted
 								</p>
 							</div>
 						</div>
 					</div>
 				} else {
-					<div class="rounded-md bg-yellow-50 p-3">
+					<div class="rounded-md bg-yellow-50 dark:bg-yellow-900/20 p-3 border border-yellow-200 dark:border-yellow-900/30">
 						<div class="flex">
 							<div class="flex-shrink-0">
 								<svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
@@ -90,9 +90,9 @@ templ HFModelSearchPage(data HFSearchPageData) {
 								</svg>
 							</div>
 							<div class="ml-3">
-								<p class="text-sm text-yellow-800">
+								<p class="text-sm text-yellow-800 dark:text-yellow-200">
 									<span class="font-medium">ONNX Exporter not available.</span> Only models with pre-built ONNX files can be downloaded.
-									<br/>Install with: <code class="text-xs bg-yellow-100 px-1 py-0.5 rounded">pip install optimum[onnx]</code>
+									<br/>Install with: <code class="text-xs bg-yellow-100 dark:bg-yellow-900/40 px-1 py-0.5 rounded">pip install optimum[onnx]</code>
 								</p>
 							</div>
 						</div>
@@ -101,14 +101,14 @@ templ HFModelSearchPage(data HFSearchPageData) {
 			</div>
 
 			<!-- Search Form -->
-			<div class="mt-6 bg-white shadow sm:rounded-lg">
+			<div class="mt-6 glass-panel">
 				<div class="px-4 py-5 sm:p-6">
 					<form hx-post="/admin/models/search" hx-target="#search-results" hx-indicator="#search-indicator">
 						<div class="grid grid-cols-1 gap-4 sm:grid-cols-4">
 							<!-- Model Type Selector -->
 							<div>
-								<label for="type" class="block text-sm font-medium text-gray-700">Model Type</label>
-								<select id="type" name="type" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm">
+								<label for="type" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Model Type</label>
+								<select id="type" name="type" class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 focus:bg-white/10 transition-colors text-gray-900 dark:text-white">
 									<option value="embed">Embeddings</option>
 									<option value="rerank">Reranking</option>
 									<option value="query_understand">Query Understanding</option>
@@ -117,31 +117,31 @@ templ HFModelSearchPage(data HFSearchPageData) {
 
 							<!-- Search Query -->
 							<div class="sm:col-span-2">
-								<label for="query" class="block text-sm font-medium text-gray-700">Search Query</label>
+								<label for="query" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Search Query</label>
 								<input type="text" name="query" id="query" placeholder="e.g., jina, bge, e5, minilm..." 
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm"/>
+									class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 focus:bg-white/10 transition-colors text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"/>
 							</div>
 
 							<!-- ONNX Only Checkbox -->
-							<div class="flex items-end">
-								<label class="flex items-center">
+							<div class="flex items-end mb-2">
+								<label class="flex items-center cursor-pointer">
 									<input type="checkbox" name="onnx_only" value="true" 
-										class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
-									<span class="ml-2 text-sm text-gray-700">ONNX Only</span>
+										class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500 dark:bg-white/10 dark:border-gray-600 dark:focus:ring-offset-gray-900"/>
+									<span class="ml-2 text-sm text-gray-700 dark:text-gray-300">ONNX Only</span>
 								</label>
 							</div>
 						</div>
 
 						<div class="mt-4 flex items-center justify-between">
 							<div class="flex items-center space-x-4">
-								<button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+								<button type="submit" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
 									<svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
 									</svg>
 									Search
 								</button>
 								<span id="search-indicator" class="htmx-indicator">
-									<svg class="animate-spin h-5 w-5 text-primary-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+									<svg class="animate-spin h-5 w-5 text-primary-600 dark:text-primary-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
 										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
 									</svg>
@@ -156,7 +156,7 @@ templ HFModelSearchPage(data HFSearchPageData) {
 			<!-- Active Export Jobs -->
 			if len(data.ActiveJobs) > 0 {
 				<div class="mt-6">
-					<h2 class="text-lg font-medium text-gray-900 mb-4">Active Export Jobs</h2>
+					<h2 class="text-lg font-medium text-gray-900 dark:text-white mb-4">Active Export Jobs</h2>
 					<div id="export-jobs" hx-get="/admin/models/export-jobs" hx-trigger="every 3s" hx-swap="innerHTML">
 						@ExportJobsList(data.ActiveJobs)
 					</div>
@@ -168,8 +168,8 @@ templ HFModelSearchPage(data HFSearchPageData) {
 			<!-- Search Results -->
 			<div id="search-results" class="mt-6">
 				<!-- Results will be loaded here via HTMX -->
-				<div class="text-center py-12 text-gray-500">
-					<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+				<div class="text-center py-12 text-gray-500 dark:text-gray-400">
+					<svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
 					</svg>
 					<p class="mt-2">Enter a search query and select a model type to find models</p>
@@ -183,43 +183,43 @@ templ HFModelSearchPage(data HFSearchPageData) {
 templ HFSearchResults(data HFSearchResultsData) {
 	if len(data.Results) == 0 {
 		<div class="text-center py-12">
-			<svg class="mx-auto h-12 w-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+			<svg class="mx-auto h-12 w-12 text-gray-400 dark:text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M12 12h.01M12 12h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
 			</svg>
-			<p class="mt-2 text-gray-500">No models found for "{ data.Query }"</p>
+			<p class="mt-2 text-gray-500 dark:text-gray-400">No models found for "{ data.Query }"</p>
 		</div>
 	} else {
-		<div class="bg-white shadow overflow-hidden sm:rounded-md">
-			<ul role="list" class="divide-y divide-gray-200">
+		<div class="glass-panel overflow-hidden">
+			<ul role="list" class="divide-y divide-glass-border">
 				for _, model := range data.Results {
 					<li>
-						<div class="px-4 py-4 sm:px-6">
+						<div class="px-4 py-4 sm:px-6 hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
 							<div class="flex items-center justify-between">
 								<div class="flex-1 min-w-0">
 									<div class="flex items-center space-x-2">
-										<p class="text-sm font-medium text-primary-600 truncate">{ model.ID }</p>
+										<p class="text-sm font-medium text-primary-600 dark:text-primary-400 truncate">{ model.ID }</p>
 										if model.HasONNX {
-											<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">
+											<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 border border-transparent dark:border-green-500/20">
 												ONNX
 											</span>
 										} else if model.CanExport {
-											<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 text-yellow-800">
+											<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-yellow-100 dark:bg-yellow-500/20 text-yellow-800 dark:text-yellow-300 border border-transparent dark:border-yellow-500/20">
 												Needs Export
 											</span>
 										} else {
-											<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">
+											<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 border border-transparent dark:border-red-500/20">
 												No ONNX
 											</span>
 										}
 									</div>
-									<div class="mt-1 flex items-center space-x-4 text-xs text-gray-500">
+									<div class="mt-1 flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
 										if model.Author != "" {
 											<span>by { model.Author }</span>
 										}
 										<span>{ formatDownloads(model.Downloads) } downloads</span>
 										<span>{ fmt.Sprintf("%d", model.Likes) } ❤️</span>
 										if model.PipelineTag != "" {
-											<span class="text-gray-400">{ model.PipelineTag }</span>
+											<span class="text-gray-400 dark:text-gray-500">{ model.PipelineTag }</span>
 										}
 									</div>
 								</div>
@@ -230,7 +230,7 @@ templ HFSearchResults(data HFSearchResultsData) {
 											hx-vals={ fmt.Sprintf(`{"type": "%s"}`, data.ModelType) }
 											hx-target="#hf-message"
 											hx-swap="innerHTML"
-											class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+											class="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
 										>
 											if model.HasONNX {
 												<svg class="h-4 w-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -245,7 +245,7 @@ templ HFSearchResults(data HFSearchResultsData) {
 											}
 										</button>
 									} else {
-										<span class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-500">
+										<span class="inline-flex items-center px-3 py-1.5 text-xs font-medium text-gray-500 dark:text-gray-400">
 											Export unavailable
 										</span>
 									}
@@ -275,23 +275,23 @@ templ ExportJobsList(jobs []ExportJobDisplay) {
 
 // ExportJobCard renders a single export job card
 templ ExportJobCard(job ExportJobDisplay) {
-	<div class="bg-white shadow sm:rounded-lg p-4">
+	<div class="glass-panel p-4">
 		<div class="flex items-center justify-between">
 			<div class="flex-1 min-w-0">
-				<p class="text-sm font-medium text-gray-900 truncate">{ job.ModelID }</p>
-				<p class="text-sm text-gray-500">{ job.Message }</p>
+				<p class="text-sm font-medium text-gray-900 dark:text-white truncate">{ job.ModelID }</p>
+				<p class="text-sm text-gray-500 dark:text-gray-400">{ job.Message }</p>
 			</div>
 			<div class="flex-shrink-0 ml-4">
 				if job.Complete {
-					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-500/20 text-green-800 dark:text-green-300 border border-transparent dark:border-green-500/20">
 						Complete
 					</span>
 				} else if job.Error != "" {
-					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 dark:bg-red-500/20 text-red-800 dark:text-red-300 border border-transparent dark:border-red-500/20">
 						Error
 					</span>
 				} else {
-					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 text-primary-800">
+					<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300 border border-transparent dark:border-primary-500/20">
 						{ job.Status }
 					</span>
 				}
@@ -301,20 +301,20 @@ templ ExportJobCard(job ExportJobDisplay) {
 		if !job.Complete && job.Error == "" {
 			<!-- Progress bar -->
 			<div class="mt-3">
-				<div class="flex items-center justify-between text-xs text-gray-500 mb-1">
+				<div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
 					<span>{ fmt.Sprintf("%.0f%%", job.Percent) }</span>
 					if job.EstimatedTime > 0 {
 						<span>~{ formatSecondsRemaining(job.EstimatedTime) } remaining</span>
 					}
 				</div>
-				<div class="w-full bg-gray-200 rounded-full h-2">
+				<div class="w-full bg-gray-200 dark:bg-white/10 rounded-full h-2">
 					<div class="bg-primary-600 h-2 rounded-full transition-all duration-500" style={ fmt.Sprintf("width: %.0f%%", job.Percent) }></div>
 				</div>
 			</div>
 		}
 		
 		if job.Error != "" {
-			<p class="mt-2 text-sm text-red-600">{ job.Error }</p>
+			<p class="mt-2 text-sm text-red-600 dark:text-red-400">{ job.Error }</p>
 		}
 	</div>
 }

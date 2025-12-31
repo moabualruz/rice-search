@@ -32,19 +32,19 @@ type ConnectionSummary struct {
 // StoresPage renders the stores browser page
 templ StoresPage(data StoresPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-			<div class="sm:flex sm:items-center">
-				<div class="sm:flex-auto">
-					<h1 class="text-2xl font-semibold text-gray-900">Stores & Connections</h1>
-					<p class="mt-2 text-sm text-gray-700">
+		<div class="max-w-7xl mx-auto space-y-8 animate-fade-in">
+			<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+				<div class="space-y-1">
+					<h1 class="text-3xl font-bold text-gray-900 dark:text-white">Stores & Connections</h1>
+					<p class="text-sm text-gray-500 dark:text-gray-400">
 						Manage your search indexes and view connected clients.
 					</p>
 				</div>
-				<div class="mt-4 sm:ml-16 sm:mt-0 sm:flex-none">
+				<div>
 					<button
 						type="button"
 						onclick="document.getElementById('create-store-modal').classList.remove('hidden')"
-						class="inline-flex items-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600"
+						class="inline-flex items-center rounded-lg bg-primary-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600 transition-all hover:scale-105"
 					>
 						<svg class="-ml-0.5 mr-1.5 h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
 							<path d="M10.75 4.75a.75.75 0 00-1.5 0v4.5h-4.5a.75.75 0 000 1.5h4.5v4.5a.75.75 0 001.5 0v-4.5h4.5a.75.75 0 000-1.5h-4.5v-4.5z"/>
@@ -56,13 +56,11 @@ templ StoresPage(data StoresPageData) {
 
 			<!-- Error message -->
 			if data.Error != "" {
-				<div class="mt-4">
-					@ErrorMessage(data.Error)
-				</div>
+				@ErrorMessage(data.Error)
 			}
 
 			<!-- Stores list -->
-			<div id="stores-container" class="mt-8">
+			<div id="stores-container">
 				@StoresGrid(data.Stores)
 			</div>
 
@@ -75,7 +73,9 @@ templ StoresPage(data StoresPageData) {
 // StoresGrid renders the grid of stores
 templ StoresGrid(stores []StoreWithConnections) {
 	if len(stores) == 0 {
-		@EmptyState("No stores found", "Get started by creating a new store")
+		<div class="glass-panel p-12 text-center text-gray-500 dark:text-gray-400">
+			@EmptyState("No stores found", "Get started by creating a new store")
+		</div>
 	} else {
 		<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
 			for _, store := range stores {
@@ -87,157 +87,159 @@ templ StoresGrid(stores []StoreWithConnections) {
 
 // StoreCard renders a single store card
 templ StoreCard(store StoreWithConnections) {
-	<div class="bg-white overflow-hidden shadow rounded-lg hover:shadow-lg transition-shadow">
-		<div class="p-5">
+	<div class="glass-panel flex flex-col h-full hover:border-primary-500/30 hover:scale-[1.01] transition-all duration-200 group relative">
+		<div class="p-6 flex-1">
 			<!-- Store header -->
-			<div class="flex items-center justify-between">
-				<h3 class="text-lg font-medium text-gray-900 truncate">
-					<a href={ templ.URL(fmt.Sprintf("/stores/%s", store.Store.Name)) } class="hover:text-primary-600">
-						{ store.Store.DisplayName }
-					</a>
-				</h3>
+			<div class="flex items-start justify-between">
+				<div class="space-y-1">
+					<h3 class="text-lg font-semibold text-gray-900 dark:text-white truncate pr-4">
+						<a href={ templ.URL(fmt.Sprintf("/stores/%s", store.Store.Name)) } class="hover:text-primary-500 transition-colors">
+							{ store.Store.DisplayName }
+						</a>
+					</h3>
+					if store.Store.Description != "" {
+						<p class="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 min-h-[2.5em]">{ store.Store.Description }</p>
+					} else {
+						<p class="text-xs text-gray-400 dark:text-gray-500 italic min-h-[2.5em]">No description provided</p>
+					}
+				</div>
+				
 				if !store.Store.IsDefaultStore() {
 					<button
 						hx-delete={ fmt.Sprintf("/admin/stores/%s", store.Store.Name) }
 						hx-target="#stores-container"
 						hx-confirm={ fmt.Sprintf("Delete store '%s'? This cannot be undone.", store.Store.Name) }
-						class="text-gray-400 hover:text-red-600"
+						class="text-gray-400 hover:text-red-500 dark:text-gray-500 dark:hover:text-red-400 transition-colors bg-white/5 p-1.5 rounded-md hover:bg-white/10"
 						title="Delete store"
 					>
-						<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
 						</svg>
 					</button>
 				}
 			</div>
 
-			<!-- Store description -->
-			if store.Store.Description != "" {
-				<p class="mt-1 text-sm text-gray-500">{ store.Store.Description }</p>
-			}
-
 			<!-- Stats -->
-			<dl class="mt-4 grid grid-cols-2 gap-4 text-sm">
-				<div>
-					<dt class="text-gray-500">Files</dt>
-					<dd class="mt-1 font-semibold text-gray-900">{ fmt.Sprint(store.FileCount) }</dd>
+			<div class="mt-6 grid grid-cols-2 gap-4">
+				<div class="px-3 py-2 rounded-md bg-white/5 border border-glass-border">
+					<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Files</dt>
+					<dd class="mt-1 text-lg font-bold text-gray-900 dark:text-white">{ fmt.Sprint(store.FileCount) }</dd>
 				</div>
-				<div>
-					<dt class="text-gray-500">Chunks</dt>
-					<dd class="mt-1 font-semibold text-gray-900">{ fmt.Sprint(store.ChunkCount) }</dd>
+				<div class="px-3 py-2 rounded-md bg-white/5 border border-glass-border">
+					<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Chunks</dt>
+					<dd class="mt-1 text-lg font-bold text-gray-900 dark:text-white">{ fmt.Sprint(store.ChunkCount) }</dd>
 				</div>
-				<div>
-					<dt class="text-gray-500">Size</dt>
-					<dd class="mt-1 font-semibold text-gray-900">{ formatBytes(store.Store.TotalSize) }</dd>
+				<div class="px-3 py-2 rounded-md bg-white/5 border border-glass-border">
+					<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Size</dt>
+					<dd class="mt-1 text-lg font-bold text-gray-900 dark:text-white">{ formatBytes(store.Store.TotalSize) }</dd>
 				</div>
-				<div>
-					<dt class="text-gray-500">Connections</dt>
-					<dd class="mt-1 font-semibold text-gray-900">{ fmt.Sprint(len(store.Connections)) }</dd>
+				<div class="px-3 py-2 rounded-md bg-white/5 border border-glass-border">
+					<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Clients</dt>
+					<dd class="mt-1 text-lg font-bold text-gray-900 dark:text-white">{ fmt.Sprint(len(store.Connections)) }</dd>
 				</div>
-			</dl>
+			</div>
 
-			<!-- Connections -->
+			<!-- Connections list preview -->
 			if len(store.Connections) > 0 {
-				<div class="mt-4 border-t border-gray-200 pt-4">
-					<h4 class="text-xs font-medium text-gray-500 uppercase tracking-wide">Connected Clients</h4>
-					<ul class="mt-2 space-y-1">
-						for _, conn := range store.Connections {
-							<li class="flex items-center justify-between text-sm">
-								<span class="text-gray-700 truncate">{ conn.Name }</span>
-								<span class="text-gray-500 text-xs">{ formatRelativeTime(conn.LastSeen) }</span>
-							</li>
+				<div class="mt-6 border-t border-glass-border pt-4">
+					<h4 class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">Recent Clients</h4>
+					<ul class="space-y-1">
+						for i, conn := range store.Connections {
+							if i < 3 {
+								<li class="flex items-center justify-between text-xs">
+									<span class="text-gray-700 dark:text-gray-300 truncate max-w-[120px]">{ conn.Name }</span>
+									<span class="text-gray-500 dark:text-gray-500">{ formatRelativeTime(conn.LastSeen) }</span>
+								</li>
+							}
+						}
+						if len(store.Connections) > 3 {
+							<li class="text-xs text-primary-500 dark:text-primary-400 italic text-center pt-1">+ { fmt.Sprint(len(store.Connections)-3) } more</li>
 						}
 					</ul>
 				</div>
+			} else {
+				<div class="mt-6 border-t border-glass-border pt-4 text-center">
+					<p class="text-xs text-gray-400 dark:text-gray-600 italic">No active connections</p>
+				</div>
 			}
+		</div>
 
-			<!-- Actions -->
-			<div class="mt-4 flex gap-2">
-				<a
-					href={ templ.URL(fmt.Sprintf("/stores/%s", store.Store.Name)) }
-					class="flex-1 inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-				>
-					View Details
-				</a>
-				<a
-					href={ templ.URL(fmt.Sprintf("/stores/%s/files", store.Store.Name)) }
-					class="flex-1 inline-flex justify-center items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
-				>
-					Browse Files
-				</a>
-			</div>
+		<!-- Actions Footer -->
+		<div class="border-t border-glass-border bg-gray-50/50 dark:bg-white/5 px-6 py-4 rounded-b-xl flex gap-3">
+			<a
+				href={ templ.URL(fmt.Sprintf("/stores/%s", store.Store.Name)) }
+				class="flex-1 inline-flex justify-center items-center px-3 py-2 border border-glass-border shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-200 bg-white dark:bg-black/20 hover:bg-gray-50 dark:hover:bg-white/10 transition-colors"
+			>
+				Details
+			</a>
+			<a
+				href={ templ.URL(fmt.Sprintf("/stores/%s/files", store.Store.Name)) }
+				class="flex-1 inline-flex justify-center items-center px-3 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-primary-700 dark:text-primary-200 bg-primary-100 dark:bg-primary-900/30 hover:bg-primary-200 dark:hover:bg-primary-900/50 transition-colors"
+			>
+				Files
+			</a>
 		</div>
 	</div>
 }
 
 // CreateStoreFormModal renders the create store modal
 templ CreateStoreFormModal() {
-	<div id="create-store-modal" class="hidden relative z-10" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-		<div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
-		<div class="fixed inset-0 z-10 overflow-y-auto">
-			<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-				<div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-					<form
-						hx-post="/admin/stores"
-						hx-target="#stores-container"
-						hx-on::after-request="if(event.detail.successful) document.getElementById('create-store-modal').classList.add('hidden')"
-					>
-						<div>
-							<h3 class="text-lg font-medium leading-6 text-gray-900" id="modal-title">Create New Store</h3>
-							<div class="mt-4 space-y-4">
-								<div>
-									<label for="name" class="block text-sm font-medium text-gray-700">Name</label>
-									<input
-										type="text"
-										name="name"
-										id="name"
-										required
-										pattern="[a-z][a-z0-9-]*"
-										placeholder="my-project"
-										class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
-									/>
-									<p class="mt-1 text-sm text-gray-500">Lowercase letters, numbers, hyphens (must start with letter)</p>
-								</div>
-								<div>
-									<label for="display_name" class="block text-sm font-medium text-gray-700">Display Name</label>
-									<input
-										type="text"
-										name="display_name"
-										id="display_name"
-										placeholder="My Project"
-										class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
-									/>
-								</div>
-								<div>
-									<label for="description" class="block text-sm font-medium text-gray-700">Description</label>
-									<textarea
-										name="description"
-										id="description"
-										rows="2"
-										placeholder="Optional description..."
-										class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
-									></textarea>
-								</div>
-							</div>
-						</div>
-						<div class="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
-							<button
-								type="submit"
-								class="inline-flex w-full justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 sm:col-start-2"
-							>
-								Create
-							</button>
-							<button
-								type="button"
-								onclick="document.getElementById('create-store-modal').classList.add('hidden')"
-								class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:col-start-1 sm:mt-0"
-							>
-								Cancel
-							</button>
-						</div>
-					</form>
-				</div>
+	@Modal("create-store-modal", "Create New Store") {
+		<form
+			hx-post="/admin/stores"
+			hx-target="#stores-container"
+			hx-on::after-request="if(event.detail.successful) document.getElementById('create-store-modal').classList.add('hidden')"
+			class="space-y-4"
+		>
+			<div>
+				<label for="name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Name</label>
+				<input
+					type="text"
+					name="name"
+					id="name"
+					required
+					pattern="[a-z][a-z0-9-]*"
+					placeholder="my-project"
+					class="mt-1 block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white sm:text-sm py-2 px-3 focus:ring-primary-500 transition-colors"
+				/>
+				<p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Lowercase letters, numbers, hyphens (must start with letter)</p>
 			</div>
-		</div>
-	</div>
+			<div>
+				<label for="display_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Display Name</label>
+				<input
+					type="text"
+					name="display_name"
+					id="display_name"
+					placeholder="My Project"
+					class="mt-1 block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white sm:text-sm py-2 px-3 focus:ring-primary-500 transition-colors"
+				/>
+			</div>
+			<div>
+				<label for="description" class="block text-sm font-medium text-gray-700 dark:text-gray-300">Description</label>
+				<textarea
+					name="description"
+					id="description"
+					rows="2"
+					placeholder="Optional description..."
+					class="mt-1 block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white sm:text-sm py-2 px-3 focus:ring-primary-500 transition-colors"
+				></textarea>
+			</div>
+			
+			<div class="pt-4 border-t border-glass-border grid grid-cols-2 gap-3">
+				<button
+					type="button"
+					onclick="document.getElementById('create-store-modal').classList.add('hidden')"
+					class="w-full inline-flex justify-center rounded-md border border-glass-border bg-white/5 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm hover:bg-white/10 transition-colors"
+				>
+					Cancel
+				</button>
+				<button
+					type="submit"
+					class="w-full inline-flex justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 transition-colors"
+				>
+					Create
+				</button>
+			</div>
+		</form>
+	}
 }

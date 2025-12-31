@@ -41,17 +41,17 @@ type ModelsPageData struct {
 // AdminModelsPage renders the model management page
 templ AdminModelsPage(data ModelsPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
 			<!-- Header -->
 			<div class="sm:flex sm:items-center sm:justify-between">
 				<div class="sm:flex-auto">
-					<h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Model Management</h1>
-					<p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Model Management</h1>
+					<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
 						Manage ML models for embeddings, reranking, and query understanding.
 					</p>
 				</div>
 				<div class="mt-4 sm:mt-0">
-					<a href="/admin/models/search" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500">
+					<a href="/admin/models/search" class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors">
 						<svg class="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
 						</svg>
@@ -82,7 +82,7 @@ templ AdminModelsPage(data ModelsPageData) {
 
 // ModelsSection renders models grouped by type
 templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay, typeConfigs []ModelTypeConfigDisplay) {
-	<div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg">
+	<div class="glass-panel overflow-hidden">
 		<div class="px-4 py-5 sm:p-6">
 			<!-- Section Header -->
 			<div class="flex items-center justify-between mb-4">
@@ -96,7 +96,7 @@ templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay,
 				<!-- Type-level GPU toggle -->
 				if typeConfig := getTypeConfig(modelType, typeConfigs); typeConfig != nil {
 					<div class="flex items-center space-x-2">
-						<span class="text-sm text-gray-700">GPU:</span>
+						<span class="text-sm text-gray-700 dark:text-gray-300">GPU:</span>
 						<button
 							hx-post={ fmt.Sprintf("/admin/models/type/%s/gpu", modelType) }
 							hx-vals={ fmt.Sprintf(`{"enabled": %t}`, !typeConfig.GPUEnabled) }
@@ -124,7 +124,7 @@ templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay,
 			<!-- Query Understanding Enable/Disable -->
 			if modelType == "query_understand" {
 				if typeConfig := getTypeConfig(modelType, typeConfigs); typeConfig != nil {
-					<div class="mb-4 p-4 bg-gray-50 rounded-lg">
+					<div class="mb-4 p-4 rounded-lg bg-gray-50 dark:bg-white/5 border border-glass-border">
 						<div class="flex items-center justify-between">
 							<div>
 								<p class="text-sm font-medium text-gray-900 dark:text-white">Use Model for Query Understanding</p>
@@ -140,9 +140,9 @@ templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay,
 								hx-post={ fmt.Sprintf("/admin/models/type/%s/toggle", modelType) }
 								hx-target="#model-messages"
 								hx-swap="innerHTML"
-								class={ "px-4 py-2 text-sm font-medium rounded-md",
+								class={ "px-4 py-2 text-sm font-medium rounded-md transition-colors",
 									templ.KV("bg-primary-600 text-white hover:bg-primary-700", typeConfig.GPUEnabled),
-									templ.KV("bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-500", !typeConfig.GPUEnabled) }
+									templ.KV("bg-gray-200 dark:bg-white/10 text-gray-700 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-white/20", !typeConfig.GPUEnabled) }
 							>
 								if typeConfig.GPUEnabled {
 									Disable Model
@@ -169,11 +169,11 @@ templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay,
 
 // ModelCard renders a single model card
 templ ModelCard(model ModelInfoDisplay) {
-	<div id={ fmt.Sprintf("model-card-%s", strings.ReplaceAll(model.ID, "/", "_")) } class="relative rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 px-4 py-4 shadow-sm hover:border-gray-400 dark:hover:border-gray-500">
+	<div id={ fmt.Sprintf("model-card-%s", strings.ReplaceAll(model.ID, "/", "_")) } class="relative rounded-lg border border-glass-border bg-white/5 px-4 py-4 shadow-sm hover:border-primary-500/30 hover:bg-white/10 transition-colors">
 		<!-- Default Badge -->
 		if model.IsDefault {
 			<div class="absolute top-2 right-2">
-				<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+				<span class="inline-flex items-center rounded-full bg-primary-100 dark:bg-primary-500/20 px-2 py-0.5 text-xs font-medium text-primary-800 dark:text-primary-300 border border-transparent dark:border-primary-500/20">
 					Default
 				</span>
 			</div>
@@ -181,8 +181,8 @@ templ ModelCard(model ModelInfoDisplay) {
 
 		<!-- Model Name & Description -->
 		<div class="mb-3">
-			<h4 class="text-sm font-medium text-gray-900 dark:text-white pr-16">{ model.DisplayName }</h4>
-			<p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{ model.Description }</p>
+			<h4 class="text-sm font-medium text-gray-900 dark:text-white pr-16 break-all" title={ model.DisplayName }>{ model.DisplayName }</h4>
+			<p class="text-xs text-gray-500 dark:text-gray-400 mt-1 line-clamp-2" title={ model.Description }>{ model.Description }</p>
 		</div>
 
 		<!-- Model Info -->
@@ -206,14 +206,14 @@ templ ModelCard(model ModelInfoDisplay) {
 		<!-- Status -->
 		<div class="mb-3">
 			if model.Status == "ready" || model.Downloaded {
-				<div class="flex items-center text-xs text-green-600">
+				<div class="flex items-center text-xs text-green-600 dark:text-green-400">
 					<svg class="h-4 w-4 mr-1" fill="currentColor" viewBox="0 0 20 20">
 						<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
 					</svg>
 					Downloaded
 				</div>
 			} else if model.Status == "downloading" {
-				<div class="flex items-center text-xs text-primary-600">
+				<div class="flex items-center text-xs text-primary-600 dark:text-primary-400">
 					<svg class="animate-spin h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24">
 						<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
 						<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -221,11 +221,11 @@ templ ModelCard(model ModelInfoDisplay) {
 					Downloading...
 				</div>
 				<!-- Progress bar -->
-				<div class="mt-2 w-full bg-gray-200 rounded-full h-1.5">
+				<div class="mt-2 w-full bg-gray-200 dark:bg-white/10 rounded-full h-1.5">
 					<div id={ fmt.Sprintf("progress-%s", strings.ReplaceAll(model.ID, "/", "_")) } class="bg-primary-600 h-1.5 rounded-full" style="width: 45%"></div>
 				</div>
 			} else {
-				<div class="flex items-center text-xs text-gray-500">
+				<div class="flex items-center text-xs text-gray-500 dark:text-gray-400">
 					<svg class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
 					</svg>
@@ -236,7 +236,7 @@ templ ModelCard(model ModelInfoDisplay) {
 
 		<!-- GPU Status -->
 		<div class="mb-3 flex items-center justify-between text-xs">
-			<span class="text-gray-500">GPU:</span>
+			<span class="text-gray-500 dark:text-gray-400">GPU:</span>
 			<button
 				hx-post={ fmt.Sprintf("/admin/models/gpu/%s", model.ID) }
 				hx-vals={ fmt.Sprintf(`{"enabled": %t}`, !model.GPUEnabled) }
@@ -244,7 +244,7 @@ templ ModelCard(model ModelInfoDisplay) {
 				hx-swap="innerHTML"
 				class={ "relative inline-flex h-4 w-8 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out",
 					templ.KV("bg-primary-600", model.GPUEnabled),
-					templ.KV("bg-gray-200", !model.GPUEnabled) }
+					templ.KV("bg-gray-200 dark:bg-white/10", !model.GPUEnabled) }
 			>
 				<span class={ "pointer-events-none inline-block h-3 w-3 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out",
 					templ.KV("translate-x-4", model.GPUEnabled),
@@ -259,7 +259,7 @@ templ ModelCard(model ModelInfoDisplay) {
 					hx-post={ fmt.Sprintf("/admin/models/download/%s", model.ID) }
 					hx-target="#model-messages"
 					hx-swap="innerHTML"
-					class="flex-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-primary-500"
+					class="flex-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-primary-500 transition-colors"
 				>
 					Download
 				</button>
@@ -269,7 +269,7 @@ templ ModelCard(model ModelInfoDisplay) {
 					hx-post={ fmt.Sprintf("/admin/models/default/%s", model.ID) }
 					hx-target="#model-messages"
 					hx-swap="innerHTML"
-					class="flex-1 rounded-md bg-white px-3 py-1.5 text-xs font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+					class="flex-1 rounded-md border border-glass-border bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-white/10 transition-colors"
 				>
 					Set Default
 				</button>
@@ -280,7 +280,7 @@ templ ModelCard(model ModelInfoDisplay) {
 					hx-target="#model-messages"
 					hx-swap="innerHTML"
 					hx-confirm={ fmt.Sprintf("Delete %s?", model.DisplayName) }
-					class="rounded-md bg-white px-3 py-1.5 text-xs font-medium text-red-600 shadow-sm ring-1 ring-inset ring-red-300 hover:bg-red-50"
+					class="rounded-md border border-red-200/50 dark:border-red-500/30 bg-red-50/50 dark:bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 shadow-sm hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
 				>
 					Delete
 				</button>

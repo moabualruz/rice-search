@@ -13,9 +13,10 @@ import (
 )
 
 type Server struct {
-	socketPath string
-	handler    *Handler
-	listener   net.Listener
+	addr     string
+	network  string
+	handler  *Handler
+	listener net.Listener
 
 	// Active connections
 	connsMu sync.RWMutex
@@ -26,46 +27,62 @@ type Server struct {
 
 type ServerConfig struct {
 	SocketPath string
+	TCPAddr    string
 	Handler    *Handler
 }
 
 func NewServer(cfg ServerConfig) *Server {
-	if cfg.SocketPath == "" {
+	network := "unix"
+	addr := cfg.SocketPath
+
+	if cfg.TCPAddr != "" {
+		network = "tcp"
+		addr = cfg.TCPAddr
+	} else if addr == "" {
 		home, _ := os.UserHomeDir()
 		// Use a platform-appropriate directory
-		cfg.SocketPath = filepath.Join(home, ".local", "run", "rice-search", "mcp.sock")
+		addr = filepath.Join(home, ".local", "run", "rice-search", "mcp.sock")
 	}
 
 	return &Server{
-		socketPath: cfg.SocketPath,
-		handler:    cfg.Handler,
-		conns:      make(map[net.Conn]struct{}),
-		log:        slog.Default().With("component", "mcp"),
+		addr:    addr,
+		network: network,
+		handler: cfg.Handler,
+		conns:   make(map[net.Conn]struct{}),
+		log:     slog.Default().With("component", "mcp"),
 	}
 }
 
 func (s *Server) Start(ctx context.Context) error {
-	// Ensure directory exists
-	dir := filepath.Dir(s.socketPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("failed to create socket dir: %w", err)
+	var listener net.Listener
+	var err error
+
+	if s.network == "unix" {
+		// Ensure directory exists
+		dir := filepath.Dir(s.addr)
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return fmt.Errorf("failed to create socket dir: %w", err)
+		}
+
+		// Remove existing socket file
+		os.Remove(s.addr)
+
+		listener, err = net.Listen("unix", s.addr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+		}
+
+		// Set permissions
+		os.Chmod(s.addr, 0600)
+	} else {
+		listener, err = net.Listen("tcp", s.addr)
+		if err != nil {
+			return fmt.Errorf("failed to listen on %s: %w", s.addr, err)
+		}
 	}
 
-	// Remove existing socket file
-	os.Remove(s.socketPath)
-
-	// Create listener
-	listener, err := net.Listen("unix", s.socketPath)
-	if err != nil {
-		return fmt.Errorf("failed to listen on %s: %w", s.socketPath, err)
-	}
 	s.listener = listener
-
-	// Set permissions (readable/writable by owner only)
-	// On Windows, chmod has limited effect but good practice for unix subsys
-	os.Chmod(s.socketPath, 0600)
-
-	s.log.Info("MCP server listening", "socket", s.socketPath)
+	s.log.Info("MCP server listening", "network", s.network, "addr", s.addr)
 
 	// Accept connections
 	go s.acceptLoop(ctx)
@@ -177,12 +194,14 @@ func (s *Server) Shutdown() error {
 	}
 	s.connsMu.Unlock()
 
-	// Remove socket file
-	os.Remove(s.socketPath)
+	// Remove socket file if unix
+	if s.network == "unix" {
+		os.Remove(s.addr)
+	}
 
 	return nil
 }
 
 func (s *Server) SocketPath() string {
-	return s.socketPath
+	return s.addr
 }

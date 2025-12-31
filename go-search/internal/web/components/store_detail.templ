@@ -37,143 +37,104 @@ type PCInfoDisplay struct {
 // StoreDetailPage renders the store detail page
 templ StoreDetailPage(data StoreDetailPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+		<div class="max-w-7xl mx-auto space-y-8 animate-fade-in">
 			<!-- Header -->
-			<div class="mb-8">
-				<nav class="flex mb-4" aria-label="Breadcrumb">
-					<ol class="flex items-center space-x-2 text-sm">
-						<li>
-							<a href="/stores" class="text-gray-500 hover:text-gray-700">Stores</a>
-						</li>
-						<li>
-							<svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-								<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-							</svg>
-						</li>
-						<li class="text-gray-900 font-medium">{ data.Store.DisplayName }</li>
-					</ol>
-				</nav>
-				
-				<div class="sm:flex sm:items-center sm:justify-between">
+			<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+				<div class="space-y-2">
+					<nav class="flex mb-2" aria-label="Breadcrumb">
+						<ol class="flex items-center space-x-2 text-sm">
+							<li>
+								<a href="/stores" class="text-gray-500 hover:text-primary-500 transition-colors">Stores</a>
+							</li>
+							<li><span class="text-gray-400">/</span></li>
+							<li class="text-gray-900 dark:text-white font-medium">{ data.Store.DisplayName }</li>
+						</ol>
+					</nav>
 					<div>
-						<h1 class="text-3xl font-bold text-gray-900">{ data.Store.DisplayName }</h1>
+						<h1 class="text-3xl font-bold text-gray-900 dark:text-white">{ data.Store.DisplayName }</h1>
 						if data.Store.Description != "" {
-							<p class="mt-2 text-gray-600">{ data.Store.Description }</p>
+							<p class="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">{ data.Store.Description }</p>
 						}
 					</div>
-					<div class="mt-4 sm:mt-0 flex gap-2">
-						<a
-							href={ templ.URL(fmt.Sprintf("/stores/%s/files", data.Store.Name)) }
-							class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-						>
-							Browse Files
-						</a>
-						<a
-							href={ templ.URL(fmt.Sprintf("/?store=%s", data.Store.Name)) }
-							class="inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-700"
-						>
-							<svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-							</svg>
-							Search This Store
-						</a>
-					</div>
+				</div>
+				<div class="flex flex-col sm:flex-row gap-3">
+					<a
+						href={ templ.URL(fmt.Sprintf("/stores/%s/files", data.Store.Name)) }
+						class="inline-flex items-center justify-center px-4 py-2 border border-glass-border rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white/5 hover:bg-white/10 transition-colors"
+					>
+						Browse Files
+					</a>
+					<a
+						href={ templ.URL(fmt.Sprintf("/?store=%s", data.Store.Name)) }
+						class="inline-flex items-center justify-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary-600 hover:bg-primary-500 transition-colors"
+					>
+						<svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+						</svg>
+						Search This Store
+					</a>
 				</div>
 			</div>
 
 			<!-- Error message -->
 			if data.Error != "" {
-				<div class="mb-6">
-					@ErrorMessage(data.Error)
-				</div>
+				@ErrorMessage(data.Error)
 			}
 
 			<!-- Stats Cards -->
-			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Total Files</dt>
-									<dd class="text-lg font-semibold text-gray-900">{ fmt.Sprint(data.Store.DocumentCount) }</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+						</svg>
+						Total Files
+					</dt>
+					<dd class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{ fmt.Sprint(data.Store.DocumentCount) }</dd>
 				</div>
 
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Total Chunks</dt>
-									<dd class="text-lg font-semibold text-gray-900">{ fmt.Sprint(data.Store.ChunkCount) }</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h16M4 12h16M4 17h16"/>
+						</svg>
+						Total Chunks
+					</dt>
+					<dd class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{ fmt.Sprint(data.Store.ChunkCount) }</dd>
 				</div>
 
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Total Size</dt>
-									<dd class="text-lg font-semibold text-gray-900">{ formatBytes(data.Store.TotalSize) }</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+						</svg>
+						Total Size
+					</dt>
+					<dd class="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{ formatBytes(data.Store.TotalSize) }</dd>
 				</div>
 
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Last Indexed</dt>
-									<dd class="text-sm font-medium text-gray-900">
-										if data.Store.LastIndexed.IsZero() {
-											<span class="text-gray-400">Never</span>
-										} else {
-											{ formatRelativeTime(data.Store.LastIndexed) }
-										}
-									</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+						</svg>
+						Last Indexed
+					</dt>
+					<dd class="mt-2 text-lg font-bold text-gray-900 dark:text-white">
+						if data.Store.LastIndexed.IsZero() {
+							<span class="text-gray-400 dark:text-gray-600 text-base font-normal">Never</span>
+						} else {
+							{ formatRelativeTime(data.Store.LastIndexed) }
+						}
+					</dd>
 				</div>
 			</div>
 
 			<!-- Connections Table -->
-			<div class="bg-white shadow rounded-lg mb-8">
-				<div class="px-6 py-4 border-b border-gray-200">
-					<h2 class="text-lg font-medium text-gray-900">Connected Clients</h2>
-					<p class="mt-1 text-sm text-gray-500">Clients that have indexed files to this store</p>
+			<div class="glass-panel overflow-hidden">
+				<div class="px-6 py-4 border-b border-glass-border bg-gray-50/50 dark:bg-white/5">
+					<h2 class="text-lg font-medium text-gray-900 dark:text-white">Connected Clients</h2>
+					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Clients that have indexed files to this store</p>
 				</div>
 				<div class="overflow-x-auto">
 					@ConnectionsTable(data.Connections)
@@ -181,15 +142,15 @@ templ StoreDetailPage(data StoreDetailPageData) {
 			</div>
 
 			<!-- Recent Files -->
-			<div class="bg-white shadow rounded-lg">
-				<div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+			<div class="glass-panel overflow-hidden">
+				<div class="px-6 py-4 border-b border-glass-border bg-gray-50/50 dark:bg-white/5 flex items-center justify-between">
 					<div>
-						<h2 class="text-lg font-medium text-gray-900">Recent Files</h2>
-						<p class="mt-1 text-sm text-gray-500">Recently indexed files</p>
+						<h2 class="text-lg font-medium text-gray-900 dark:text-white">Recent Files</h2>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Recently indexed files</p>
 					</div>
 					<a
 						href={ templ.URL(fmt.Sprintf("/stores/%s/files", data.Store.Name)) }
-						class="text-sm font-medium text-primary-600 hover:text-primary-500"
+						class="text-sm font-medium text-primary-600 hover:text-primary-500 transition-colors"
 					>
 						View all →
 					</a>
@@ -205,47 +166,39 @@ templ StoreDetailPage(data StoreDetailPageData) {
 // ConnectionsTable renders the connections table
 templ ConnectionsTable(connections []ConnectionDetail) {
 	if len(connections) == 0 {
-		<div class="px-6 py-8 text-center">
-			<p class="text-sm text-gray-500">No connections have indexed to this store yet</p>
+		<div class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+			<p>No connections have indexed to this store yet</p>
 		</div>
 	} else {
-		<table class="min-w-full divide-y divide-gray-200">
-			<thead class="bg-gray-50">
+		<table class="min-w-full divide-y divide-glass-border">
+			<thead class="bg-gray-50/50 dark:bg-white/5">
 				<tr>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						Connection
-					</th>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						PC Info
-					</th>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						Files Indexed
-					</th>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						Last Seen
-					</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Connection</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Device Info</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Indexed</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Last Seen</th>
 				</tr>
 			</thead>
-			<tbody class="bg-white divide-y divide-gray-200">
+			<tbody class="divide-y divide-glass-border bg-transparent">
 				for _, conn := range connections {
-					<tr class="hover:bg-gray-50">
+					<tr class="hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors">
 						<td class="px-6 py-4">
-							<div class="text-sm font-medium text-gray-900">{ conn.Name }</div>
-							<div class="text-sm text-gray-500 font-mono">{ conn.ID }</div>
+							<div class="text-sm font-medium text-gray-900 dark:text-white">{ conn.Name }</div>
+							<div class="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{ conn.ID[:8] }...</div>
 						</td>
 						<td class="px-6 py-4">
-							<div class="text-sm text-gray-900">{ conn.PCInfo.Hostname }</div>
-							<div class="text-sm text-gray-500">
+							<div class="text-sm text-gray-900 dark:text-white">{ conn.PCInfo.Hostname }</div>
+							<div class="text-xs text-gray-500 dark:text-gray-400">
 								{ conn.PCInfo.OS }/{ conn.PCInfo.Arch }
 								if conn.PCInfo.Username != "" {
 									<span> • { conn.PCInfo.Username }</span>
 								}
 							</div>
 						</td>
-						<td class="px-6 py-4 text-sm text-gray-900">
-							{ fmt.Sprint(conn.FilesIndexed) }
+						<td class="px-6 py-4 text-sm text-gray-900 dark:text-white font-mono">
+							{ fmt.Sprint(conn.FilesIndexed) } files
 						</td>
-						<td class="px-6 py-4 text-sm text-gray-500">
+						<td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
 							{ formatRelativeTime(conn.LastSeen) }
 						</td>
 					</tr>
@@ -258,43 +211,35 @@ templ ConnectionsTable(connections []ConnectionDetail) {
 // RecentFilesTable renders the recent files table
 templ RecentFilesTable(files []IndexedFileInfo) {
 	if len(files) == 0 {
-		<div class="px-6 py-8 text-center">
-			<p class="text-sm text-gray-500">No files indexed yet</p>
+		<div class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+			<p>No files indexed yet</p>
 		</div>
 	} else {
-		<table class="min-w-full divide-y divide-gray-200">
-			<thead class="bg-gray-50">
+		<table class="min-w-full divide-y divide-glass-border">
+			<thead class="bg-gray-50/50 dark:bg-white/5">
 				<tr>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						Path
-					</th>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						Language
-					</th>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						Chunks
-					</th>
-					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-						Indexed
-					</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Path</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Language</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Chunks</th>
+					<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Indexed</th>
 				</tr>
 			</thead>
-			<tbody class="bg-white divide-y divide-gray-200">
+			<tbody class="divide-y divide-glass-border bg-transparent">
 				for _, file := range files {
-					<tr class="hover:bg-gray-50">
+					<tr class="hover:bg-gray-50/80 dark:hover:bg-white/5 transition-colors">
 						<td class="px-6 py-4">
-							<div class="text-sm font-medium text-gray-900 font-mono">{ file.Path }</div>
-							<div class="text-sm text-gray-500">{ formatBytes(file.Size) }</div>
+							<div class="text-sm font-medium text-gray-900 dark:text-white font-mono break-all">{ file.Path }</div>
+							<div class="text-xs text-gray-500 dark:text-gray-400 font-mono mt-0.5">{ formatBytes(file.Size) }</div>
 						</td>
 						<td class="px-6 py-4">
-							<span class="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800">
+							<span class="inline-flex items-center rounded-full bg-primary-100 dark:bg-primary-500/10 px-2.5 py-0.5 text-xs font-medium text-primary-800 dark:text-primary-300 border border-transparent dark:border-primary-500/20">
 								{ file.Language }
 							</span>
 						</td>
-						<td class="px-6 py-4 text-sm text-gray-900">
+						<td class="px-6 py-4 text-sm text-gray-900 dark:text-white font-mono">
 							{ fmt.Sprint(file.ChunkCount) }
 						</td>
-						<td class="px-6 py-4 text-sm text-gray-500">
+						<td class="px-6 py-4 text-sm text-gray-500 dark:text-gray-400">
 							{ formatRelativeTime(file.IndexedAt) }
 						</td>
 					</tr>

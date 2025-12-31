@@ -23,98 +23,90 @@ templ HealthDot(status string) {
 	}
 }
 
-// StatCard renders a statistics card with optional trend.
-templ StatCard(title, value, subtitle, trend string) {
-	<div class="bg-white overflow-hidden shadow rounded-lg">
-		<div class="px-4 py-5 sm:p-6">
-			<dt class="text-sm font-medium text-gray-500 truncate">{ title }</dt>
-			<dd class="mt-1 flex items-baseline justify-between">
-				<div class="flex items-baseline text-3xl font-semibold text-gray-900">
-					{ value }
+// StatCard renders a statistics card with premium glass styling.
+templ StatCard(title, value, subtitle, icon string) {
+	<div class="glass-panel p-6 flex flex-col justify-between hover:scale-[1.02] transition-transform duration-200">
+		<div class="flex justify-between items-start">
+			<div>
+				<dt class="text-sm font-medium text-gray-500 dark:text-gray-400">{ subtitle }</dt>
+				<dd class="mt-2 text-3xl font-bold text-gray-900 dark:text-white tracking-tight">{ value }</dd>
+			</div>
+			if icon != "" {
+				<div class="flex items-center justify-center h-10 w-10 rounded-lg bg-primary-500/10 text-xl">
+					{ icon }
 				</div>
-				if trend != "" {
-					<div class="inline-flex items-baseline px-2.5 py-0.5 rounded-full text-sm font-medium bg-green-100 text-green-800">
-						<svg class="-ml-1 mr-0.5 flex-shrink-0 self-center h-5 w-5 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-							<path fill-rule="evenodd" d="M5.293 9.707a1 1 0 010-1.414l4-4a1 1 0 011.414 0l4 4a1 1 0 01-1.414 1.414L11 7.414V15a1 1 0 11-2 0V7.414L6.707 9.707a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-						</svg>
-						<span class="sr-only">Increased by</span>
-						{ trend }
-					</div>
-				}
-			</dd>
-			<dd class="mt-1 text-sm text-gray-500">{ subtitle }</dd>
+			}
+		</div>
+		<div class="mt-4 flex items-center">
+			<span class="text-sm font-medium text-gray-900 dark:text-gray-200">{ title }</span>
 		</div>
 	</div>
 }
 
 // DataTable renders a responsive data table.
 templ DataTable(headers []string, rows [][]string) {
-	<div class="overflow-hidden bg-white shadow sm:rounded-lg">
-		<table class="min-w-full divide-y divide-gray-200">
-			<thead class="bg-gray-50">
-				<tr>
-					for _, header := range headers {
-						<th scope="col" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-							{ header }
-						</th>
-					}
-				</tr>
-			</thead>
-			<tbody class="bg-white divide-y divide-gray-200">
-				for _, row := range rows {
+	<div class="glass-panel overflow-hidden">
+		<div class="overflow-x-auto">
+			<table class="min-w-full divide-y divide-glass-border">
+				<thead class="bg-gray-50/50 dark:bg-black/20">
 					<tr>
-						for _, cell := range row {
-							<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-								{ cell }
-							</td>
+						for _, header := range headers {
+							<th scope="col" class="px-6 py-3 text-left text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+								{ header }
+							</th>
 						}
 					</tr>
-				}
-			</tbody>
-		</table>
+				</thead>
+				<tbody class="divide-y divide-glass-border bg-transparent">
+					for _, row := range rows {
+						<tr class="hover:bg-white/5 transition-colors">
+							for _, cell := range row {
+								<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300">
+									{ cell }
+								</td>
+							}
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
 	</div>
 }
 
 // Pagination renders pagination controls.
 templ Pagination(current, total int, baseURL string) {
 	if total > 1 {
-		<nav class="flex items-center justify-between border-t border-gray-200 px-4 sm:px-0">
-			<div class="-mt-px flex w-0 flex-1">
-				if current > 1 {
-					<a href={ templ.URL(fmt.Sprintf("%s?page=%d", baseURL, current-1)) } class="inline-flex items-center border-t-2 border-transparent pr-1 pt-4 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
-						<svg class="mr-3 h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-							<path fill-rule="evenodd" d="M18 10a.75.75 0 01-.75.75H4.66l2.1 1.95a.75.75 0 11-1.02 1.1l-3.5-3.25a.75.75 0 010-1.1l3.5-3.25a.75.75 0 111.02 1.1l-2.1 1.95h12.59A.75.75 0 0118 10z" clip-rule="evenodd"/>
-						</svg>
-						Previous
-					</a>
-				}
-			</div>
-			<div class="hidden md:-mt-px md:flex">
-				for i := 1; i <= total; i++ {
-					if i == current {
-						<span class="inline-flex items-center border-t-2 border-primary-500 px-4 pt-4 text-sm font-medium text-primary-600">
-							{ fmt.Sprint(i) }
-						</span>
-					} else if i == 1 || i == total || (i >= current-2 && i <= current+2) {
-						<a href={ templ.URL(fmt.Sprintf("%s?page=%d", baseURL, i)) } class="inline-flex items-center border-t-2 border-transparent px-4 pt-4 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
-							{ fmt.Sprint(i) }
+		<nav class="flex items-center justify-between border-t border-glass-border bg-white/5 px-4 py-3 sm:px-6">
+			<div class="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
+				<div>
+					<p class="text-sm text-gray-700 dark:text-gray-300">
+						Showing page <span class="font-medium">{ fmt.Sprint(current) }</span> of <span class="font-medium">{ fmt.Sprint(total) }</span>
+					</p>
+				</div>
+				<div>
+					<nav class="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
+						if current > 1 {
+							<a href={ templ.URL(fmt.Sprintf("%s?page=%d", baseURL, current-1)) } class="relative inline-flex items-center rounded-l-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-glass-border hover:bg-gray-50 dark:hover:bg-white/5 focus:z-20 focus:outline-offset-0">
+								<span class="sr-only">Previous</span>
+								<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+									<path fill-rule="evenodd" d="M12.79 5.23a.75.75 0 01-.02 1.06L8.832 10l3.938 3.71a.75.75 0 11-1.04 1.08l-4.5-4.25a.75.75 0 010-1.08l4.5-4.25a.75.75 0 011.06.02z" clip-rule="evenodd" />
+								</svg>
+							</a>
+						}
+						// Simplified pagination logic for nicer UI
+						<a href="#" aria-current="page" class="relative z-10 inline-flex items-center bg-primary-600 px-4 py-2 text-sm font-semibold text-white focus:z-20 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-600">
+							{ fmt.Sprint(current) }
 						</a>
-					} else if i == current-3 || i == current+3 {
-						<span class="inline-flex items-center border-t-2 border-transparent px-4 pt-4 text-sm font-medium text-gray-500">
-							...
-						</span>
-					}
-				}
-			</div>
-			<div class="-mt-px flex w-0 flex-1 justify-end">
-				if current < total {
-					<a href={ templ.URL(fmt.Sprintf("%s?page=%d", baseURL, current+1)) } class="inline-flex items-center border-t-2 border-transparent pl-1 pt-4 text-sm font-medium text-gray-500 hover:border-gray-300 hover:text-gray-700">
-						Next
-						<svg class="ml-3 h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
-							<path fill-rule="evenodd" d="M2 10a.75.75 0 01.75-.75h12.59l-2.1-1.95a.75.75 0 111.02-1.1l3.5 3.25a.75.75 0 010 1.1l-3.5 3.25a.75.75 0 11-1.02-1.1l2.1-1.95H2.75A.75.75 0 012 10z" clip-rule="evenodd"/>
-						</svg>
-					</a>
-				}
+						if current < total {
+							<a href={ templ.URL(fmt.Sprintf("%s?page=%d", baseURL, current+1)) } class="relative inline-flex items-center rounded-r-md px-2 py-2 text-gray-400 ring-1 ring-inset ring-glass-border hover:bg-gray-50 dark:hover:bg-white/5 focus:z-20 focus:outline-offset-0">
+								<span class="sr-only">Next</span>
+								<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+									<path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+								</svg>
+							</a>
+						}
+					</nav>
+				</div>
 			</div>
 		</nav>
 	}
@@ -123,22 +115,18 @@ templ Pagination(current, total int, baseURL string) {
 // SearchBar renders a search input with optional button.
 templ SearchBar(placeholder, action, method string) {
 	<form action={ templ.URL(action) } method={ method } class="flex-1">
-		<div class="flex rounded-md shadow-sm">
+		<div class="relative rounded-md shadow-sm">
 			<input
 				type="text"
 				name="query"
 				placeholder={ placeholder }
-				class="block w-full rounded-l-md border-gray-300 focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+				class="block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 text-gray-900 dark:text-white placeholder-gray-500"
 			/>
-			<button
-				type="submit"
-				class="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
-			>
-				<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+			<div class="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+				<svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
 				</svg>
-				<span class="ml-2">Search</span>
-			</button>
+			</div>
 		</div>
 	</form>
 }
@@ -146,7 +134,7 @@ templ SearchBar(placeholder, action, method string) {
 // Toast renders a toast notification.
 templ Toast(message, toastType string) {
 	<div 
-		class={ "fixed top-4 right-4 max-w-sm w-full bg-white shadow-lg rounded-lg pointer-events-auto ring-1 ring-black ring-opacity-5 overflow-hidden z-50", toastClass(toastType) }
+		class={ "fixed top-4 right-4 max-w-sm w-full glass-panel shadow-lg pointer-events-auto overflow-hidden z-50 animate-slide-up", toastClass(toastType) }
 		x-data="{ show: true }"
 		x-show="show"
 		x-init="setTimeout(() => show = false, 5000)"
@@ -157,10 +145,10 @@ templ Toast(message, toastType string) {
 					@toastIcon(toastType)
 				</div>
 				<div class="ml-3 w-0 flex-1 pt-0.5">
-					<p class="text-sm font-medium text-gray-900">{ message }</p>
+					<p class="text-sm font-medium text-gray-900 dark:text-white">{ message }</p>
 				</div>
 				<div class="ml-4 flex flex-shrink-0">
-					<button @click="show = false" class="inline-flex rounded-md bg-white text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
+					<button @click="show = false" class="inline-flex rounded-md bg-transparent text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2">
 						<span class="sr-only">Close</span>
 						<svg class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
 							<path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/>
@@ -172,18 +160,18 @@ templ Toast(message, toastType string) {
 	</div>
 }
 
-// Modal renders a modal dialog.
+// Modal renders a modal dialog for Glass UI.
 templ Modal(id, title string) {
-	<div id={ id } class="hidden relative z-10" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-		<div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+	<div id={ id } class="hidden relative z-50" aria-labelledby="modal-title" role="dialog" aria-modal="true">
+		<div class="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity"></div>
 		<div class="fixed inset-0 z-10 overflow-y-auto">
 			<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-				<div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-					<div>
-						<h3 class="text-lg font-medium leading-6 text-gray-900" id="modal-title">{ title }</h3>
-						<div class="mt-4">
-							{ children... }
-						</div>
+				<div class="relative transform overflow-hidden rounded-lg glass-panel text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg p-6">
+					<div class="mb-4">
+						<h3 class="text-lg font-semibold leading-6 text-gray-900 dark:text-white" id="modal-title">{ title }</h3>
+					</div>
+					<div class="mt-2">
+						{ children... }
 					</div>
 				</div>
 			</div>
@@ -195,17 +183,17 @@ templ Modal(id, title string) {
 templ DropdownMenu(items []MenuItem) {
 	<div class="relative inline-block text-left dropdown">
 		<div>
-			<button type="button" class="inline-flex w-full justify-center gap-x-1.5 rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+			<button type="button" class="inline-flex w-full justify-center gap-x-1.5 rounded-md glass px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm hover:bg-white/5">
 				Options
 				<svg class="-mr-1 h-5 w-5 text-gray-400" viewBox="0 0 20 20" fill="currentColor">
 					<path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd"/>
 				</svg>
 			</button>
 		</div>
-		<div class="dropdown-content absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+		<div class="dropdown-content absolute right-0 z-10 mt-2 w-56 origin-top-right rounded-md glass-panel shadow-lg focus:outline-none">
 			<div class="py-1">
 				for _, item := range items {
-					<a href={ templ.URL(item.URL) } class="text-gray-700 block px-4 py-2 text-sm hover:bg-gray-100">
+					<a href={ templ.URL(item.URL) } class="text-gray-700 dark:text-gray-200 block px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-white/10">
 						{ item.Label }
 					</a>
 				}
@@ -214,29 +202,28 @@ templ DropdownMenu(items []MenuItem) {
 	</div>
 }
 
-// Badge renders a colored badge.
+// Badge renders a colored badge (Glass style).
 templ Badge(text, color string) {
 	<span class={ badgeClass(color) }>
 		{ text }
 	</span>
 }
 
-// Helper functions
-
+// Helper functions for classes...
 func toastClass(toastType string) string {
 	switch toastType {
 	case "success":
-		return "border-l-4 border-green-500"
+		return "border-l-4 border-green-500 bg-white dark:bg-gray-800"
 	case "error":
-		return "border-l-4 border-red-500"
+		return "border-l-4 border-red-500 bg-white dark:bg-gray-800"
 	case "warning":
-		return "border-l-4 border-yellow-500"
+		return "border-l-4 border-yellow-500 bg-white dark:bg-gray-800"
 	default:
-		return "border-l-4 border-primary-500"
+		return "border-l-4 border-primary-500 bg-white dark:bg-gray-800"
 	}
 }
 
-templ toastIcon(toastType string) {
+func toastIcon(toastType string) {
 	switch toastType {
 	case "success":
 		<svg class="h-6 w-6 text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -258,20 +245,18 @@ templ toastIcon(toastType string) {
 }
 
 func badgeClass(color string) string {
-	base := "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium"
+	base := "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-opacity-20 backdrop-blur-sm border border-transparent"
 	switch color {
 	case "green":
-		return base + " bg-green-100 text-green-800"
+		return base + " bg-green-500/10 text-green-700 dark:text-green-400 border-green-200/20"
 	case "red":
-		return base + " bg-red-100 text-red-800"
+		return base + " bg-red-500/10 text-red-700 dark:text-red-400 border-red-200/20"
 	case "yellow":
-		return base + " bg-yellow-100 text-yellow-800"
+		return base + " bg-yellow-500/10 text-yellow-700 dark:text-yellow-400 border-yellow-200/20"
 	case "blue":
-		return base + " bg-primary-100 text-primary-800"
+		return base + " bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-200/20"
 	case "gray":
-		return base + " bg-gray-100 text-gray-800"
-	case "purple":
-		return base + " bg-purple-100 text-purple-800"
+		return base + " bg-gray-500/10 text-gray-700 dark:text-gray-400 border-gray-200/20"
 	default:
 		return base + " bg-gray-100 text-gray-800"
 	}

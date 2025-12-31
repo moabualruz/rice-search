@@ -35,12 +35,12 @@ type ConnectionsPageData struct {
 // AdminConnectionsPage renders the connection management page
 templ AdminConnectionsPage(data ConnectionsPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
 			<!-- Header -->
 			<div class="sm:flex sm:items-center">
 				<div class="sm:flex-auto">
-					<h1 class="text-2xl font-semibold text-gray-900">Connections</h1>
-					<p class="mt-2 text-sm text-gray-700">
+					<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Connections</h1>
+					<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
 						Manage client connections (ricegrep CLI instances) accessing the search system.
 					</p>
 				</div>
@@ -48,17 +48,17 @@ templ AdminConnectionsPage(data ConnectionsPageData) {
 
 			<!-- Stats -->
 			<div class="mt-6 grid grid-cols-1 gap-5 sm:grid-cols-3">
-				<div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
-					<dt class="truncate text-sm font-medium text-gray-500">Total Connections</dt>
-					<dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-900">{ fmt.Sprint(data.Total) }</dd>
+				<div class="glass-panel px-4 py-5 sm:p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="truncate text-sm font-medium text-gray-500 dark:text-gray-400">Total Connections</dt>
+					<dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-900 dark:text-white">{ fmt.Sprint(data.Total) }</dd>
 				</div>
-				<div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
-					<dt class="truncate text-sm font-medium text-gray-500">Active Connections</dt>
-					<dd class="mt-1 text-3xl font-semibold tracking-tight text-green-600">{ fmt.Sprint(data.ActiveCount) }</dd>
+				<div class="glass-panel px-4 py-5 sm:p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="truncate text-sm font-medium text-gray-500 dark:text-gray-400">Active Connections</dt>
+					<dd class="mt-1 text-3xl font-semibold tracking-tight text-green-600 dark:text-green-400">{ fmt.Sprint(data.ActiveCount) }</dd>
 				</div>
-				<div class="overflow-hidden rounded-lg bg-white px-4 py-5 shadow sm:p-6">
-					<dt class="truncate text-sm font-medium text-gray-500">Inactive Connections</dt>
-					<dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-400">{ fmt.Sprint(data.Total - data.ActiveCount) }</dd>
+				<div class="glass-panel px-4 py-5 sm:p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="truncate text-sm font-medium text-gray-500 dark:text-gray-400">Inactive Connections</dt>
+					<dd class="mt-1 text-3xl font-semibold tracking-tight text-gray-400 dark:text-gray-500">{ fmt.Sprint(data.Total - data.ActiveCount) }</dd>
 				</div>
 			</div>
 
@@ -82,12 +82,12 @@ templ AdminConnectionsPage(data ConnectionsPageData) {
 						hx-include="[name='store']"
 						hx-target="#connections-list"
 						hx-swap="outerHTML"
-						class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-600"
+						class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-600 dark:bg-white/10 dark:border-gray-600 dark:focus:ring-offset-gray-900"
 					/>
-					<label for="active-only" class="ml-2 text-sm text-gray-700">Show active only</label>
+					<label for="active-only" class="ml-2 text-sm text-gray-700 dark:text-gray-300">Show active only</label>
 				</div>
 				<div class="flex items-center space-x-2">
-					<label for="store-filter" class="text-sm text-gray-700">Store:</label>
+					<label for="store-filter" class="text-sm text-gray-700 dark:text-gray-300">Store:</label>
 					<select
 						id="store-filter"
 						name="store"
@@ -95,7 +95,7 @@ templ AdminConnectionsPage(data ConnectionsPageData) {
 						hx-include="[name='active-only']:checked"
 						hx-target="#connections-list"
 						hx-swap="outerHTML"
-						class="rounded-md border-gray-300 py-1 px-3 text-sm focus:border-primary-500 focus:ring-primary-500"
+						class="rounded-md border-glass-border bg-white/5 py-1 px-3 text-sm text-gray-900 dark:text-white focus:border-primary-500 focus:ring-primary-500 focus:bg-white/10 transition-colors"
 					>
 						<option value="">All stores</option>
 						<!-- Stores populated by handler -->
@@ -116,8 +116,8 @@ templ ConnectionsList(connections []ConnectionDisplay) {
 	if len(connections) == 0 {
 		@EmptyState("No connections", "Connections will appear here when clients connect to the system")
 	} else {
-		<div class="overflow-hidden bg-white shadow sm:rounded-lg">
-			<ul role="list" class="divide-y divide-gray-200">
+		<div class="glass-panel overflow-hidden">
+			<ul role="list" class="divide-y divide-glass-border">
 				for _, conn := range connections {
 					@ConnectionRow(conn)
 				}
@@ -128,28 +128,28 @@ templ ConnectionsList(connections []ConnectionDisplay) {
 
 // ConnectionRow renders a single connection row with expandable details
 templ ConnectionRow(conn ConnectionDisplay) {
-	<li class="px-6 py-4">
+	<li class="px-6 py-4 hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors">
 		<div class="flex items-center justify-between">
 			<div class="flex-1">
 				<!-- Connection Header -->
 				<div class="flex items-center space-x-3">
 					<!-- Status indicator -->
-					<div class={ "h-3 w-3 rounded-full", 
-						templ.KV("bg-green-500", conn.IsActive && isRecentlySeen(conn.LastSeen)),
-						templ.KV("bg-yellow-500", conn.IsActive && !isRecentlySeen(conn.LastSeen)),
-						templ.KV("bg-gray-400", !conn.IsActive) }></div>
+					<div class={ "h-3 w-3 rounded-full ring-2 ring-opacity-20", 
+						templ.KV("bg-green-500 ring-green-500", conn.IsActive && isRecentlySeen(conn.LastSeen)),
+						templ.KV("bg-yellow-500 ring-yellow-500", conn.IsActive && !isRecentlySeen(conn.LastSeen)),
+						templ.KV("bg-gray-400 ring-gray-400", !conn.IsActive) }></div>
 					
 					<div class="flex-1">
 						<div class="flex items-center space-x-2">
-							<h3 class="text-sm font-medium text-gray-900">{ conn.Name }</h3>
-							<span class="text-xs text-gray-500">({ conn.Hostname })</span>
+							<h3 class="text-sm font-medium text-gray-900 dark:text-white">{ conn.Name }</h3>
+							<span class="text-xs text-gray-500 dark:text-gray-400">({ conn.Hostname })</span>
 							if !conn.IsActive {
-								<span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">
+								<span class="inline-flex items-center rounded-full bg-red-100 dark:bg-red-500/20 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-300">
 									Disabled
 								</span>
 							}
 						</div>
-						<div class="mt-1 flex items-center space-x-4 text-xs text-gray-500">
+						<div class="mt-1 flex items-center space-x-4 text-xs text-gray-500 dark:text-gray-400">
 							<span>{ conn.OS }/{ conn.Arch }</span>
 							if conn.Username != "" {
 								<span>•</span>
@@ -166,15 +166,15 @@ templ ConnectionRow(conn ConnectionDisplay) {
 				</div>
 
 				<!-- Stats -->
-				<div class="mt-2 flex items-center space-x-6 text-xs text-gray-600">
+				<div class="mt-2 flex items-center space-x-6 text-xs text-gray-600 dark:text-gray-400">
 					<div class="flex items-center space-x-1">
-						<svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<svg class="h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
 						</svg>
 						<span>{ fmt.Sprint(conn.IndexedFiles) } files indexed</span>
 					</div>
 					<div class="flex items-center space-x-1">
-						<svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<svg class="h-4 w-4 text-gray-400 dark:text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
 						</svg>
 						<span>{ fmt.Sprint(conn.SearchCount) } searches</span>
@@ -184,21 +184,21 @@ templ ConnectionRow(conn ConnectionDisplay) {
 				<!-- Store Access -->
 				<div class="mt-2">
 					<details class="group">
-						<summary class="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900">
+						<summary class="cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors select-none">
 							<span class="inline-flex items-center">
 								Store Access
-								<svg class="ml-1 h-4 w-4 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<svg class="ml-1 h-4 w-4 transform transition-transform group-open:rotate-90 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
 								</svg>
 							</span>
 						</summary>
 						<div class="mt-2 pl-4">
 							if len(conn.StoreAccess) == 0 {
-								<p class="text-xs text-gray-500">Access to all stores</p>
+								<p class="text-xs text-gray-500 dark:text-gray-400">Access to all stores</p>
 							} else {
 								<div class="flex flex-wrap gap-1">
 									for _, store := range conn.StoreAccess {
-										<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800">
+										<span class="inline-flex items-center rounded-full bg-primary-100 dark:bg-primary-500/20 px-2 py-0.5 text-xs font-medium text-primary-800 dark:text-primary-300 border border-transparent dark:border-primary-500/20">
 											{ store }
 										</span>
 									}
@@ -211,26 +211,26 @@ templ ConnectionRow(conn ConnectionDisplay) {
 				<!-- Full Details (expandable) -->
 				<div class="mt-3">
 					<details class="group">
-						<summary class="cursor-pointer text-xs font-medium text-gray-700 hover:text-gray-900">
+						<summary class="cursor-pointer text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white transition-colors select-none">
 							<span class="inline-flex items-center">
 								More Details
-								<svg class="ml-1 h-4 w-4 transform transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<svg class="ml-1 h-4 w-4 transform transition-transform group-open:rotate-90 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
 								</svg>
 							</span>
 						</summary>
-						<div class="mt-2 rounded bg-gray-50 p-3 text-xs space-y-1">
+						<div class="mt-2 rounded-md bg-gray-50/50 dark:bg-black/20 p-3 text-xs space-y-1 border border-glass-border">
 							<div class="flex justify-between">
-								<span class="text-gray-600">Connection ID:</span>
-								<span class="font-mono text-gray-900">{ conn.ID }</span>
+								<span class="text-gray-600 dark:text-gray-400">Connection ID:</span>
+								<span class="font-mono text-gray-900 dark:text-gray-200">{ conn.ID }</span>
 							</div>
 							<div class="flex justify-between">
-								<span class="text-gray-600">Created:</span>
-								<span class="text-gray-900">{ conn.CreatedAt.Format("2006-01-02 15:04:05") }</span>
+								<span class="text-gray-600 dark:text-gray-400">Created:</span>
+								<span class="text-gray-900 dark:text-gray-200">{ conn.CreatedAt.Format("2006-01-02 15:04:05") }</span>
 							</div>
 							<div class="flex justify-between">
-								<span class="text-gray-600">Last Activity:</span>
-								<span class="text-gray-900">{ conn.LastSeen.Format("2006-01-02 15:04:05") }</span>
+								<span class="text-gray-600 dark:text-gray-400">Last Activity:</span>
+								<span class="text-gray-900 dark:text-gray-200">{ conn.LastSeen.Format("2006-01-02 15:04:05") }</span>
 							</div>
 						</div>
 					</details>
@@ -242,7 +242,7 @@ templ ConnectionRow(conn ConnectionDisplay) {
 				<button
 					onclick="renameConnection(this.dataset.id)"
 					data-id={ conn.ID }
-					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50"
+					class="rounded-md border border-glass-border bg-white/5 px-3 py-1.5 text-sm font-medium text-gray-700 dark:text-gray-200 shadow-sm hover:bg-white/10 transition-colors"
 				>
 					Rename
 				</button>
@@ -251,7 +251,7 @@ templ ConnectionRow(conn ConnectionDisplay) {
 						hx-post={ fmt.Sprintf("/admin/connections/%s/disable", conn.ID) }
 						hx-target="#connections-list"
 						hx-swap="outerHTML"
-						class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-yellow-600 shadow-sm ring-1 ring-inset ring-yellow-300 hover:bg-yellow-50"
+						class="rounded-md border border-yellow-200/50 dark:border-yellow-500/30 bg-yellow-50/50 dark:bg-yellow-500/10 px-3 py-1.5 text-sm font-medium text-yellow-600 dark:text-yellow-400 shadow-sm hover:bg-yellow-100 dark:hover:bg-yellow-500/20 transition-colors"
 					>
 						Disable
 					</button>
@@ -260,7 +260,7 @@ templ ConnectionRow(conn ConnectionDisplay) {
 						hx-post={ fmt.Sprintf("/admin/connections/%s/enable", conn.ID) }
 						hx-target="#connections-list"
 						hx-swap="outerHTML"
-						class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-green-600 shadow-sm ring-1 ring-inset ring-green-300 hover:bg-green-50"
+						class="rounded-md border border-green-200/50 dark:border-green-500/30 bg-green-50/50 dark:bg-green-500/10 px-3 py-1.5 text-sm font-medium text-green-600 dark:text-green-400 shadow-sm hover:bg-green-100 dark:hover:bg-green-500/20 transition-colors"
 					>
 						Enable
 					</button>
@@ -270,7 +270,7 @@ templ ConnectionRow(conn ConnectionDisplay) {
 					hx-target="#connections-list"
 					hx-swap="outerHTML"
 					hx-confirm={ fmt.Sprintf("Delete connection '%s'? This will remove all associated data.", conn.Name) }
-					class="rounded-md bg-white px-3 py-1.5 text-sm font-medium text-red-600 shadow-sm ring-1 ring-inset ring-red-300 hover:bg-red-50"
+					class="rounded-md border border-red-200/50 dark:border-red-500/30 bg-red-50/50 dark:bg-red-500/10 px-3 py-1.5 text-sm font-medium text-red-600 dark:text-red-400 shadow-sm hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
 				>
 					Delete
 				</button>
@@ -281,11 +281,11 @@ templ ConnectionRow(conn ConnectionDisplay) {
 
 // Rename Connection Modal
 templ RenameConnectionModal() {
-	<div id="rename-modal" class="hidden relative z-10" aria-labelledby="rename-title" role="dialog" aria-modal="true">
-		<div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"></div>
+	<div id="rename-modal" class="hidden relative z-50" aria-labelledby="rename-title" role="dialog" aria-modal="true">
+		<div class="fixed inset-0 bg-gray-500/75 dark:bg-black/80 transition-opacity backdrop-blur-sm"></div>
 		<div class="fixed inset-0 z-10 overflow-y-auto">
 			<div class="flex min-h-full items-end justify-center p-4 text-center sm:items-center sm:p-0">
-				<div class="relative transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+				<div class="relative transform overflow-hidden glass-panel px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
 					<form
 						id="rename-form"
 						hx-put="/admin/connections/rename"
@@ -295,9 +295,9 @@ templ RenameConnectionModal() {
 					>
 						<input type="hidden" name="connection_id" id="rename-connection-id"/>
 						<div>
-							<h3 class="text-lg font-medium leading-6 text-gray-900" id="rename-title">Rename Connection</h3>
+							<h3 class="text-lg font-bold leading-6 text-gray-900 dark:text-white" id="rename-title">Rename Connection</h3>
 							<div class="mt-4">
-								<label for="rename-name" class="block text-sm font-medium text-gray-700">New Name</label>
+								<label for="rename-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300">New Name</label>
 								<input
 									type="text"
 									name="name"
@@ -305,22 +305,22 @@ templ RenameConnectionModal() {
 									required
 									pattern="[a-zA-Z0-9][a-zA-Z0-9_-]*"
 									placeholder="my-machine"
-									class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+									class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 focus:bg-white/10 transition-colors text-gray-900 dark:text-white"
 								/>
-								<p class="mt-1 text-sm text-gray-500">Alphanumeric, hyphens, and underscores only</p>
+								<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Alphanumeric, hyphens, and underscores only</p>
 							</div>
 						</div>
 						<div class="mt-5 sm:mt-6 sm:grid sm:grid-flow-row-dense sm:grid-cols-2 sm:gap-3">
 							<button
 								type="submit"
-								class="inline-flex w-full justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 sm:col-start-2"
+								class="inline-flex w-full justify-center rounded-md bg-primary-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-500 sm:col-start-2 transition-colors"
 							>
 								Rename
 							</button>
 							<button
 								type="button"
 								onclick="document.getElementById('rename-modal').classList.add('hidden')"
-								class="mt-3 inline-flex w-full justify-center rounded-md bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 sm:col-start-1 sm:mt-0"
+								class="mt-3 inline-flex w-full justify-center rounded-md border border-glass-border bg-white/5 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-white shadow-sm hover:bg-white/10 sm:col-start-1 sm:mt-0 transition-colors"
 							>
 								Cancel
 							</button>
@@ -339,7 +339,7 @@ templ RenameConnectionModal() {
 	</script>
 }
 
-// Helper functions
+// Helper functions (unchanged)
 func isRecentlySeen(lastSeen time.Time) bool {
 	return time.Since(lastSeen) < 5*time.Minute
 }

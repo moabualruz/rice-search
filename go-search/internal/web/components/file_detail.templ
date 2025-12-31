@@ -25,212 +25,156 @@ type ChunkInfo struct {
 // FileDetailPage renders the file detail page
 templ FileDetailPage(data FileDetailPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
+		<div class="max-w-7xl mx-auto space-y-8 animate-fade-in">
 			<!-- Header -->
-			<div class="mb-8">
-				<nav class="flex mb-4" aria-label="Breadcrumb">
-					<ol class="flex items-center space-x-2 text-sm">
-						<li>
-							<a href="/stores" class="text-gray-500 hover:text-gray-700">Stores</a>
-						</li>
-						<li>
-							<svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-								<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-							</svg>
-						</li>
-						<li>
-							<a href={ templ.URL(fmt.Sprintf("/stores/%s", data.Store)) } class="text-gray-500 hover:text-gray-700">{ data.Store }</a>
-						</li>
-						<li>
-							<svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-								<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-							</svg>
-						</li>
-						<li>
-							<a href={ templ.URL(fmt.Sprintf("/stores/%s/files", data.Store)) } class="text-gray-500 hover:text-gray-700">Files</a>
-						</li>
-						<li>
-							<svg class="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-								<path fill-rule="evenodd" d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" clip-rule="evenodd"/>
-							</svg>
-						</li>
-						<li class="text-gray-900 font-medium truncate max-w-xs">{ data.File.Path }</li>
-					</ol>
-				</nav>
-				
-				<div class="sm:flex sm:items-start sm:justify-between">
-					<div class="flex-1 min-w-0">
-						<h1 class="text-2xl font-bold text-gray-900 font-mono break-all">{ data.File.Path }</h1>
-						<div class="mt-2 flex items-center gap-3">
-							<span class="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800">
+			<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+				<div class="space-y-2 max-w-4xl">
+					<nav class="flex mb-2" aria-label="Breadcrumb">
+						<ol class="flex items-center space-x-2 text-sm">
+							<li><a href="/stores" class="text-gray-500 hover:text-primary-500 transition-colors">Stores</a></li>
+							<li><span class="text-gray-400">/</span></li>
+							<li><a href={ templ.URL(fmt.Sprintf("/stores/%s", data.Store)) } class="text-gray-500 hover:text-primary-500 transition-colors">{ data.Store }</a></li>
+							<li><span class="text-gray-400">/</span></li>
+							<li><a href={ templ.URL(fmt.Sprintf("/stores/%s/files", data.Store)) } class="text-gray-500 hover:text-primary-500 transition-colors">Files</a></li>
+						</ol>
+					</nav>
+					
+					<div>
+						<h1 class="text-2xl font-bold text-gray-900 dark:text-white font-mono break-all">{ data.File.Path }</h1>
+						<div class="mt-3 flex flex-wrap items-center gap-3">
+							<span class="inline-flex items-center rounded-full bg-primary-100 dark:bg-primary-500/20 px-2.5 py-0.5 text-xs font-medium text-primary-800 dark:text-primary-300 border border-transparent dark:border-primary-500/20">
 								{ data.File.Language }
 							</span>
 							if data.File.Status == "indexed" {
-								<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-800">
-									<svg class="-ml-0.5 mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 8 8">
-										<circle cx="4" cy="4" r="3"/>
-									</svg>
+								<span class="inline-flex items-center rounded-full bg-green-100 dark:bg-green-500/20 px-2.5 py-0.5 text-xs font-medium text-green-800 dark:text-green-300 ring-1 ring-inset ring-green-600/20">
+									<svg class="-ml-0.5 mr-1 h-3 w-3" fill="currentColor" viewBox="0 0 8 8"><circle cx="4" cy="4" r="3"/></svg>
 									Indexed
 								</span>
 							}
-							<span class="text-sm text-gray-500">
-								Hash: <code class="font-mono text-xs">{ data.File.Hash }</code>
+							<span class="text-sm text-gray-500 dark:text-gray-400 font-mono text-xs border border-glass-border px-2 py-0.5 rounded bg-black/5 dark:bg-white/5">
+								{ data.File.Hash }
 							</span>
 						</div>
 					</div>
-					<div class="mt-4 sm:mt-0 sm:ml-4 flex gap-2">
-						<button
-							hx-post={ fmt.Sprintf("/files/reindex/%s", data.File.Path) }
-							hx-confirm="Re-index this file? This will update all chunks."
-							class="inline-flex items-center px-4 py-2 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50"
-						>
-							<svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-							</svg>
-							Re-index
-						</button>
+				</div>
+				
+				<div class="flex flex-col sm:flex-row gap-3 min-w-max">
+					<button
+						hx-post={ fmt.Sprintf("/files/reindex/%s", data.File.Path) }
+						hx-confirm="Re-index this file? This will update all chunks."
+						class="inline-flex items-center justify-center px-4 py-2 border border-glass-border rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-gray-200 bg-white/5 hover:bg-white/10 transition-colors"
+					>
+						<svg class="-ml-0.5 mr-1.5 h-5 w-5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+						</svg>
+						Re-index
+					</button>
 					<button
 						hx-delete={ fmt.Sprintf("/files/%s?store=%s", data.File.Path, data.Store) }
 						hx-confirm={ fmt.Sprintf("Delete %s? This cannot be undone.", data.File.Path) }
-						class="inline-flex items-center px-4 py-2 border border-red-300 rounded-md shadow-sm text-sm font-medium text-red-700 bg-white hover:bg-red-50"
+						class="inline-flex items-center justify-center px-4 py-2 border border-red-200/50 dark:border-red-500/30 rounded-md shadow-sm text-sm font-medium text-red-700 dark:text-red-400 bg-red-50/50 dark:bg-red-500/10 hover:bg-red-100 dark:hover:bg-red-500/20 transition-colors"
 					>
-							<svg class="-ml-0.5 mr-1.5 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-							</svg>
-							Delete
-						</button>
-					</div>
+						<svg class="-ml-0.5 mr-1.5 h-5 w-5 opacity-70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+						</svg>
+						Delete
+					</button>
 				</div>
 			</div>
 
 			<!-- Error message -->
 			if data.Error != "" {
-				<div class="mb-6">
-					@ErrorMessage(data.Error)
-				</div>
+				@ErrorMessage(data.Error)
 			}
 
 			<!-- Metadata Cards -->
-			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">File Size</dt>
-									<dd class="text-lg font-semibold text-gray-900">{ formatBytes(data.File.Size) }</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+			<div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/>
+						</svg>
+						File Size
+					</dt>
+					<dd class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{ formatBytes(data.File.Size) }</dd>
 				</div>
 
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Chunks</dt>
-									<dd class="text-lg font-semibold text-gray-900">{ fmt.Sprint(data.File.ChunkCount) }</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+						</svg>
+						Chunks
+					</dt>
+					<dd class="mt-2 text-2xl font-bold text-gray-900 dark:text-white">{ fmt.Sprint(data.File.ChunkCount) }</dd>
 				</div>
 
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Indexed</dt>
-									<dd class="text-sm font-semibold text-gray-900">{ formatRelativeTime(data.File.IndexedAt) }</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+						</svg>
+						Indexed At
+					</dt>
+					<dd class="mt-2 text-lg font-bold text-gray-900 dark:text-white">
+						{ formatRelativeTime(data.File.IndexedAt) }
+					</dd>
 				</div>
 
-				<div class="bg-white overflow-hidden shadow rounded-lg">
-					<div class="p-5">
-						<div class="flex items-center">
-							<div class="flex-shrink-0">
-								<svg class="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
-								</svg>
-							</div>
-							<div class="ml-5 w-0 flex-1">
-								<dl>
-									<dt class="text-sm font-medium text-gray-500 truncate">Connection</dt>
-									<dd class="text-sm font-semibold text-gray-900 truncate">{ data.File.ConnectionName }</dd>
-								</dl>
-							</div>
-						</div>
-					</div>
+				<div class="glass-panel p-6 flex flex-col hover:border-primary-500/30 transition-colors">
+					<dt class="flex items-center gap-2 text-sm font-medium text-gray-500 dark:text-gray-400">
+						<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
+						</svg>
+						Connection
+					</dt>
+					<dd class="mt-2 text-lg font-bold text-gray-900 dark:text-white truncate" title={ data.File.ConnectionName }>{ data.File.ConnectionName }</dd>
 				</div>
 			</div>
 
 			<!-- Connection Info -->
 			if data.Connection.ID != "" {
-				<div class="bg-white shadow rounded-lg mb-8">
-					<div class="px-6 py-4 border-b border-gray-200">
-						<h2 class="text-lg font-medium text-gray-900">Indexed By</h2>
+				<div class="glass-panel overflow-hidden">
+					<div class="px-6 py-4 border-b border-glass-border bg-gray-50/50 dark:bg-white/5">
+						<h2 class="text-lg font-medium text-gray-900 dark:text-white">Indexing Source</h2>
 					</div>
 					<div class="px-6 py-4">
-						<dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2">
+						<dl class="grid grid-cols-1 gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-4">
 							<div>
-								<dt class="text-sm font-medium text-gray-500">Connection Name</dt>
-								<dd class="mt-1 text-sm text-gray-900">{ data.Connection.Name }</dd>
+								<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Connection Name</dt>
+								<dd class="mt-1 text-sm text-gray-900 dark:text-white font-medium">{ data.Connection.Name }</dd>
 							</div>
 							<div>
-								<dt class="text-sm font-medium text-gray-500">Connection ID</dt>
-								<dd class="mt-1 text-sm text-gray-900 font-mono">{ data.Connection.ID }</dd>
+								<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Connection ID</dt>
+								<dd class="mt-1 text-sm text-gray-500 dark:text-gray-400 font-mono">{ data.Connection.ID }</dd>
 							</div>
 							<div>
-								<dt class="text-sm font-medium text-gray-500">Hostname</dt>
-								<dd class="mt-1 text-sm text-gray-900">{ data.Connection.PCInfo.Hostname }</dd>
-							</div>
-							<div>
-								<dt class="text-sm font-medium text-gray-500">OS / Arch</dt>
-								<dd class="mt-1 text-sm text-gray-900">{ data.Connection.PCInfo.OS } / { data.Connection.PCInfo.Arch }</dd>
+								<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">Hostname (OS)</dt>
+								<dd class="mt-1 text-sm text-gray-900 dark:text-white">
+									{ data.Connection.PCInfo.Hostname } 
+									<span class="text-gray-500 text-xs">({ data.Connection.PCInfo.OS })</span>
+								</dd>
 							</div>
 							if data.Connection.PCInfo.Username != "" {
 								<div>
-									<dt class="text-sm font-medium text-gray-500">Username</dt>
-									<dd class="mt-1 text-sm text-gray-900">{ data.Connection.PCInfo.Username }</dd>
+									<dt class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide">User</dt>
+									<dd class="mt-1 text-sm text-gray-900 dark:text-white">{ data.Connection.PCInfo.Username }</dd>
 								</div>
 							}
-							<div>
-								<dt class="text-sm font-medium text-gray-500">Last Seen</dt>
-								<dd class="mt-1 text-sm text-gray-900">{ formatRelativeTime(data.Connection.LastSeen) }</dd>
-							</div>
 						</dl>
 					</div>
 				</div>
 			}
 
 			<!-- Chunks -->
-			<div class="bg-white shadow rounded-lg">
-				<div class="px-6 py-4 border-b border-gray-200">
-					<h2 class="text-lg font-medium text-gray-900">Chunks ({ fmt.Sprint(len(data.Chunks)) })</h2>
-					<p class="mt-1 text-sm text-gray-500">Individual segments of this file indexed for search</p>
+			<div class="glass-panel overflow-hidden">
+				<div class="px-6 py-4 border-b border-glass-border bg-gray-50/50 dark:bg-white/5 flex justify-between items-center">
+					<div>
+						<h2 class="text-lg font-medium text-gray-900 dark:text-white">Chunks ({ fmt.Sprint(len(data.Chunks)) })</h2>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Indexed segments found in this file</p>
+					</div>
 				</div>
-				<div class="divide-y divide-gray-200">
+				<div class="divide-y divide-glass-border">
 					@ChunksList(data.Chunks)
 				</div>
 			</div>
@@ -241,8 +185,8 @@ templ FileDetailPage(data FileDetailPageData) {
 // ChunksList renders the list of chunks
 templ ChunksList(chunks []ChunkInfo) {
 	if len(chunks) == 0 {
-		<div class="px-6 py-8 text-center">
-			<p class="text-sm text-gray-500">No chunks found</p>
+		<div class="px-6 py-12 text-center text-gray-500 dark:text-gray-400">
+			<p>No chunks found</p>
 		</div>
 	} else {
 		for i, chunk := range chunks {
@@ -253,33 +197,33 @@ templ ChunksList(chunks []ChunkInfo) {
 
 // ChunkCard renders a single chunk card
 templ ChunkCard(chunk ChunkInfo, index int) {
-	<div class="px-6 py-4 hover:bg-gray-50">
+	<div class="px-6 py-4 hover:bg-gray-50/50 dark:hover:bg-white/5 transition-colors group">
 		<!-- Chunk header -->
-		<div class="flex items-center justify-between mb-2">
+		<div class="flex items-center justify-between mb-3">
 			<div class="flex items-center gap-3">
-				<span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary-100 text-primary-800 text-xs font-medium">
+				<span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-primary-100 dark:bg-primary-500/20 text-primary-800 dark:text-primary-300 text-xs font-medium ring-1 ring-inset ring-primary-500/20">
 					{ fmt.Sprint(index + 1) }
 				</span>
-				<span class="text-sm font-medium text-gray-900">
+				<span class="text-sm font-medium text-gray-900 dark:text-white font-mono">
 					Lines { fmt.Sprint(chunk.StartLine) } - { fmt.Sprint(chunk.EndLine) }
 				</span>
-				<span class="text-sm text-gray-500">
+				<span class="text-xs text-gray-500 dark:text-gray-400 bg-black/5 dark:bg-white/5 px-1.5 py-0.5 rounded">
 					{ formatBytes(chunk.Size) }
 				</span>
 			</div>
 			<button
-				class="text-sm text-primary-600 hover:text-primary-800"
+				class="text-xs font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 transition-colors uppercase tracking-wide"
 				onclick={ expandChunk(chunk.ID) }
 			>
-				Toggle
+				Toggle Content
 			</button>
 		</div>
 
 		<!-- Symbols -->
 		if len(chunk.Symbols) > 0 {
-			<div class="mb-2 flex flex-wrap gap-1">
+			<div class="mb-3 flex flex-wrap gap-1.5 pl-9">
 				for _, symbol := range chunk.Symbols {
-					<span class="inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-mono text-gray-700">
+					<span class="inline-flex items-center rounded bg-gray-100 dark:bg-white/10 border border-glass-border px-2 py-0.5 text-xs font-mono text-gray-700 dark:text-gray-300">
 						{ symbol }
 					</span>
 				}
@@ -287,9 +231,9 @@ templ ChunkCard(chunk ChunkInfo, index int) {
 		}
 
 		<!-- Content preview -->
-		<div id={ fmt.Sprintf("chunk-%s", chunk.ID) } class="hidden mt-2">
-			<div class="bg-gray-50 rounded-md p-4 overflow-x-auto">
-				<pre class="text-xs font-mono text-gray-800 whitespace-pre-wrap">{ chunk.Content }</pre>
+		<div id={ fmt.Sprintf("chunk-%s", chunk.ID) } class="hidden mt-2 pl-9">
+			<div class="bg-gray-900 rounded-md p-4 overflow-x-auto border border-glass-border shadow-inner">
+				<pre class="text-xs font-mono text-gray-300 whitespace-pre-wrap">{ chunk.Content }</pre>
 			</div>
 		</div>
 	</div>

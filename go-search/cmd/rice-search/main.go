@@ -73,6 +73,7 @@ Then use this CLI:
 		healthCmd(),
 		modelsCmd(),
 		watchCmd,
+		mcpCmd(),
 	)
 
 	if err := rootCmd.Execute(); err != nil {

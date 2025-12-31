@@ -100,11 +100,11 @@ type RuntimeConfig struct {
 // AdminSettingsPage renders the settings management page
 templ AdminSettingsPage(data SettingsPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8">
+		<div class="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-8 animate-fade-in">
 			<!-- Header -->
 			<div class="mb-8">
-				<h1 class="text-2xl font-semibold text-gray-900 dark:text-white">Settings</h1>
-				<p class="mt-2 text-sm text-gray-700 dark:text-gray-300">
+				<h1 class="text-2xl font-bold text-gray-900 dark:text-white">Settings</h1>
+				<p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
 					Configure runtime settings for Rice Search.
 				</p>
 			</div>
@@ -120,13 +120,13 @@ templ AdminSettingsPage(data SettingsPageData) {
 			</div>
 
 			<!-- Export/Import/Reset Controls -->
-			<div class="bg-white dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden mb-6">
+			<div class="glass-panel overflow-hidden mb-6">
 				<div class="px-4 py-5 sm:p-6">
 					<h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">Configuration Management</h3>
 					<div class="flex flex-wrap gap-4">
 						<!-- Export Button with Format Selector -->
 						<div class="flex gap-2">
-							<select id="export-format" class="rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border">
+							<select id="export-format" class="rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 focus:bg-white/10 transition-colors text-gray-900 dark:text-white">
 								<option value="yaml">YAML</option>
 								<option value="json">JSON</option>
 							</select>
@@ -134,7 +134,7 @@ templ AdminSettingsPage(data SettingsPageData) {
 								id="export-link"
 								href="/admin/settings/export?format=yaml"
 								download
-								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white/5 border border-glass-border rounded-md shadow-sm hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
 								onclick="this.href='/admin/settings/export?format=' + document.getElementById('export-format').value"
 							>
 								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -150,7 +150,7 @@ templ AdminSettingsPage(data SettingsPageData) {
 							<button
 								type="button"
 								onclick="document.getElementById('settings-file-input').click()"
-								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+								class="inline-flex items-center px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white/5 border border-glass-border rounded-md shadow-sm hover:bg-white/10 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
 							>
 								<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
@@ -163,7 +163,7 @@ templ AdminSettingsPage(data SettingsPageData) {
 						<button
 							type="button"
 							onclick="if(confirm('Are you sure you want to reset all settings to defaults? This cannot be undone.')) { htmx.ajax('POST', '/admin/settings/reset', {target: '#settings-messages', swap: 'innerHTML'}).then(() => window.location.reload()) }"
-							class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+							class="inline-flex items-center px-4 py-2 text-sm font-medium text-white bg-red-600/80 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 transition-colors"
 						>
 							<svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
@@ -178,7 +178,7 @@ templ AdminSettingsPage(data SettingsPageData) {
 			<div class="mb-6">
 				<div class="relative">
 					<div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-						<svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<svg class="h-5 w-5 text-gray-500 dark:text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
 						</svg>
 					</div>
@@ -186,10 +186,10 @@ templ AdminSettingsPage(data SettingsPageData) {
 						type="text"
 						id="settings-search"
 						placeholder="Search settings..."
-						class="block w-full rounded-md border-gray-300 pl-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+						class="block w-full rounded-md border-glass-border bg-white/5 text-gray-900 dark:text-white pl-10 focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border focus:bg-white/10 transition-colors placeholder-gray-500 dark:placeholder-gray-400"
 						oninput="filterSettings(this.value)"
 					/>
-					<div id="search-stats" class="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-gray-500"></div>
+					<div id="search-stats" class="absolute inset-y-0 right-0 flex items-center pr-3 text-sm text-gray-500 dark:text-gray-400"></div>
 				</div>
 			</div>
 
@@ -300,19 +300,19 @@ templ AdminSettingsPage(data SettingsPageData) {
 				}
 
 				<!-- Submit -->
-				<div class="flex justify-end gap-4 pt-6 border-t border-gray-200">
+				<div class="flex justify-end gap-4 pt-6 border-t border-glass-border">
 					<button
 						type="button"
 						hx-get="/admin/settings"
 						hx-target="closest form"
 						hx-swap="outerHTML"
-						class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50"
+						class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 bg-white/5 border border-glass-border rounded-md shadow-sm hover:bg-white/10 transition-colors"
 					>
 						Reset
 					</button>
 					<button
 						type="submit"
-						class="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
+						class="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md shadow-sm hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 transition-colors"
 					>
 						Save Settings
 					</button>
@@ -420,7 +420,7 @@ templ AdminSettingsPage(data SettingsPageData) {
 				}
 				
 				const regex = new RegExp(`(${escapeRegex(query)})`, 'gi');
-				const highlightedText = originalText.replace(regex, '<mark class="bg-yellow-200 px-1 rounded">$1</mark>');
+				const highlightedText = originalText.replace(regex, '<mark class="bg-yellow-200 dark:bg-yellow-900/50 dark:text-yellow-100 px-1 rounded">$1</mark>');
 				label.innerHTML = highlightedText;
 			}
 			
@@ -458,7 +458,7 @@ type SelectOption struct {
 
 // SettingsSection renders a collapsible settings section
 templ SettingsSection(title, id string) {
-	<div class="settings-section bg-white dark:bg-gray-800 shadow sm:rounded-lg overflow-hidden" data-section-title={ title } data-section-id={ id }>
+	<div class="settings-section glass-panel overflow-hidden" data-section-title={ title } data-section-id={ id }>
 		<div class="px-4 py-5 sm:p-6">
 			<h3 class="text-lg font-medium leading-6 text-gray-900 dark:text-white mb-4">{ title }</h3>
 			{ children... }
@@ -478,7 +478,7 @@ templ TextInput(label, name, value, placeholder string) {
 			id={ name }
 			value={ value }
 			placeholder={ placeholder }
-			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+			class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors"
 		/>
 	</div>
 }
@@ -496,7 +496,7 @@ templ TextInputWithSource(label, name, value, placeholder, source string) {
 			id={ name }
 			value={ value }
 			placeholder={ placeholder }
-			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+			class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors"
 		/>
 	</div>
 }
@@ -510,7 +510,7 @@ templ NumberInput(label, name string, value, defaultVal int) {
 			name={ name }
 			id={ name }
 			value={ intToStr(value, defaultVal) }
-			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+			class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors"
 		/>
 	</div>
 }
@@ -527,7 +527,7 @@ templ NumberInputWithSource(label, name string, value, defaultVal int, source st
 			name={ name }
 			id={ name }
 			value={ intToStr(value, defaultVal) }
-			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+			class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors"
 		/>
 	</div>
 }
@@ -535,7 +535,7 @@ templ NumberInputWithSource(label, name string, value, defaultVal int, source st
 // ToggleInput renders a toggle switch
 templ ToggleInput(label, name string, checked bool) {
 	<div class="setting-item flex items-center justify-between" data-label={ label } data-name={ name }>
-		<span class="text-sm font-medium text-gray-700">{ label }</span>
+		<span class="text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</span>
 		<button
 			type="button"
 			role="switch"
@@ -555,7 +555,7 @@ templ ToggleInput(label, name string, checked bool) {
 templ ToggleInputWithSource(label, name string, checked bool, source string) {
 	<div class="setting-item flex items-center justify-between" data-label={ label } data-name={ name }>
 		<div class="flex items-center gap-2">
-			<span class="text-sm font-medium text-gray-700">{ label }</span>
+			<span class="text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</span>
 			@SourceBadge(source)
 		</div>
 		<button
@@ -580,7 +580,7 @@ templ SelectInput(label, name, value string, options []SelectOption) {
 		<select
 			name={ name }
 			id={ name }
-			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+			class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors"
 		>
 			for _, opt := range options {
 				<option value={ opt.Value } selected?={ value == opt.Value }>{ opt.Label }</option>
@@ -599,7 +599,7 @@ templ SelectInputWithSource(label, name, value string, options []SelectOption, s
 		<select
 			name={ name }
 			id={ name }
-			class="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400"
+			class="mt-1 block w-full rounded-md border-glass-border bg-white/5 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors"
 		>
 			for _, opt := range options {
 				<option value={ opt.Value } selected?={ value == opt.Value }>{ opt.Label }</option>
@@ -613,7 +613,7 @@ templ RangeInput(label, name string, value float32, min, max, step float64) {
 	<div class="setting-item" data-label={ label } data-name={ name }>
 		<div class="flex justify-between">
 			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
-			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+			<span id={ name + "_value" } class="text-sm text-gray-500 dark:text-gray-400">{ floatToStr(value) }</span>
 		</div>
 		<input
 			type="range"
@@ -638,7 +638,7 @@ templ RangeInputWithSource(label, name string, value float32, min, max, step flo
 				<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
 				@SourceBadge(source)
 			</div>
-			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+			<span id={ name + "_value" } class="text-sm text-gray-500 dark:text-gray-400">{ floatToStr(value) }</span>
 		</div>
 		<input
 			type="range"
@@ -679,7 +679,7 @@ func toggleBgClass(checked bool) string {
 	if checked {
 		return "bg-primary-600"
 	}
-	return "bg-gray-200"
+	return "bg-gray-200 dark:bg-gray-600"
 }
 
 func toggleKnobClass(checked bool) string {
@@ -692,19 +692,19 @@ func toggleKnobClass(checked bool) string {
 // SourceBadge renders a small badge showing where a setting value comes from
 templ SourceBadge(source string) {
 	if source == "admin" {
-		<span class="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-medium text-primary-800" title="Overridden by admin settings">
+		<span class="inline-flex items-center rounded-full bg-primary-100 dark:bg-primary-500/20 px-2 py-0.5 text-xs font-medium text-primary-800 dark:text-primary-300 border border-transparent dark:border-primary-500/20" title="Overridden by admin settings">
 			Admin
 		</span>
 	} else if source == "env" {
-		<span class="inline-flex items-center rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800" title="From environment variable">
+		<span class="inline-flex items-center rounded-full bg-yellow-100 dark:bg-yellow-500/20 px-2 py-0.5 text-xs font-medium text-yellow-800 dark:text-yellow-300 border border-transparent dark:border-yellow-500/20" title="From environment variable">
 			ENV
 		</span>
 	} else if source == "config" {
-		<span class="inline-flex items-center rounded-full bg-purple-100 px-2 py-0.5 text-xs font-medium text-purple-800" title="From config file">
+		<span class="inline-flex items-center rounded-full bg-purple-100 dark:bg-purple-500/20 px-2 py-0.5 text-xs font-medium text-purple-800 dark:text-purple-300 border border-transparent dark:border-purple-500/20" title="From config file">
 			Config
 		</span>
 	} else if source == "default" {
-		<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600" title="Using default value">
+		<span class="inline-flex items-center rounded-full bg-gray-100 dark:bg-gray-500/20 px-2 py-0.5 text-xs font-medium text-gray-600 dark:text-gray-300 border border-transparent dark:border-gray-500/20" title="Using default value">
 			Default
 		</span>
 	}
@@ -715,7 +715,7 @@ func inputBorderClass(err string) string {
 	if err != "" {
 		return "border-red-300 focus:border-red-500 focus:ring-red-500"
 	}
-	return "border-gray-300 focus:border-primary-500 focus:ring-primary-500"
+	return "border-glass-border focus:border-primary-500 focus:ring-primary-500"
 }
 
 // TextInputWithError renders a text input field with optional error display
@@ -730,10 +730,10 @@ templ TextInputWithError(label, name, value, placeholder, err string) {
 			id={ name }
 			value={ value }
 			placeholder={ placeholder }
-			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border", inputBorderClass(err) }
+			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border bg-white/5 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors", inputBorderClass(err) }
 		/>
 		if err != "" {
-			<p class="mt-1 text-sm text-red-600">{ err }</p>
+			<p class="mt-1 text-sm text-red-600 dark:text-red-400">{ err }</p>
 		}
 	</div>
 }
@@ -747,10 +747,10 @@ templ NumberInputWithError(label, name string, value, defaultVal int, err string
 			name={ name }
 			id={ name }
 			value={ intToStr(value, defaultVal) }
-			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border", inputBorderClass(err) }
+			class={ "mt-1 block w-full rounded-md shadow-sm sm:text-sm py-2 px-3 border bg-white/5 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:bg-white/10 transition-colors", inputBorderClass(err) }
 		/>
 		if err != "" {
-			<p class="mt-1 text-sm text-red-600">{ err }</p>
+			<p class="mt-1 text-sm text-red-600 dark:text-red-400">{ err }</p>
 		}
 	</div>
 }
@@ -760,7 +760,7 @@ templ RangeInputWithError(label, name string, value float32, min, max, step floa
 	<div class="setting-item" data-label={ label } data-name={ name }>
 		<div class="flex justify-between">
 			<label for={ name } class="block text-sm font-medium text-gray-700 dark:text-gray-300">{ label }</label>
-			<span id={ name + "_value" } class="text-sm text-gray-500">{ floatToStr(value) }</span>
+			<span id={ name + "_value" } class="text-sm text-gray-500 dark:text-gray-400">{ floatToStr(value) }</span>
 		</div>
 		<input
 			type="range"
@@ -775,7 +775,7 @@ templ RangeInputWithError(label, name string, value float32, min, max, step floa
 			class="mt-1 block w-full"
 		/>
 		if err != "" {
-			<p class="mt-1 text-sm text-red-600">{ err }</p>
+			<p class="mt-1 text-sm text-red-600 dark:text-red-400">{ err }</p>
 		}
 	</div>
 }
@@ -791,7 +791,7 @@ func validationErrorCount(count int) string {
 // ValidationSummary renders a summary of validation errors at the top of the form
 templ ValidationSummary(errors map[string]string) {
 	if len(errors) > 0 {
-		<div class="rounded-md bg-red-50 p-4 mb-6">
+		<div class="rounded-md bg-red-50 dark:bg-red-900/20 p-4 mb-6 border border-red-200 dark:border-red-900/30">
 			<div class="flex">
 				<div class="flex-shrink-0">
 					<svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
@@ -799,13 +799,11 @@ templ ValidationSummary(errors map[string]string) {
 					</svg>
 				</div>
 				<div class="ml-3">
-					<h3 class="text-sm font-medium text-red-800">
-						{ validationErrorCount(len(errors)) }
-					</h3>
-					<div class="mt-2 text-sm text-red-700">
-						<ul class="list-disc space-y-1 pl-5">
+					<h3 class="text-sm font-medium text-red-800 dark:text-red-200">{ validationErrorCount(len(errors)) }</h3>
+					<div class="mt-2 text-sm text-red-700 dark:text-red-300">
+						<ul class="list-disc pl-5 space-y-1">
 							for field, msg := range errors {
-								<li>{ field }: { msg }</li>
+								<li><span class="font-medium">{ field }:</span> { msg }</li>
 							}
 						</ul>
 					</div>

@@ -34,21 +34,39 @@ templ Layout(data LayoutData) {
 								mono: ['JetBrains Mono', 'monospace'],
 							},
 							colors: {
-								gray: {
-									850: '#1f2937',
-									900: '#111827',
-									950: '#0b0f19', // Deep dark background
+								// Base Backgrounds (Matte Navy/Charcoal)
+								bg: {
+									DEFAULT: '#1e293b', // Slate 800
+									dark: '#0f172a',    // Slate 900
+									darker: '#020617',  // Slate 950
 								},
+								// Muted Accents (Slate Blue)
+								accent: {
+									DEFAULT: '#475569', // Slate 600
+									light: '#64748b',   // Slate 500
+									dark: '#334155',    // Slate 700
+								},
+								// Primary Brand (Blue/Indigo - High Contrast)
 								primary: {
-									50: '#f0f9ff',
-									100: '#e0f2fe',
-									500: '#0ea5e9', // Sky blue
-									600: '#0284c7',
-									700: '#0369a1',
-								}
+									50: '#eff6ff',
+									100: '#dbeafe',
+									500: '#3b82f6', // Blue 500
+									600: '#2563eb', // Blue 600
+									700: '#1d4ed8', // Blue 700
+								},
+								// Status Colors (Muted)
+								success: '#10b981', // Emerald 500
+								warning: '#f59e0b', // Amber 500
+								error: '#ef4444',   // Red 500
+								info: '#3b82f6',    // Blue 500
+							},
+							boxShadow: {
+								'glass': '0 4px 30px rgba(0, 0, 0, 0.1)',
+								'glass-hover': '0 8px 30px rgba(0, 0, 0, 0.2)',
 							},
 							backdropBlur: {
 								xs: '2px',
+								md: '12px',
 							}
 						}
 					}
@@ -57,40 +75,73 @@ templ Layout(data LayoutData) {
 			<!-- HTMX -->
 			<script src="https://unpkg.com/htmx.org@1.9.10"></script>
 			<script src="https://unpkg.com/htmx.org@1.9.10/dist/ext/sse.js"></script>
-			<!-- Custom styles -->
+			<!-- Custom Premium Styles -->
 			<style>
 				:root {
-					--glass-border: rgba(255, 255, 255, 0.1);
+					--bg-primary: #f8fafc; /* Slate 50 */
+					--text-primary: #0f172a; /* Slate 900 */
 					--glass-bg: rgba(255, 255, 255, 0.7);
-					--glass-bg-dark: rgba(17, 24, 39, 0.7);
+					--glass-border: rgba(255, 255, 255, 0.2);
+					--sidebar-bg: rgba(255, 255, 255, 0.8);
 				}
+				
+				html.dark {
+					--bg-primary: #1e293b; /* Slate 800 - Matte Navy */
+					--text-primary: #f8fafc; /* Slate 50 - High Contrast White */
+					--glass-bg: rgba(30, 41, 59, 0.6); /* Slate 800 with opacity */
+					--glass-border: rgba(255, 255, 255, 0.08); /* Subtle white border */
+					--sidebar-bg: rgba(15, 23, 42, 0.7); /* Slate 900 Glass */
+				}
+				
+				body {
+					background-color: var(--bg-primary);
+					color: var(--text-primary);
+					font-family: 'Inter', sans-serif;
+					-webkit-font-smoothing: antialiased;
+				}
+
+				/* Glassmorphism Classes */
 				.glass {
 					background: var(--glass-bg);
 					backdrop-filter: blur(12px);
 					-webkit-backdrop-filter: blur(12px);
-					border-bottom: 1px solid rgba(0,0,0,0.05);
-				}
-				html.dark .glass {
-					background: var(--glass-bg-dark);
-					border-bottom: 1px solid var(--glass-border);
+					border: 1px solid var(--glass-border);
+					box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 				}
 				
+				.glass-panel {
+					background: var(--glass-bg);
+					backdrop-filter: blur(16px);
+					border: 1px solid var(--glass-border);
+					border-radius: 6px; /* Reduced from V2 (was likely 12px) as requested */
+				}
+
+				.glass-hover:hover {
+					background: rgba(255, 255, 255, 0.05);
+					border-color: rgba(255, 255, 255, 0.2);
+					transition: all 0.2s ease;
+				}
+				
+				/* Sidebar Styles */
+				.sidebar-glass {
+					background: var(--sidebar-bg);
+					backdrop-filter: blur(20px);
+					border-right: 1px solid var(--glass-border);
+				}
+
 				.htmx-indicator { opacity: 0; transition: opacity 200ms ease-in; }
 				.htmx-request .htmx-indicator { opacity: 1; }
 				.htmx-request.htmx-indicator { opacity: 1; }
 				
-				/* Smooth transitions */
-				.transition-all-200 { transition: all 0.2s ease-in-out; }
+				/* Animations */
+				@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+				.animate-fade-in { animation: fadeIn 0.3s ease-out; }
 				
-				/* Search result animation */
-				@keyframes slideUp {
-					from { opacity: 0; transform: translateY(10px); }
-					to { opacity: 1; transform: translateY(0); }
-				}
-				.animate-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-				
-				.dropdown-content { display: none; }
-				.dropdown:hover .dropdown-content { display: block; animation: slideUp 0.15s ease-out; }
+				/* Scrollbar */
+				::-webkit-scrollbar { width: 8px; height: 8px; }
+				::-webkit-scrollbar-track { background: transparent; }
+				::-webkit-scrollbar-thumb { background: rgba(156, 163, 175, 0.3); border-radius: 4px; }
+				::-webkit-scrollbar-thumb:hover { background: rgba(156, 163, 175, 0.5); }
 			</style>
 			<!-- Theme toggle script -->
 			<script>
@@ -129,116 +180,123 @@ templ Layout(data LayoutData) {
 				document.addEventListener('DOMContentLoaded', updateThemeIcon);
 			</script>
 		</head>
-		<body class="h-full bg-gray-50 dark:bg-gray-900 transition-colors" hx-boost="true">
-			<div class="min-h-full">
-				<!-- Navigation -->
-				<nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 shadow-sm">
-					<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-						<div class="flex h-16 justify-between">
-							<div class="flex">
-									<div class="flex flex-shrink-0 items-center">
-									<a href="/" class="text-xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-										<span class="text-2xl">🔍</span>
-										<span>Rice Search</span>
-									</a>
-								</div>
-								<div class="hidden sm:ml-8 sm:flex sm:space-x-8">
-								<a 
-									href="/" 
-									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/") }
-								>
-									Dashboard
-								</a>
-								<a 
-									href="/search" 
-									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/search") }
-								>
-									Search
-								</a>
-								<a 
-									href="/stores" 
-									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/stores") }
-								>
-									Stores
-								</a>
-								<a 
-									href="/files" 
-									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/files") }
-								>
-									Files
-								</a>
-								<!-- Admin Dropdown -->
-								<div class="relative dropdown inline-flex items-center">
-									<button class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium h-full", navLinkClass(data.CurrentPath, "/admin") }>
-										Admin
-										<svg class="ml-1 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
-										</svg>
-									</button>
-									<div class="dropdown-content absolute left-0 top-full w-48 z-50">
-										<div class="pt-1">
-											<div class="rounded-md bg-white dark:bg-gray-800 shadow-lg ring-1 ring-black ring-opacity-5 dark:ring-gray-700">
-												<div class="py-1">
-													<a href="/admin/models" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Models</a>
-													<a href="/admin/mappers" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Mappers</a>
-													<a href="/admin/connections" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Connections</a>
-													<a href="/admin/settings" class="block px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700">Settings</a>
-												</div>
-											</div>
-										</div>
-									</div>
-								</div>
-								<a 
-									href="/stats" 
-									class={ "inline-flex items-center border-b-2 px-1 pt-1 text-sm font-medium", navLinkClass(data.CurrentPath, "/stats") }
-								>
-									Stats
-								</a>
-							</div>
+		<body class="h-full transition-colors overflow-hidden" hx-boost="true">
+			<div class="flex h-full">
+				<!-- Sidebar (Desktop) -->
+				<aside class="w-64 sidebar-glass hidden md:flex flex-col z-20 transition-all duration-300">
+					<!-- Brand -->
+					<div class="h-16 flex items-center px-6 border-b border-glass-border">
+						<a href="/" class="flex items-center gap-3 font-semibold text-lg hover:opacity-80 transition-opacity">
+							<span class="text-2xl">🔍</span>
+							<span>Rice Search</span>
+						</a>
+					</div>
+
+					<!-- Navigation -->
+					<nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
+						<a href="/" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/") }>
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
+							</svg>
+							Dashboard
+						</a>
+						<a href="/search" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/search") }>
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+							</svg>
+							Search
+						</a>
+						<a href="/files" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/files") }>
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+							</svg>
+							Files
+						</a>
+						<a href="/stores" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/stores") }>
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+							</svg>
+							Stores
+						</a>
+
+						<div class="pt-4 pb-2">
+							<div class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Management</div>
 						</div>
-							<div class="flex items-center gap-4">
-								<!-- Theme Toggle -->
-								<button 
-									id="theme-toggle"
-									onclick="cycleTheme()"
-									class="inline-flex items-center gap-1 px-2 py-1 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-									title="Toggle theme (Light/Dark/System)"
-								>
-									💻 <span class="hidden sm:inline">System</span>
-								</button>
-								<!-- Health Indicator -->
+
+						<a href="/admin" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/admin") }>
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+							</svg>
+							Admin
+						</a>
+						<a href="/stats" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/stats") }>
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/>
+							</svg>
+							Statistics
+						</a>
+					</nav>
+
+					<!-- Footer / Theme Toggle -->
+					<div class="p-4 border-t border-glass-border">
+						<button 
+							onclick="cycleTheme()"
+							class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm"
+						>
+							<span id="theme-toggle-icon">💻</span>
+							<span id="theme-toggle-label">System</span>
+						</button>
+					</div>
+				</aside>
+
+				<!-- Main Content Wrapper -->
+				<div class="flex-1 flex flex-col h-full overflow-hidden relative">
+					<!-- Top Header (System Widget) -->
+					<header class="h-16 glass flex items-center justify-between px-6 z-10 shrink-0">
+						<!-- Breadcrumb / Page Title -->
+						<div class="flex items-center">
+							<h1 class="text-lg font-semibold tracking-tight">{ data.Title }</h1>
+						</div>
+
+						<!-- System Widget (Right Corner) -->
+						<div class="flex items-center gap-4">
+							<!-- Environment / Metrics Pill (Glass) -->
+							<div class="hidden sm:flex items-center gap-4 px-4 py-1.5 rounded-full bg-black/20 border border-white/5 text-xs font-mono">
+								<!-- Health -->
 								<div class="flex items-center gap-2">
 									@HealthDot(data.HealthStatus)
-									<span class="text-sm text-gray-600 dark:text-gray-300">{ healthLabel(data.HealthStatus) }</span>
+									<span class="opacity-80">{ healthLabel(data.HealthStatus) }</span>
 								</div>
+								
+								<div class="w-px h-3 bg-white/20"></div>
+
 								<!-- Version -->
-								if data.Version != "" {
-									<span class="text-sm text-gray-400 dark:text-gray-500">{ data.Version }</span>
-								}
-								<!-- Qdrant Link -->
+								<span class="opacity-60">v{ data.Version }</span>
+								
 								if data.QdrantURL != "" {
-									<a 
-										href={ templ.URL(data.QdrantURL + "/dashboard") } 
-										target="_blank"
-										rel="noopener noreferrer"
-										class="text-sm text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300 flex items-center gap-1"
-									>
-										Qdrant
-										<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-										</svg>
-									</a>
+									<div class="w-px h-3 bg-white/20"></div>
+									<a href={ templ.URL(data.QdrantURL + "/dashboard") } target="_blank" class="hover:text-primary-400 transition-colors">Qdrant</a>
 								}
 							</div>
+							
+							<!-- Mobile Menu Button (Visible only on small screens) -->
+							<button class="md:hidden p-2 rounded-md hover:bg-white/10">
+								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+								</svg>
+							</button>
 						</div>
-					</div>
-				</nav>
+					</header>
 
-				<!-- Main content -->
-				<main>
-					{ children... }
-				</main>
+					<!-- Scrollable Content Area -->
+					<main class="flex-1 overflow-y-auto p-6 md:p-8 relative">
+						{ children... }
+					</main>
+				</div>
 			</div>
+
+			<!-- Mobile Sidebar Overlay (TODO: specific mobile menu implementation) -->
 		</body>
 	</html>
 }
@@ -246,9 +304,9 @@ templ Layout(data LayoutData) {
 // navLinkClass returns the appropriate classes for navigation links.
 func navLinkClass(currentPath, linkPath string) string {
 	if currentPath == linkPath || (currentPath == "/" && linkPath == "/dashboard") {
-		return "border-primary-500 text-gray-900 dark:text-white"
+		return "bg-primary-500/10 text-primary-500 border-l-2 border-primary-500" // Active Sidebar
 	}
-	return "border-transparent text-gray-500 dark:text-gray-400 hover:border-gray-300 dark:hover:border-gray-600 hover:text-gray-700 dark:hover:text-gray-200"
+	return "text-gray-400 hover:text-gray-100 hover:bg-white/5 border-l-2 border-transparent"
 }
 
 // healthLabel returns a human-readable label for health status.

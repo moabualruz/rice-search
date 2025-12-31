@@ -95,25 +95,33 @@ type SearchPageData struct {
 // SearchPage renders the main search page
 templ SearchPage(data SearchPageData) {
 	@Layout(data.Layout) {
-		<div class="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
-			<!-- Search Form -->
-			<div class="mb-8">
+		<div class="max-w-7xl mx-auto space-y-6 animate-fade-in">
+			<!-- Page Header -->
+			<div class="flex items-center justify-between">
+				<div>
+					<h2 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">Code Search</h2>
+					<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Semantic & lexical search across your repositories</p>
+				</div>
+			</div>
+
+			<!-- Search Interface -->
+			<div class="glass-panel p-6 shadow-sm">
 				<form 
 					hx-post="/search"
 					hx-target="#search-results"
 					hx-indicator="#search-indicator"
-					class="space-y-4"
+					class="space-y-6"
 					id="search-form"
 				>
-					<!-- Main Search Bar -->
-					<div class="flex gap-4">
-						<!-- Store selector -->
-						<div class="w-48">
-							<label for="store" class="block text-sm font-medium text-gray-700 mb-1">Store</label>
+					<!-- Search Bar Row -->
+					<div class="flex flex-col md:flex-row gap-4">
+						<!-- Store Selector -->
+						<div class="w-full md:w-48">
+							<label for="store" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Index Store</label>
 							<select 
 								id="store" 
 								name="store" 
-								class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+								class="block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white sm:text-sm py-2 px-3 focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all"
 							>
 								for _, s := range data.Stores {
 									<option value={ s } selected?={ s == data.Store }>{ s }</option>
@@ -121,17 +129,22 @@ templ SearchPage(data SearchPageData) {
 							</select>
 						</div>
 						
-						<!-- Search input -->
+						<!-- Search Input -->
 						<div class="flex-1">
-							<label for="query" class="block text-sm font-medium text-gray-700 mb-1">Search Query</label>
-							<div class="flex rounded-md shadow-sm">
+							<label for="query" class="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1 uppercase tracking-wide">Query</label>
+							<div class="relative rounded-md shadow-sm">
+								<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+									<svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+									</svg>
+								</div>
 								<input
 									type="text"
 									id="query"
 									name="query"
 									value={ data.Query }
-									placeholder="Search your code..."
-									class="block w-full rounded-l-md border-gray-300 focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+									placeholder="Search by keyword, concept, or regex..."
+									class="block w-full pl-10 rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white placeholder-gray-500 focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-all sm:text-sm py-2 px-3"
 									hx-post="/search"
 									hx-target="#search-results"
 									hx-indicator="#search-indicator"
@@ -140,222 +153,103 @@ templ SearchPage(data SearchPageData) {
 								/>
 								<button
 									type="submit"
-									class="inline-flex items-center rounded-r-md border border-l-0 border-gray-300 bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2"
+									class="absolute inset-y-0 right-0 px-4 py-2 border-l border-glass-border bg-primary-600/90 hover:bg-primary-600 text-sm font-medium text-white rounded-r-md transition-colors"
 								>
-									<svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-									</svg>
-									<span class="ml-2">Search</span>
+									Search
 								</button>
 							</div>
 						</div>
 					</div>
 					
-					<!-- Advanced Options (Collapsible) -->
-					<div class="border border-gray-200 rounded-lg bg-white">
+					<!-- Advanced Options Toggle -->
+					<div class="border-t border-glass-border pt-4">
 						<button
 							type="button"
-							class="w-full px-4 py-3 flex items-center justify-between text-sm font-medium text-gray-700 hover:bg-gray-50"
+							class="flex items-center text-sm font-medium text-primary-500 hover:text-primary-400 transition-colors focus:outline-none"
 							onclick="document.getElementById('advanced-options').classList.toggle('hidden')"
 						>
-							<span class="flex items-center">
-								<svg class="h-5 w-5 mr-2 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
-								</svg>
-								Advanced Options
-							</span>
-							<svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+							<svg class="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
 							</svg>
+							Show Advanced Options
 						</button>
 						
-						<div id="advanced-options" class="px-4 pb-4 space-y-4 hidden">
-							<!-- Results & Reranking -->
-							<div class="grid grid-cols-3 gap-4">
-								<div>
-									<label for="top_k" class="block text-sm font-medium text-gray-700 mb-1">Results</label>
-									<select id="top_k" name="top_k" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border">
-										<option value="10" selected?={ data.Options.TopK == 10 }>10</option>
-										<option value="20" selected?={ data.Options.TopK == 20 || data.Options.TopK == 0 }>20</option>
-										<option value="50" selected?={ data.Options.TopK == 50 }>50</option>
-										<option value="100" selected?={ data.Options.TopK == 100 }>100</option>
-									</select>
-								</div>
-								
-								<div>
-									<label class="block text-sm font-medium text-gray-700 mb-1">Reranking</label>
-									<label class="inline-flex items-center mt-2">
-										<input type="checkbox" name="enable_reranking" checked?={ data.Options.EnableReranking || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
-										<span class="ml-2 text-sm text-gray-700">Enable reranking</span>
-									</label>
-								</div>
-								
-								<div>
-									<label for="rerank_top_k" class="block text-sm font-medium text-gray-700 mb-1">Rerank Candidates</label>
-									<input 
-										type="number" 
-										id="rerank_top_k" 
-										name="rerank_top_k" 
-										value={ fmt.Sprint(getOrDefault(data.Options.RerankTopK, 30)) }
-										min="10"
-										max="100"
-										class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
-									/>
-								</div>
-							</div>
-							
-							<!-- Weights -->
-							<div class="border-t pt-4">
-								<h4 class="text-sm font-medium text-gray-900 mb-3">Retrieval Weights</h4>
-								<div class="grid grid-cols-2 gap-4">
+						<!-- Collapsible Content -->
+						<div id="advanced-options" class="mt-4 space-y-6 hidden animate-fade-in">
+							<!-- Logic Grid -->
+							<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+								<!-- Results Config -->
+								<div class="space-y-4">
+									<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Retrieval Config</h4>
 									<div>
-										<label for="sparse_weight" class="block text-sm text-gray-700 mb-1">
-											Sparse (BM25): <span id="sparse_weight_val">{ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.SparseWeight, 0.5)) }</span>
+										<label class="block text-sm text-gray-700 dark:text-gray-300 mb-1">Top K Results</label>
+										<select name="top_k" class="block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white text-sm py-1.5 px-3">
+											<option value="10" selected?={ data.Options.TopK == 10 }>10 items</option>
+											<option value="20" selected?={ data.Options.TopK == 20 || data.Options.TopK == 0 }>20 items</option>
+											<option value="50" selected?={ data.Options.TopK == 50 }>50 items</option>
+											<option value="100" selected?={ data.Options.TopK == 100 }>100 items</option>
+										</select>
+									</div>
+									<div class="flex items-center justify-between p-3 rounded-md border border-glass-border bg-white/5">
+										<span class="text-sm text-gray-700 dark:text-gray-300">Reranking</span>
+										<label class="relative inline-flex items-center cursor-pointer">
+											<input type="checkbox" name="enable_reranking" checked?={ data.Options.EnableReranking || data.Query == "" } class="sr-only peer">
+											<div class="w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-primary-600"></div>
+										</label>
+									</div>
+								</div>
+								
+								<!-- Weights Sliders -->
+								<div class="space-y-4">
+									<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Weights (Hybrid Search)</h4>
+									<div>
+										<label class="flex justify-between text-sm text-gray-700 dark:text-gray-300 mb-1">
+											<span>Sparse (BM25)</span>
+											<span id="sparse_weight_val" class="font-mono text-xs">{ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.SparseWeight, 0.5)) }</span>
 										</label>
 										<input 
-											type="range" 
-											id="sparse_weight" 
-											name="sparse_weight" 
+											type="range" name="sparse_weight" min="0" max="1" step="0.1"
 											value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.SparseWeight, 0.5)) }
-											min="0" 
-											max="1" 
-											step="0.1"
-											class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+											class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
 											oninput="document.getElementById('sparse_weight_val').textContent = parseFloat(this.value).toFixed(2)"
 										/>
 									</div>
-									
 									<div>
-										<label for="dense_weight" class="block text-sm text-gray-700 mb-1">
-											Dense (Semantic): <span id="dense_weight_val">{ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DenseWeight, 0.5)) }</span>
+										<label class="flex justify-between text-sm text-gray-700 dark:text-gray-300 mb-1">
+											<span>Dense (Vector)</span>
+											<span id="dense_weight_val" class="font-mono text-xs">{ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DenseWeight, 0.5)) }</span>
 										</label>
 										<input 
-											type="range" 
-											id="dense_weight" 
-											name="dense_weight" 
+											type="range" name="dense_weight" min="0" max="1" step="0.1"
 											value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DenseWeight, 0.5)) }
-											min="0" 
-											max="1" 
-											step="0.1"
-											class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+											class="w-full h-1.5 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
 											oninput="document.getElementById('dense_weight_val').textContent = parseFloat(this.value).toFixed(2)"
 										/>
 									</div>
 								</div>
-							</div>
-							
-							<!-- Post-processing -->
-							<div class="border-t pt-4">
-								<h4 class="text-sm font-medium text-gray-900 mb-3">Post-processing</h4>
-								<div class="grid grid-cols-2 gap-4">
-									<div class="space-y-3">
-										<label class="flex items-center justify-between">
-											<span class="flex items-center">
-												<input type="checkbox" name="enable_dedup" checked?={ data.Options.EnableDedup || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
-												<span class="ml-2 text-sm text-gray-700">Deduplication</span>
-											</span>
-											<input 
-												type="number" 
-												name="dedup_threshold" 
-												value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DedupThreshold, 0.85)) }
-												min="0.5" 
-												max="1" 
-												step="0.05"
-												placeholder="0.85"
-												class="w-20 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-xs py-1 px-2 border"
-											/>
-										</label>
-										
-										<label class="flex items-center justify-between">
-											<span class="flex items-center">
-												<input type="checkbox" name="enable_diversity" checked?={ data.Options.EnableDiversity || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
-												<span class="ml-2 text-sm text-gray-700">Diversity (MMR)</span>
-											</span>
-											<input 
-												type="number" 
-												name="diversity_lambda" 
-												value={ fmt.Sprintf("%.2f", getOrDefaultFloat(data.Options.DiversityLambda, 0.7)) }
-												min="0" 
-												max="1" 
-												step="0.1"
-												placeholder="0.7"
-												class="w-20 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-xs py-1 px-2 border"
-											/>
-										</label>
-										
-										<label class="inline-flex items-center">
-											<input type="checkbox" name="enable_expansion" checked?={ data.Options.EnableExpansion || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
-											<span class="ml-2 text-sm text-gray-700">Query Expansion</span>
-										</label>
-									</div>
-									
-									<div class="space-y-3">
-										<label class="flex items-center justify-between">
-											<span class="flex items-center">
-												<input type="checkbox" name="group_by_file" checked?={ data.Options.GroupByFile } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
-												<span class="ml-2 text-sm text-gray-700">Group by File</span>
-											</span>
-											<input 
-												type="number" 
-												name="max_chunks_per_file" 
-												value={ fmt.Sprint(getOrDefault(data.Options.MaxChunksPerFile, 3)) }
-												min="1" 
-												max="10"
-												placeholder="3"
-												class="w-20 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 text-xs py-1 px-2 border"
-											/>
-										</label>
-										
-										<label class="inline-flex items-center">
-											<input type="checkbox" name="include_content" checked?={ data.Options.IncludeContent || data.Query == "" } class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"/>
-											<span class="ml-2 text-sm text-gray-700">Include Content</span>
-										</label>
-									</div>
-								</div>
-							</div>
-							
-							<!-- Filters -->
-							<div class="border-t pt-4">
-								<h4 class="text-sm font-medium text-gray-900 mb-3">Filters</h4>
-								<div class="grid grid-cols-3 gap-4">
+
+								<!-- Filters -->
+								<div class="space-y-4">
+									<h4 class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide">Filters</h4>
 									<div>
-										<label for="path_prefix" class="block text-sm text-gray-700 mb-1">Path Prefix</label>
 										<input 
-											type="text" 
-											id="path_prefix" 
-											name="path_prefix" 
-											value={ data.Options.PathPrefix }
-											placeholder="src/"
-											class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border"
+											type="text" name="path_prefix" value={ data.Options.PathPrefix } placeholder="Path filter (e.g. src/)"
+											class="block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white text-sm py-1.5 px-3"
 										/>
 									</div>
-									
 									<div>
-										<label for="languages" class="block text-sm text-gray-700 mb-1">Languages</label>
-										<select id="languages" name="languages" multiple class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border" size="1">
-											<option value="">All Languages</option>
+										<select name="languages" multiple class="block w-full rounded-md border-glass-border bg-white/5 dark:bg-black/20 text-gray-900 dark:text-white text-sm py-1.5 px-3 h-24">
+											<option value="" class="text-gray-500">All Languages</option>
 											if len(data.AvailableLanguages) > 0 {
 												for _, lang := range data.AvailableLanguages {
 													<option value={ lang }>{ lang }</option>
 												}
 											} else {
+												<option value="go">Go</option>
+												<option value="python">Python</option>
 												<option value="typescript">TypeScript</option>
 												<option value="javascript">JavaScript</option>
-												<option value="python">Python</option>
-												<option value="go">Go</option>
 												<option value="rust">Rust</option>
-												<option value="java">Java</option>
-												<option value="cpp">C++</option>
-											}
-										</select>
-									</div>
-									
-									<div>
-										<label for="connection_id" class="block text-sm text-gray-700 mb-1">Connection</label>
-										<select id="connection_id" name="connection_id" class="block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm py-2 px-3 border">
-											<option value="">All Connections</option>
-											for _, conn := range data.Connections {
-												<option value={ conn.ID } selected?={ conn.ID == data.ConnectionID }>{ conn.Name }</option>
 											}
 										</select>
 									</div>
@@ -367,134 +261,91 @@ templ SearchPage(data SearchPageData) {
 			</div>
 
 			<!-- Loading indicator -->
-			<div id="search-indicator" class="htmx-indicator mb-4">
-				@LoadingSpinner()
+			<div id="search-indicator" class="htmx-indicator flex justify-center py-12">
+				<div class="flex flex-col items-center gap-3">
+					<div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+					<span class="text-sm text-gray-500 animate-pulse">Running semantic search...</span>
+				</div>
 			</div>
 
-			<!-- Search Results -->
-			<div id="search-results">
+			<!-- Search Results Area -->
+			<div id="search-results" class="min-h-[400px]">
 				@SearchResults(data)
 			</div>
 		</div>
 	}
 }
 
-// SearchResults renders just the results section (for HTMX updates)
+// SearchResults renders results list
 templ SearchResults(data SearchPageData) {
 	if data.Error != "" {
 		@ErrorMessage(data.Error)
 	} else if data.Query == "" {
-		@EmptyState("Start searching", "Enter a query above to search your code")
+		@EmptyState("Ready to search", "Enter a query above to start exploring your codebase")
 	} else if len(data.Results) == 0 {
 		@EmptyState("No results found", fmt.Sprintf("No matches for \"%s\"", data.Query))
 	} else {
-		<!-- Query Understanding (if available) -->
-		if data.ParsedQuery != nil {
-			@QueryUnderstanding(data.ParsedQuery)
-		}
-		
-		<!-- Results header with metadata -->
-		<div class="mb-4">
-			<div class="flex items-center justify-between mb-2">
-				<p class="text-sm text-gray-600">
-					Found <span class="font-semibold">{ fmt.Sprint(data.Total) }</span> results in <span class="font-semibold">{ fmt.Sprint(data.SearchTime) }ms</span>
-				</p>
-				if data.SearchMetadata != nil {
-					<div class="flex items-center gap-4 text-xs text-gray-500">
-						<span title="Embedding time">Embed: { fmt.Sprint(data.SearchMetadata.EmbedTimeMs) }ms</span>
-						<span title="Retrieval time">Retrieve: { fmt.Sprint(data.SearchMetadata.RetrievalTimeMs) }ms</span>
-						if data.SearchMetadata.RerankingApplied {
-							<span title="Reranking time" class="text-green-600">
-								Rerank: { fmt.Sprint(data.SearchMetadata.RerankTimeMs) }ms ({ fmt.Sprint(data.SearchMetadata.CandidatesReranked) } candidates)
-							</span>
-						}
-					</div>
-				}
-			</div>
-			
-			<!-- Applied options indicator -->
-			<div class="flex flex-wrap gap-2 text-xs">
-				if data.Options.EnableReranking {
-					<span class="inline-flex items-center rounded-full bg-green-100 px-2.5 py-0.5 font-medium text-green-800">
-						<svg class="h-3 w-3 mr-1" fill="currentColor" viewBox="0 0 20 20">
-							<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.857-9.809a.75.75 0 00-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 10-1.06 1.061l2.5 2.5a.75.75 0 001.137-.089l4-5.5z" clip-rule="evenodd"/>
-						</svg>
-						Reranking
-					</span>
-				}
-				if data.Options.EnableDedup {
-					<span class="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 font-medium text-primary-800">Dedup</span>
-				}
-				if data.Options.EnableDiversity {
-					<span class="inline-flex items-center rounded-full bg-purple-100 px-2.5 py-0.5 font-medium text-purple-800">Diversity</span>
-				}
-				if data.Options.GroupByFile {
-					<span class="inline-flex items-center rounded-full bg-orange-100 px-2.5 py-0.5 font-medium text-orange-800">Grouped</span>
-				}
-				if data.Options.PathPrefix != "" {
-					<span class="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 font-medium text-gray-800">
-						Path: { data.Options.PathPrefix }
-					</span>
-				}
-			</div>
-		</div>
-
-		<!-- Results list -->
-		<div class="space-y-4">
-			for i, result := range data.Results {
-				@SearchResultCard(result, i, data.SearchMetadata != nil && data.SearchMetadata.RerankingApplied)
+		<div class="space-y-6 animate-fade-in">
+			<!-- Query Understanding -->
+			if data.ParsedQuery != nil {
+				@QueryUnderstanding(data.ParsedQuery)
 			}
+			
+			<!-- Metadata Bar -->
+			<div class="flex items-center justify-between px-2">
+				<div class="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
+					<span>Found <strong class="text-gray-900 dark:text-white">{ fmt.Sprint(data.Total) }</strong> results</span>
+					<span>in <strong class="text-gray-900 dark:text-white">{ fmt.Sprint(data.SearchTime) }</strong>ms</span>
+				</div>
+				if data.SearchMetadata != nil && data.SearchMetadata.RerankingApplied {
+					<span class="inline-flex items-center rounded-full bg-green-500/10 px-2 py-1 text-xs font-medium text-green-700 dark:text-green-400 ring-1 ring-inset ring-green-600/20">
+						Reranked { fmt.Sprint(data.SearchMetadata.CandidatesReranked) } items in { fmt.Sprint(data.SearchMetadata.RerankTimeMs) }ms
+					</span>
+				}
+			</div>
+
+			<!-- Results Loop -->
+			<div class="space-y-4">
+				for i, result := range data.Results {
+					@SearchResultCard(result, i, data.SearchMetadata != nil && data.SearchMetadata.RerankingApplied)
+				}
+			</div>
 		</div>
 	}
 }
 
-// QueryUnderstanding displays query analysis information
+// QueryUnderstanding displays AI analysis of the query
 templ QueryUnderstanding(parsed *ParsedQueryDisplay) {
-	<div class="mb-4 rounded-lg border border-primary-200 bg-primary-50 p-4">
-		<div class="flex items-start">
-			<svg class="h-5 w-5 text-primary-600 mt-0.5 mr-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
-			</svg>
-			<div class="flex-1">
-				<h3 class="text-sm font-medium text-primary-900">
-					Query Analysis 
-					<span class="text-xs font-normal text-primary-700">
-						if parsed.UsedModel {
-							(model)
-						} else {
-							(keywords)
-						}
+	<div class="glass-panel p-4 border-l-4 border-l-primary-500 bg-primary-500/5">
+		<div class="flex gap-4">
+			<div class="shrink-0 pt-1">
+				<svg class="h-5 w-5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+				</svg>
+			</div>
+			<div class="flex-1 space-y-2">
+				<div class="flex items-center justify-between">
+					<h3 class="text-sm font-semibold text-gray-900 dark:text-white">Query Analysis</h3>
+					<span class="text-xs text-primary-500 font-mono">
+						if parsed.UsedModel { MODEL_INFERENCE } else { KEYWORD_MATCH }
 					</span>
-				</h3>
-				<div class="mt-2 text-sm text-primary-800 space-y-1">
-					if len(parsed.Keywords) > 0 {
-						<div class="flex items-start">
-							<span class="font-medium mr-2">Keywords:</span>
-							<div class="flex flex-wrap gap-1">
-								for _, kw := range parsed.Keywords {
-									<span class="inline-block rounded bg-primary-200 px-2 py-0.5 text-xs">{ kw }</span>
-								}
-							</div>
-						</div>
+				</div>
+				
+				<div class="flex flex-wrap gap-2 text-xs">
+					if parsed.ActionIntent != "" {
+						<span class="px-2 py-1 rounded bg-blue-500/10 text-blue-700 dark:text-blue-300 border border-blue-200/20">
+							Intent: { parsed.ActionIntent }
+						</span>
 					}
-					if parsed.ActionIntent != "" || parsed.TargetType != "" {
-						<div>
-							<span class="font-medium">Intent:</span>
-							<span class="ml-2">{ parsed.ActionIntent }</span>
-							if parsed.TargetType != "" {
-								<span class="text-primary-600"> | Target: { parsed.TargetType }</span>
-							}
-						</div>
+					if parsed.TargetType != "" {
+						<span class="px-2 py-1 rounded bg-purple-500/10 text-purple-700 dark:text-purple-300 border border-purple-200/20">
+							Target: { parsed.TargetType }
+						</span>
 					}
-					if len(parsed.Expanded) > 0 {
-						<div class="flex items-start">
-							<span class="font-medium mr-2">Expanded:</span>
-							<div class="flex flex-wrap gap-1">
-								for _, exp := range parsed.Expanded {
-									<span class="text-xs text-primary-700">{ exp }</span>
-								}
-							</div>
-						</div>
+					for _, exp := range parsed.Expanded {
+						<span class="px-2 py-1 rounded bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200/20">
+							+ "{ exp }"
+						</span>
 					}
 				</div>
 			</div>
@@ -502,50 +353,35 @@ templ QueryUnderstanding(parsed *ParsedQueryDisplay) {
 	</div>
 }
 
-// SearchResultCard renders a single search result
+// SearchResultCard renders a single result
 templ SearchResultCard(result SearchResult, index int, showRerank bool) {
-	<div class="search-result bg-white rounded-lg shadow border border-gray-200 overflow-hidden hover:shadow-md transition-shadow" style={ fmt.Sprintf("animation-delay: %dms", index*50) }>
+	<div class="glass-panel overflow-hidden hover:border-primary-500/30 transition-all duration-200 group" style={ fmt.Sprintf("animation-delay: %dms", index*50) }>
 		<!-- Header -->
-		<div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
-			<div class="flex items-center justify-between">
-				<div class="flex items-center gap-3 flex-1 min-w-0">
-					<span class="text-sm font-medium text-gray-900 truncate" title={ result.Path }>{ result.Path }</span>
-					<span class="inline-flex items-center rounded-full bg-primary-100 px-2.5 py-0.5 text-xs font-medium text-primary-800 flex-shrink-0">
-						{ result.Language }
-					</span>
-					<span class="text-sm text-gray-500 flex-shrink-0">
-						Lines { fmt.Sprint(result.StartLine) }-{ fmt.Sprint(result.EndLine) }
-					</span>
-					if len(result.Symbols) > 0 {
-						<div class="flex items-center gap-1 flex-shrink-0">
-							<svg class="h-4 w-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14"/>
-							</svg>
-							<span class="text-xs text-gray-500">{ result.Symbols[0] }</span>
-							if len(result.Symbols) > 1 {
-								<span class="text-xs text-gray-400">+{ fmt.Sprint(len(result.Symbols)-1) }</span>
-							}
-						</div>
-					}
-				</div>
-				<div class="flex items-center gap-4 text-sm text-gray-500 flex-shrink-0 ml-4">
-					<span title="Combined score" class="font-mono">
-						{ fmt.Sprintf("%.3f", result.Score) }
-					</span>
-					if showRerank && result.RerankScore > 0 {
-						<span title="Rerank score" class="text-green-600 font-mono">
-							R: { fmt.Sprintf("%.3f", result.RerankScore) }
-						</span>
+		<div class="px-4 py-3 border-b border-glass-border bg-gray-50/50 dark:bg-white/5 flex items-center justify-between group-hover:bg-primary-500/5 transition-colors">
+			<div class="flex items-center gap-3 min-w-0 overflow-hidden">
+				<svg class="h-4 w-4 text-gray-400 group-hover:text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+				</svg>
+				<span class="text-sm font-medium text-gray-900 dark:text-gray-100 truncate font-mono" title={ result.Path }>{ result.Path }</span>
+				<span class="text-xs text-gray-500 dark:text-gray-400 flex-shrink-0">L{ fmt.Sprint(result.StartLine) }-{ fmt.Sprint(result.EndLine) }</span>
+			</div>
+			
+			<div class="flex items-center gap-3 text-xs">
+				<span class="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-white/10 text-gray-600 dark:text-gray-300 border border-glass-border">
+					{ result.Language }
+				</span>
+				<div class="text-right">
+					<div class="font-mono font-medium text-gray-900 dark:text-white">{ fmt.Sprintf("%.3f", result.Score) }</div>
+					if showRerank {
+						<div class="text-[10px] text-green-600 dark:text-green-400 font-mono">rerank</div>
 					}
 				</div>
 			</div>
 		</div>
-		
-		<!-- Code content -->
-		if result.Content != "" {
-			<div class="px-4 py-3 overflow-x-auto bg-gray-900">
-				<pre class="text-sm text-gray-100"><code class="code-line language-{ result.Language }">{ result.Content }</code></pre>
-			</div>
-		}
+
+		<!-- Content -->
+		<div class="overflow-x-auto bg-[#0d1117] p-4 text-sm font-mono border-t border-glass-border">
+			<pre><code class={ "language-" + result.Language, "text-gray-300" }>{ result.Content }</code></pre>
+		</div>
 	</div>
 }
