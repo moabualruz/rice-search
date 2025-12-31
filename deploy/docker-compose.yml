@@ -11,6 +11,8 @@ services:
     volumes:
       - qdrant_data:/qdrant/storage
     restart: always
+    networks:
+      - rice-net
 
   redis:
     image: redis:7-alpine
@@ -19,6 +21,8 @@ services:
     volumes:
       - redis_data:/data
     restart: always
+    networks:
+      - rice-net
 
   minio:
     image: minio/minio
@@ -32,6 +36,8 @@ services:
     volumes:
       - minio_data:/data
     restart: always
+    networks:
+      - rice-net
 
   # ---------------------------------------------------------------------------
   # PYTHON MONOLITH (API & WORKER)
@@ -55,6 +61,11 @@ services:
     depends_on:
       - redis
       - qdrant
+    links:
+      - qdrant
+      - redis
+    networks:
+      - rice-net
 
   backend-worker:
     build:
@@ -70,6 +81,11 @@ services:
     depends_on:
       - redis
       - qdrant
+    links:
+      - qdrant
+      - redis
+    networks:
+      - rice-net
 
   # ---------------------------------------------------------------------------
   # FRONTEND (NEXT.JS)
@@ -86,6 +102,12 @@ services:
       - /app/node_modules
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
+    networks:
+      - rice-net
+
+networks:
+  rice-net:
+    driver: bridge
 
 volumes:
   qdrant_data:
