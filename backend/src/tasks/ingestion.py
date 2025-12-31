@@ -2,25 +2,36 @@ import os
 import uuid
 from typing import List
 from sentence_transformers import SentenceTransformer
-from qdrant_client.models import PointStruct
+from qdrant_client.models import PointStruct, VectorParams, SparseVectorParams, SparseIndexParams, Distance
 
 from src.worker import celery_app
 from src.db.qdrant import get_qdrant_client
 from src.services.ingestion.parser import DocumentParser
 from src.services.ingestion.chunker import DocumentChunker
+from src.core.config import settings
 
-# Load model globally per worker process (Lazy loading recommended but this is simple)
-# We use 'all-MiniLM-L6-v2' for speed/quality balance locally
-model = SentenceTransformer('all-MiniLM-L6-v2') 
+# Load dense model globally per worker process
+model = SentenceTransformer(settings.EMBEDDING_MODEL)
 qdrant = get_qdrant_client()
 chunker = DocumentChunker()
 
-COLLECTION_NAME = "rice_codebase"
+# Lazy load sparse embedder (GPU-heavy)
+_sparse_embedder = None
+
+def get_sparse_embedder():
+    """Lazy load sparse embedder to avoid GPU allocation on import."""
+    global _sparse_embedder
+    if _sparse_embedder is None and settings.SPARSE_ENABLED:
+        from src.services.search.sparse_embedder import SparseEmbedder
+        _sparse_embedder = SparseEmbedder.get_instance()
+    return _sparse_embedder
+
+COLLECTION_NAME = "rice_chunks"
 
 @celery_app.task(bind=True)
 def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: str = "public"):
     """
-    Full pipeline: Parse -> Chunk -> Embed -> Upsert
+    Full pipeline: Parse -> Chunk -> Embed (Dense + Sparse) -> Upsert
     """
     self.update_state(state='STARTED', meta={'step': 'Parsing'})
     
@@ -38,35 +49,55 @@ def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: s
     base_metadata = {
         "file_path": file_path,
         "repo_name": repo_name,
-        "org_id": org_id, # Phase 7 Multi-tenancy
+        "org_id": org_id,  # Phase 7 Multi-tenancy
         "doc_id": str(uuid.uuid4())
     }
     chunks = chunker.chunk_text(text, base_metadata)
 
-    # 3. Embed
-    self.update_state(state='STARTED', meta={'step': 'Embedding'})
+    # 3. Embed (Dense)
+    self.update_state(state='STARTED', meta={'step': 'Embedding (Dense)'})
     contents = [c["content"] for c in chunks]
-    embeddings = model.encode(contents)
+    dense_embeddings = model.encode(contents)
 
-    # 4. Upsert to Qdrant
+    # 4. Embed (Sparse) - Phase 9 Hybrid Search
+    sparse_embeddings = []
+    if settings.SPARSE_ENABLED:
+        self.update_state(state='STARTED', meta={'step': 'Embedding (Sparse)'})
+        sparse_embedder = get_sparse_embedder()
+        if sparse_embedder:
+            sparse_embeddings = sparse_embedder.embed_batch(contents)
+
+    # 5. Upsert to Qdrant
     self.update_state(state='STARTED', meta={'step': 'Indexing'})
     points = []
     
-    # Ensure collection exists
-    try:
-        qdrant.get_collection(COLLECTION_NAME)
-    except Exception:
-        qdrant.create_collection(
-            collection_name=COLLECTION_NAME,
-            vectors_config={"size": 384, "distance": "Cosine"}
-        )
+    # Ensure collection exists with hybrid schema
+    ensure_collection_exists()
     
     for i, chunk in enumerate(chunks):
+        point_id = str(uuid.uuid4())
+        
+        # Build vectors dict
+        vectors = {
+            "default": dense_embeddings[i].tolist()
+        }
+        
+        # Add sparse vector if available
+        sparse_vectors = None
+        if sparse_embeddings and i < len(sparse_embeddings):
+            sparse_vec = sparse_embeddings[i]
+            sparse_vectors = {
+                "sparse": {
+                    "indices": sparse_vec.indices,
+                    "values": sparse_vec.values
+                }
+            }
+        
         points.append(PointStruct(
-            id=str(uuid.uuid4()),
-            vector=embeddings[i].tolist(),
+            id=point_id,
+            vector=vectors,
             payload={
-                "text": chunk["content"], # Store text in payload for retrieval
+                "text": chunk["content"],
                 **chunk["metadata"],
                 "chunk_index": chunk["chunk_index"]
             }
@@ -77,10 +108,31 @@ def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: s
         points=points
     )
 
-    # Cleanup temp file if needed (skipping for now)
-    
     return {
         "status": "success", 
         "chunks_indexed": len(points), 
-        "file_path": file_path
+        "file_path": file_path,
+        "hybrid_enabled": settings.SPARSE_ENABLED
     }
+
+
+def ensure_collection_exists():
+    """Ensure collection exists with proper hybrid schema."""
+    try:
+        qdrant.get_collection(COLLECTION_NAME)
+    except Exception:
+        # Create with hybrid schema
+        qdrant.create_collection(
+            collection_name=COLLECTION_NAME,
+            vectors_config={
+                "default": VectorParams(
+                    size=384,  # all-MiniLM-L6-v2 dimension
+                    distance=Distance.COSINE
+                )
+            },
+            sparse_vectors_config={
+                "sparse": SparseVectorParams(
+                    index=SparseIndexParams(on_disk=False)
+                )
+            } if settings.SPARSE_ENABLED else None
+        )

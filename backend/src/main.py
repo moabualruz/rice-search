@@ -10,8 +10,11 @@ app = FastAPI(
 )
 
 from src.api.v1.endpoints import ingest, search
+from src.api.v1.endpoints.admin import config as admin_config
+
 app.include_router(ingest.router, prefix=f"{settings.API_V1_STR}/ingest", tags=["ingestion"])
 app.include_router(search.router, prefix=f"{settings.API_V1_STR}/search", tags=["search"])
+app.include_router(admin_config.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 
 # CORS
 app.add_middleware(

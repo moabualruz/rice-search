@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
+    # Hybrid Search (Phase 9)
+    SPARSE_MODEL: str = "naver/splade-v3"
+    SPARSE_ENABLED: bool = True
+    RRF_K: int = 60
+    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+
     class Config:
         env_file = ".env"
 
