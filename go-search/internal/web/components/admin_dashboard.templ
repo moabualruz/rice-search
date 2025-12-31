@@ -1,0 +1,119 @@
+package components
+
+import "fmt"
+
+// AdminDashboardData holds data for the admin overview
+type AdminDashboardData struct {
+	Layout      LayoutData
+	ModelCount  int
+	StoreCount  int
+	MapperCount int
+	ConnCount   int
+}
+
+// AdminDashboard renders the main admin overview page
+templ AdminDashboard(data AdminDashboardData) {
+	@Layout(data.Layout) {
+		<div class="max-w-7xl mx-auto space-y-8 animate-fade-in">
+			<!-- Header -->
+			<div class="space-y-1">
+				<h1 class="text-3xl font-bold text-gray-900 dark:text-white">System Administration</h1>
+				<p class="text-sm text-gray-500 dark:text-gray-400">
+					Configure system components, manage models, and monitor connections.
+				</p>
+			</div>
+
+			<!-- Admin Grid -->
+			<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+				
+				<!-- Models Card -->
+				<a href="/admin/models" class="block group">
+					@GlassCard("h-full hover:border-primary-500/50 transition-colors cursor-pointer", true) {
+						<div class="flex items-start justify-between">
+							<div class="p-3 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400">
+								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/>
+								</svg>
+							</div>
+							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-300">
+								{ fmt.Sprint(data.ModelCount) } Models
+							</span>
+						</div>
+						<h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white group-hover:text-primary-500 transition-colors">ML Models</h3>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage embedding and reranking models, download from HuggingFace.</p>
+					}
+				</a>
+
+				<!-- Stores Card -->
+				<a href="/stores" class="block group">
+					@GlassCard("h-full hover:border-emerald-500/50 transition-colors cursor-pointer", true) {
+						<div class="flex items-start justify-between">
+							<div class="p-3 rounded-lg bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400">
+								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"/>
+								</svg>
+							</div>
+							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300">
+								{ fmt.Sprint(data.StoreCount) } Stores
+							</span>
+						</div>
+						<h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white group-hover:text-emerald-500 transition-colors">Stores & Indexes</h3>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Create and delete search indexes, manage indexed documents.</p>
+					}
+				</a>
+
+				<!-- Connections Card -->
+				<a href="/admin/connections" class="block group">
+					@GlassCard("h-full hover:border-purple-500/50 transition-colors cursor-pointer", true) {
+						<div class="flex items-start justify-between">
+							<div class="p-3 rounded-lg bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400">
+								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+								</svg>
+							</div>
+							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+								{ fmt.Sprint(data.ConnCount) } Active
+							</span>
+						</div>
+						<h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white group-hover:text-purple-500 transition-colors">Connections</h3>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Manage client connections, security tokens, and monitoring.</p>
+					}
+				</a>
+
+				<!-- Mappers Card -->
+				<a href="/admin/mappers" class="block group">
+					@GlassCard("h-full hover:border-amber-500/50 transition-colors cursor-pointer", true) {
+						<div class="flex items-start justify-between">
+							<div class="p-3 rounded-lg bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400">
+								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0121 18.382V7.618a1 1 0 01-1.447-.894L15 7m0 13V7m0 0L9 7"/>
+								</svg>
+							</div>
+							<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-800 dark:text-amber-300">
+								{ fmt.Sprint(data.MapperCount) } Mappers
+							</span>
+						</div>
+						<h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white group-hover:text-amber-500 transition-colors">Type Mappers</h3>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">Configure file type detection and processing rules.</p>
+					}
+				</a>
+
+				<!-- Settings Card -->
+				<a href="/admin/settings" class="block group">
+					@GlassCard("h-full hover:border-gray-500/50 transition-colors cursor-pointer", true) {
+						<div class="flex items-start justify-between">
+							<div class="p-3 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400">
+								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+								</svg>
+							</div>
+						</div>
+						<h3 class="mt-4 text-lg font-medium text-gray-900 dark:text-white group-hover:text-primary-500 transition-colors">Settings</h3>
+						<p class="mt-1 text-sm text-gray-500 dark:text-gray-400">System configuration, backups, and defaults.</p>
+					}
+				</a>
+			</div>
+		</div>
+	}
+}

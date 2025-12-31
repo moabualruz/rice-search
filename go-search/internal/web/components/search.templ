@@ -327,7 +327,11 @@ templ QueryUnderstanding(parsed *ParsedQueryDisplay) {
 				<div class="flex items-center justify-between">
 					<h3 class="text-sm font-semibold text-gray-900 dark:text-white">Query Analysis</h3>
 					<span class="text-xs text-primary-500 font-mono">
-						if parsed.UsedModel { MODEL_INFERENCE } else { KEYWORD_MATCH }
+						if parsed.UsedModel {
+							"MODEL_INFERENCE"
+						} else {
+							"KEYWORD_MATCH"
+						}
 					</span>
 				</div>
 				

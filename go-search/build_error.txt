@@ -1,0 +1,5 @@
+# github.com/ricesearch/rice-search/internal/onnx
+internal\onnx\runtime_cgo.go:28:19: undefined: mockRuntime
+internal\onnx\runtime_cgo.go:42:19: undefined: stubRuntime
+internal\onnx\runtime_cgo.go:101:10: options.AppendExecutionProviderCPU undefined (type *onnxruntime_go.SessionOptions has no field or method AppendExecutionProviderCPU)
+internal\onnx\runtime_cgo.go:191:7: declared and not used: err

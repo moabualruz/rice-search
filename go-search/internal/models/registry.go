@@ -709,7 +709,39 @@ func (r *progressReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// DeleteModel removes a model from the registry.
+// OffloadModel removes a model's files from disk but keeps the configuration.
+func (r *Registry) OffloadModel(ctx context.Context, modelID string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	model, exists := r.models[modelID]
+	if !exists {
+		return errors.NotFoundError(fmt.Sprintf("model: %s", modelID))
+	}
+
+	if !model.Downloaded {
+		return errors.ValidationError("model is not downloaded")
+	}
+
+	// Remove files
+	if err := r.removeModelFiles(modelID); err != nil {
+		return errors.Wrap(errors.CodeInternal, "failed to remove model files", err)
+	}
+
+	// Update state
+	model.Downloaded = false
+	model.Validated = false
+	model.ValidatedAt = time.Time{}
+
+	if err := r.storage.SaveModel(model); err != nil {
+		return errors.Wrap(errors.CodeInternal, "failed to save model state", err)
+	}
+
+	r.log.Info("Offloaded model", "model", modelID)
+	return nil
+}
+
+// DeleteModel removes a model from the registry and deletes its files.
 func (r *Registry) DeleteModel(ctx context.Context, modelID string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -724,6 +756,12 @@ func (r *Registry) DeleteModel(ctx context.Context, modelID string) error {
 		return errors.ValidationError("cannot delete default model, set another model as default first")
 	}
 
+	// Remove files first
+	if err := r.removeModelFiles(modelID); err != nil {
+		r.log.Warn("Failed to remove model files during deletion", "model", modelID, "error", err)
+		// Continue to delete metadata
+	}
+
 	// Delete from storage
 	if err := r.storage.DeleteModel(modelID); err != nil {
 		return errors.Wrap(errors.CodeInternal, "failed to delete model", err)
@@ -732,6 +770,16 @@ func (r *Registry) DeleteModel(ctx context.Context, modelID string) error {
 	delete(r.models, modelID)
 	r.log.Info("Deleted model", "model", modelID)
 	return nil
+}
+
+// removeModelFiles deletes the model directory from disk.
+func (r *Registry) removeModelFiles(modelID string) error {
+	modelDir := filepath.Join("./models", modelID)
+	// Check if exists
+	if _, err := os.Stat(modelDir); os.IsNotExist(err) {
+		return nil
+	}
+	return os.RemoveAll(modelDir)
 }
 
 // RegisterModel adds a new model to the registry.
@@ -1122,6 +1170,10 @@ func (r *Registry) exportModelToONNX(ctx context.Context, modelID string, modelT
 
 	// Start export
 	task := GetTaskForModelType(modelType)
+	// Special case for CodeT5+ query understanding models which need text2text-generation
+	if strings.HasPrefix(modelID, "Salesforce/codet5p-") && modelType == ModelTypeQueryUnderstand {
+		task = "text2text-generation"
+	}
 	exportChan, err := r.exporter.ExportModel(ctx, modelID, task)
 	if err != nil {
 		progressChan <- DownloadProgress{

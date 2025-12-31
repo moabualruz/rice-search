@@ -1,0 +1,50 @@
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.826+01:00 level=INFO msg="Starting Rice Search Server" version=dev grpc_port=50053 http_port=8082
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.827+01:00 level=INFO msg="Initialized metrics" persistence=memory
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.827+01:00 level=INFO msg="Event logging disabled"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.827+01:00 level=INFO msg="Event bus instrumented with metrics"
+
+
+[1A[2K[WebServer] 2025/12/31 06:43:30 WARN Client version is not compatible with server version. Major versions should match and minor version difference must not exceed 1. Set SkipCompatibilityCheck=true to skip version check. clientVersion=v1.16.2 serverVersion=1.13.0
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.892+01:00 level=INFO msg="Connected to Qdrant" host=localhost port=6334
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.892+01:00 level=INFO msg="Loading ML models..."
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.892+01:00 level=INFO msg="Loading embedder on GPU" device=cuda
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.892+01:00 level=INFO msg="Loading sparse encoder on GPU" device=cuda
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.892+01:00 level=INFO msg="Loading reranker on GPU" device=cuda
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.892+01:00 level=INFO msg="Registered ML event handlers (embed, sparse, rerank)"
+
+
+[1A[2K[WebServer] 2025/12/31 06:43:30 [INFO] ML Mock Mode Enabled (RICE_SEARCH_MOCK_ML=true)
+[WebServer] 2025/12/31 06:43:30 WARN Tree-Sitter not available (CGO disabled), using fallback parser
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Registered metrics event subscriber (13 topics)"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Wired ML metrics (operations + cache)"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Initialized query understanding service"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Initialized observability service"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Multi-pass reranker attached to search service"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Initialized multi-pass reranker (two-pass with early exit)"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Initialized model registry"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Initialized mapper service"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.893+01:00 level=INFO msg="Initialized connection service"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.894+01:00 level=INFO msg="Initialized settings service"
+
+[1A[2K[2m[WebServer] [22mtime=2025-12-31T06:43:30.894+01:00 level=INFO msg="Connection monitoring service started"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.894+01:00 level=INFO msg="Initialized connection monitoring service" search_spike_multiplier=3 inactivity_threshold=2h0m0s
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.894+01:00 level=INFO msg="Monitoring service attached to search service"
+[2m[WebServer] [22mtime=2025-12-31T06:43:30.894+01:00 level=INFO msg="Initialized detailed health checker"
+
+
+[1A[2K[WebServer] 2025/12/31 06:43:30 INFO MCP server listening component=mcp network=unix addr=C:\Users\mkh\.local\run\rice-search\mcp.sock
+[WebServer] 2025/12/31 06:43:30 INFO Shutting down MCP server component=mcp
+
+[1A[2K[WebServer] Error: failed to start gRPC server: failed to listen on TCP 0.0.0.0:50053: listen tcp 0.0.0.0:50053: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+[1A[2K
+To open last HTML report run:
+[36m[39m
+[36m  npx playwright show-report[39m
+[36m[39m

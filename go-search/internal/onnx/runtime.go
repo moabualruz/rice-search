@@ -151,7 +151,7 @@ func (r *Runtime) Close() error {
 	}
 
 	if r.impl != nil {
-		if err := r.impl.close(); err != nil {
+		if err := r.impl.Close(); err != nil {
 			lastErr = err
 		}
 	}
@@ -193,7 +193,7 @@ func IsAvailable() bool {
 // runtimeImpl is the platform-specific runtime implementation.
 type runtimeImpl interface {
 	createSession(name, modelPath string, device Device, opts SessionOptions) (*Session, error)
-	close() error
+	Close() error
 }
 
 // Note: newRuntimeImpl(cfg) must return (runtimeResult, error) containing impl and actualDevice

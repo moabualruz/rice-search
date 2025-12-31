@@ -12,6 +12,7 @@ require (
 	github.com/redis/go-redis/v9 v9.17.2
 	github.com/smacker/go-tree-sitter v0.0.0-20240827094217-dd81d9e9be82
 	github.com/spf13/cobra v1.10.2
+	github.com/yalue/onnxruntime_go v1.16.0
 	golang.org/x/sync v0.19.0
 	golang.org/x/time v0.14.0
 	google.golang.org/grpc v1.76.0

@@ -1,0 +1,10 @@
+[1A[2K[WebServer] 'build\rice-search-server.exe' is not recognized as an internal or external command,
+[WebServer] operable program or batch file.
+
+Error: Process from config.webServer was not able to start. Exit code: 1
+
+[1A[2K
+To open last HTML report run:
+[36m[39m
+[36m  npx playwright show-report[39m
+[36m[39m

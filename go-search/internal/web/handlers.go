@@ -111,9 +111,8 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 
 	// Static Files
 	// Serve static files from ./internal/web/static
-	// Note: In production this might need to be adjusted or embedded
-	mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./internal/web/static"))))
-
+	fs := http.FileServer(http.Dir("./internal/web/static"))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", fs))
 	// Admin Pages
 	mux.HandleFunc("GET /admin", h.handleAdminPage)
 	mux.HandleFunc("GET /admin/models", h.handleModelsPage)
@@ -132,6 +131,7 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /admin/models/download/{id...}", h.handleDownloadModel)
 	mux.HandleFunc("POST /admin/models/default/{id...}", h.handleSetDefaultModel)
 	mux.HandleFunc("POST /admin/models/gpu/{id...}", h.handleToggleModelGPU)
+	mux.HandleFunc("POST /admin/models/offload/{id...}", h.handleOffloadModel)
 	mux.HandleFunc("POST /admin/models/delete/{id...}", h.handleDeleteModel)
 	// Type-level model operations (type is simple string like "embed", "rerank")
 	mux.HandleFunc("POST /admin/models/type/{type}/gpu", h.handleToggleTypeGPU)
@@ -191,6 +191,53 @@ func (h *Handler) RegisterRoutes(mux *http.ServeMux) {
 	// Metrics endpoint
 	if h.metrics != nil {
 		mux.Handle("GET /metrics", h.metrics.Handler())
+	}
+}
+
+// =============================================================================
+// Admin Dashboard
+// =============================================================================
+
+func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Gather quick stats
+	modelCount := 0
+	if h.modelReg != nil {
+		models, _ := h.modelReg.ListModels(ctx, "")
+		modelCount = len(models)
+	}
+
+	storeCount := 0
+	storesResp, err := h.grpc.ListStores(ctx, &pb.ListStoresRequest{})
+	if err == nil {
+		storeCount = len(storesResp.Stores)
+	}
+
+	connCount := 0
+	if h.connSvc != nil {
+		conns, _ := h.connSvc.ListAllConnections(ctx)
+		connCount = len(conns)
+	}
+
+	mapperCount := 0
+	if h.mapperSvc != nil {
+		// Mapper svc doesn't have list count easily accessible without config?
+		// We can just skip or implement later.
+	}
+
+	data := components.AdminDashboardData{
+		Layout:      h.getLayoutData(ctx, "Administration", "/admin"),
+		ModelCount:  modelCount,
+		StoreCount:  storeCount,
+		ConnCount:   connCount,
+		MapperCount: mapperCount,
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := components.AdminDashboard(data).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render admin dashboard", "error", err)
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
 
@@ -994,12 +1041,8 @@ func (h *Handler) handleExportFiles(w http.ResponseWriter, r *http.Request) {
 }
 
 // =============================================================================
-// Admin Page (Legacy - redirects to stores)
+// Settings Helpers
 // =============================================================================
-
-func (h *Handler) handleAdminPage(w http.ResponseWriter, r *http.Request) {
-	http.Redirect(w, r, "/stores", http.StatusSeeOther)
-}
 
 // =============================================================================
 // Models Page
@@ -1214,7 +1257,7 @@ func (h *Handler) handleDownloadModel(w http.ResponseWriter, r *http.Request) {
 	// Templ doesn't have native OOB wrapper, we must construct it or use a helper.
 
 	// We'll write the OOB wrapper manually
-	fmt.Fprintf(w, `<div hx-swap-oob="outerHTML:#model-card-%s">`, modelID)
+	fmt.Fprintf(w, `<div hx-swap-oob="outerHTML:#model-card-%s">`, strings.ReplaceAll(strings.ReplaceAll(modelID, "/", "_"), ".", "_"))
 	_ = components.ModelCard(displayModel).Render(ctx, w)
 	fmt.Fprintf(w, `</div>`)
 }
@@ -1357,6 +1400,74 @@ func (h *Handler) handleDeleteModel(w http.ResponseWriter, r *http.Request) {
 	if err := components.SuccessMessage(fmt.Sprintf("Deleted model: %s", modelID)).Render(ctx, w); err != nil {
 		h.log.Error("Failed to render success message", "error", err)
 	}
+
+	// Remove the card from UI (OOB swap with empty)
+	fmt.Fprintf(w, `<div hx-swap-oob="delete:#model-card-%s"></div>`, strings.ReplaceAll(strings.ReplaceAll(modelID, "/", "_"), ".", "_"))
+}
+
+func (h *Handler) handleOffloadModel(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	modelID := r.PathValue("id")
+
+	if modelID == "" {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := components.ErrorMessage("Model ID is required").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	if h.modelReg == nil {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := components.ErrorMessage("Model registry not available").Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Offload model (delete files, keep metadata)
+	err := h.modelReg.OffloadModel(ctx, modelID)
+	if err != nil {
+		h.log.Error("Failed to offload model", "model", modelID, "error", err)
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		if err := components.ErrorMessage(fmt.Sprintf("Failed to offload model: %s", err.Error())).Render(ctx, w); err != nil {
+			h.log.Error("Failed to render error", "error", err)
+		}
+		return
+	}
+
+	// Get updated model info for the card
+	model, err := h.modelReg.GetModel(ctx, modelID)
+	if err != nil {
+		// Should not happen as we just offloaded it
+		h.log.Error("Failed to get model after offload", "model", modelID, "error", err)
+		return
+	}
+
+	// Return success message and OOB updated card
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
+	// 1. Success Message
+	if err := components.SuccessMessage(fmt.Sprintf("Offloaded model files: %s", modelID)).Render(ctx, w); err != nil {
+		h.log.Error("Failed to render success message", "error", err)
+	}
+
+	// 2. OOB Card Update
+	displayModel := components.ModelInfoDisplay{
+		ID:          model.ID,
+		Type:        string(model.Type),
+		DisplayName: model.DisplayName,
+		Description: model.Description,
+		OutputDim:   model.OutputDim,
+		MaxTokens:   model.MaxTokens,
+		Downloaded:  false,
+		GPUEnabled:  model.GPUEnabled,
+		Status:      getModelStatus(model),
+	}
+
+	fmt.Fprintf(w, `<div hx-swap-oob="outerHTML:#model-card-%s">`, strings.ReplaceAll(strings.ReplaceAll(modelID, "/", "_"), ".", "_"))
+	_ = components.ModelCard(displayModel).Render(ctx, w)
+	fmt.Fprintf(w, `</div>`)
 }
 
 func (h *Handler) handleToggleTypeGPU(w http.ResponseWriter, r *http.Request) {

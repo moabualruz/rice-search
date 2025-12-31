@@ -59,8 +59,8 @@ func DefaultConfig() Config {
 		Version:        "dev",
 		Commit:         "none",
 		BuildDate:      "unknown",
-		MaxRecvMsgSize: 16 * 1024 * 1024, // 16MB
-		MaxSendMsgSize: 16 * 1024 * 1024, // 16MB
+		MaxRecvMsgSize: 100 * 1024 * 1024, // 100MB
+		MaxSendMsgSize: 100 * 1024 * 1024, // 100MB
 	}
 }
 

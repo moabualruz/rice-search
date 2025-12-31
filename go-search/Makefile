@@ -222,7 +222,13 @@ install-tools: ## Install development tools
 	go install github.com/air-verse/air@latest
 	go install github.com/a-h/templ/cmd/templ@latest
 	go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+
 	go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+	@echo "Tools installed. To setup ONNX runtime on Windows, run: make install-dll"
+
+.PHONY: install-dll
+install-dll: ## Install ONNX Runtime DLL (Windows only)
+	./scripts/download_dll.bat
 
 .PHONY: help
 help: ## Display this help

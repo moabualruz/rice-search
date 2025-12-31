@@ -3,19 +3,20 @@
   --bg-primary: #f8fafc; /* Slate 50 */
   --text-primary: #0f172a; /* Slate 900 */
   --glass-bg: rgba(255, 255, 255, 0.7);
-  --glass-border: rgba(255, 255, 255, 0.2);
-  --sidebar-bg: rgba(255, 255, 255, 0.8);
+  /* Increased opacity for better visibility */
+  --glass-border: rgba(255, 255, 255, 0.4);
+  --sidebar-bg: rgba(255, 255, 255, 0.85);
   --glass-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1),
     0 2px 4px -1px rgba(0, 0, 0, 0.06);
-  --glass-border-radius: 6px;
+  --glass-border-radius: 8px; /* Slightly larger radius */
 }
 
 html.dark {
   --bg-primary: #1e293b; /* Slate 800 - Matte Navy */
   --text-primary: #f8fafc; /* Slate 50 - High Contrast White */
-  --glass-bg: rgba(30, 41, 59, 0.6); /* Slate 800 with opacity */
-  --glass-border: rgba(255, 255, 255, 0.08); /* Subtle white border */
-  --sidebar-bg: rgba(15, 23, 42, 0.7); /* Slate 900 Glass */
+  --glass-bg: rgba(30, 41, 59, 0.75); /* Slate 800 with higher opacity */
+  --glass-border: rgba(255, 255, 255, 0.2); /* Stronger white border for dark mode */
+  --sidebar-bg: rgba(15, 23, 42, 0.85); /* Slate 900 Glass */
   --glass-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3),
     0 2px 4px -1px rgba(0, 0, 0, 0.2);
 }
@@ -32,7 +33,7 @@ body {
   background: var(--glass-bg);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--glass-border);
+  border-bottom: 1px solid var(--glass-border); /* Header usually just bottom */
   box-shadow: var(--glass-shadow);
 }
 
@@ -41,18 +42,18 @@ body {
   backdrop-filter: blur(16px);
   border: 1px solid var(--glass-border);
   border-radius: var(--glass-border-radius);
-  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
 }
 
 .glass-hover:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
   transition: all 0.2s ease;
 }
 
 html.dark .glass-hover:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .border-glass-border {

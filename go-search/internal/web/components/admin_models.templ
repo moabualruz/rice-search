@@ -72,6 +72,7 @@ templ AdminModelsPage(data ModelsPageData) {
 
 			<!-- Models by Type -->
 			<div class="mt-8 space-y-8" hx-ext="sse" sse-connect="/admin/events">
+				<div sse-swap="model.progress" class="hidden"></div>
 				@ModelsSection("Embeddings", "embed", data.Models, data.TypeConfigs)
 				@ModelsSection("Reranking", "rerank", data.Models, data.TypeConfigs)
 				@ModelsSection("Query Understanding", "query_understand", data.Models, data.TypeConfigs)
@@ -169,7 +170,7 @@ templ ModelsSection(displayName, modelType string, allModels []ModelInfoDisplay,
 
 // ModelCard renders a single model card
 templ ModelCard(model ModelInfoDisplay) {
-	<div id={ fmt.Sprintf("model-card-%s", strings.ReplaceAll(model.ID, "/", "_")) } class="relative rounded-lg border border-glass-border bg-white/5 px-4 py-4 shadow-sm hover:border-primary-500/30 hover:bg-white/10 transition-colors">
+	<div id={ fmt.Sprintf("model-card-%s", strings.ReplaceAll(strings.ReplaceAll(model.ID, "/", "_"), ".", "_")) } class="relative rounded-lg border border-glass-border bg-white/5 px-4 py-4 shadow-sm hover:border-primary-500/30 hover:bg-white/10 transition-colors">
 		<!-- Default Badge -->
 		if model.IsDefault {
 			<div class="absolute top-2 right-2">
@@ -222,7 +223,7 @@ templ ModelCard(model ModelInfoDisplay) {
 				</div>
 				<!-- Progress bar -->
 				<div class="mt-2 w-full bg-gray-200 dark:bg-white/10 rounded-full h-1.5">
-					<div id={ fmt.Sprintf("progress-%s", strings.ReplaceAll(model.ID, "/", "_")) } class="bg-primary-600 h-1.5 rounded-full" style="width: 45%"></div>
+					<div id={ fmt.Sprintf("progress-%s", strings.ReplaceAll(strings.ReplaceAll(model.ID, "/", "_"), ".", "_")) } class="bg-primary-600 h-1.5 rounded-full" style="width: 45%"></div>
 				</div>
 			} else {
 				<div class="flex items-center text-xs text-gray-500 dark:text-gray-400">
@@ -254,14 +255,32 @@ templ ModelCard(model ModelInfoDisplay) {
 
 		<!-- Actions -->
 		<div class="flex space-x-2">
-			if !model.Downloaded && model.Status != "downloading" {
+			if !model.Downloaded && model.Status != "downloading" && model.Status != "ready" {
 				<button
 					hx-post={ fmt.Sprintf("/admin/models/download/%s", model.ID) }
 					hx-target="#model-messages"
 					hx-swap="innerHTML"
-					class="flex-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-primary-500 transition-colors"
+					hx-indicator={ fmt.Sprintf("#download-indicator-%s", strings.ReplaceAll(strings.ReplaceAll(model.ID, "/", "_"), ".", "_")) }
+					class="relative flex-1 rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-primary-500 transition-colors disabled:opacity-50 disabled:cursor-wait"
 				>
-					Download
+					<span class="indicator-label">Download</span>
+					<span id={ fmt.Sprintf("download-indicator-%s", strings.ReplaceAll(strings.ReplaceAll(model.ID, "/", "_"), ".", "_")) } class="htmx-indicator absolute inset-0 flex items-center justify-center bg-primary-600 rounded-md">
+						<svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+							<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+							<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+						</svg>
+					</span>
+				</button>
+			}
+			if model.Downloaded {
+				<button
+					hx-post={ fmt.Sprintf("/admin/models/offload/%s", model.ID) }
+					hx-target="#model-messages"
+					hx-swap="innerHTML"
+					hx-confirm={ fmt.Sprintf("Remove local files for %s?", model.DisplayName) }
+					class="rounded-md border border-orange-200/50 dark:border-orange-500/30 bg-orange-50/50 dark:bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-600 dark:text-orange-400 shadow-sm hover:bg-orange-100 dark:hover:bg-orange-500/20 transition-colors"
+				>
+					Offload
 				</button>
 			}
 			if !model.IsDefault && model.Downloaded {

@@ -132,7 +132,7 @@ func (s *Session) Close() error {
 	}
 
 	if s.impl != nil {
-		if err := s.impl.close(); err != nil {
+		if err := s.impl.Close(); err != nil {
 			return err
 		}
 	}
@@ -144,5 +144,5 @@ func (s *Session) Close() error {
 // sessionImpl is the platform-specific session implementation.
 type sessionImpl interface {
 	run(inputs map[string]*Tensor) (map[string]*Tensor, error)
-	close() error
+	Close() error
 }

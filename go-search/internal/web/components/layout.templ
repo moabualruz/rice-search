@@ -103,131 +103,189 @@ templ Layout(data LayoutData) {
 				function updateThemeIcon() {
 					var theme = getTheme();
 					var icons = { light: '☀️', dark: '🌙', system: '💻' };
-					var labels = { light: 'Light', dark: 'Dark', system: 'System' };
-					var btn = document.getElementById('theme-toggle');
+					var btn = document.getElementById('theme-toggle-btn');
 					if (btn) {
-						btn.innerHTML = icons[theme] + ' <span class="hidden sm:inline">' + labels[theme] + '</span>';
+						btn.innerHTML = icons[theme];
+						btn.title = "Current theme: " + theme.charAt(0).toUpperCase() + theme.slice(1);
 					}
 				}
 				// Listen for system preference changes
 				window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
 					if (getTheme() === 'system') applyTheme();
 				});
-				// Initialize on load
+				
+				// Apply theme immediately to prevent flash
+				applyTheme();
+
+				// Initialize icon on load
 				document.addEventListener('DOMContentLoaded', updateThemeIcon);
 			</script>
+			<!-- Sidebar Toggle Script -->
+			<script>
+				function toggleSidebar() {
+					const sidebar = document.getElementById('sidebar');
+					const texts = document.querySelectorAll('.sidebar-text');
+					const toggleIcon = document.getElementById('sidebar-toggle-icon');
+					const isCollapsed = sidebar.classList.toggle('w-16');
+					sidebar.classList.toggle('w-64');
+
+					// Update persistence
+					localStorage.setItem('sidebarCollapsed', isCollapsed);
+
+					if (isCollapsed) {
+						texts.forEach(t => t.classList.add('opacity-0', 'pointer-events-none', 'hidden'));
+						toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />';
+						document.querySelector('.sidebar-icon-divider').classList.remove('hidden');
+					} else {
+						texts.forEach(t => t.classList.remove('opacity-0', 'pointer-events-none', 'hidden'));
+						toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />';
+						document.querySelector('.sidebar-icon-divider').classList.add('hidden');
+					}
+				}
+
+				// Restore sidebar state on load
+				document.addEventListener('DOMContentLoaded', () => {
+					const isCollapsed = localStorage.getItem('sidebarCollapsed') === 'true';
+					if (isCollapsed) {
+						// Apply collapsed state without animation initially if preferred, but for now simple toggle
+						// We need to sync the state
+						const sidebar = document.getElementById('sidebar');
+						const texts = document.querySelectorAll('.sidebar-text');
+						const toggleIcon = document.getElementById('sidebar-toggle-icon');
+						
+						sidebar.classList.remove('w-64');
+						sidebar.classList.add('w-16');
+						texts.forEach(t => t.classList.add('opacity-0', 'pointer-events-none', 'hidden'));
+						if (toggleIcon) toggleIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7" />';
+						const div = document.querySelector('.sidebar-icon-divider');
+						if (div) div.classList.remove('hidden');
+					}
+					
+					// Theme icon update
+					updateThemeIcon();
+				});
+			</script>
 		</head>
-		<body class="h-full transition-colors overflow-hidden" hx-boost="true">
+		<body class="h-full transition-colors overflow-hidden bg-slate-50 dark:bg-slate-900 text-slate-900 dark:text-slate-50" hx-boost="true">
 			<div class="flex h-full">
 				<!-- Sidebar (Desktop) -->
-				<aside class="w-64 sidebar-glass hidden md:flex flex-col z-20 transition-all duration-300">
+				<aside id="sidebar" class="w-64 sidebar-glass hidden md:flex flex-col z-20 transition-all duration-300">
 					<!-- Brand -->
-					<div class="h-16 flex items-center px-6 border-b border-glass-border">
-						<a href="/" class="flex items-center gap-3 font-semibold text-lg hover:opacity-80 transition-opacity">
-							<span class="text-2xl">🔍</span>
-							<span>Rice Search</span>
+					<div class="h-16 flex items-center px-6 border-b border-glass-border justify-between group">
+						<a href="/" class="flex items-center gap-3 font-semibold text-lg hover:opacity-80 transition-opacity overflow-hidden whitespace-nowrap">
+							<span class="text-2xl shrink-0">🔍</span>
+							<span class="sidebar-text transition-opacity duration-300">Rice Search</span>
 						</a>
+						<button onclick="toggleSidebar()" class="p-1 rounded-md hover:bg-white/10 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity">
+							<svg id="sidebar-toggle-icon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+							</svg>
+						</button>
 					</div>
 
 					<!-- Navigation -->
-					<nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto">
-						<a href="/" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/") }>
-							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+					<nav class="flex-1 px-4 py-6 space-y-2 overflow-y-auto overflow-x-hidden">
+						<a href="/" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group whitespace-nowrap", navLinkClass(data.CurrentPath, "/") } title="Dashboard">
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/>
 							</svg>
-							Dashboard
+							<span class="sidebar-text transition-opacity duration-300">Dashboard</span>
 						</a>
-						<a href="/search" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/search") }>
-							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<a href="/search" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group whitespace-nowrap", navLinkClass(data.CurrentPath, "/search") } title="Search">
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
 							</svg>
-							Search
+							<span class="sidebar-text transition-opacity duration-300">Search</span>
 						</a>
-						<a href="/files" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/files") }>
-							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<a href="/files" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group whitespace-nowrap", navLinkClass(data.CurrentPath, "/files") } title="Files">
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
 							</svg>
-							Files
+							<span class="sidebar-text transition-opacity duration-300">Files</span>
 						</a>
-						<a href="/stores" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/stores") }>
-							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<a href="/stores" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group whitespace-nowrap", navLinkClass(data.CurrentPath, "/stores") } title="Stores">
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
 							</svg>
-							Stores
+							<span class="sidebar-text transition-opacity duration-300">Stores</span>
 						</a>
 
 						<div class="pt-4 pb-2">
-							<div class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Management</div>
+							<div class="px-3 text-xs font-semibold text-gray-500 uppercase tracking-wider sidebar-text whitespace-nowrap">Management</div>
+							<div class="px-3 border-t border-glass-border my-2 sidebar-icon-divider hidden"></div>
 						</div>
 
-						<a href="/admin" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/admin") }>
-							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<a href="/admin" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group whitespace-nowrap", navLinkClass(data.CurrentPath, "/admin") } title="Admin">
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
 							</svg>
-							Admin
+							<span class="sidebar-text transition-opacity duration-300">Admin</span>
 						</a>
-						<a href="/stats" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group", navLinkClass(data.CurrentPath, "/stats") }>
-							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+						<a href="/stats" class={ "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-all group whitespace-nowrap", navLinkClass(data.CurrentPath, "/stats") } title="Statistics">
+							<svg class="h-5 w-5 opacity-70 group-hover:opacity-100 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
 								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 002 2h2a2 2 0 002-2z"/>
 							</svg>
-							Statistics
+							<span class="sidebar-text transition-opacity duration-300">Statistics</span>
 						</a>
 					</nav>
 
-					<!-- Footer / Theme Toggle -->
-					<div class="p-4 border-t border-glass-border">
-						<button 
-							id="theme-toggle"
-							onclick="cycleTheme()"
-							class="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-md bg-white/5 hover:bg-white/10 transition-colors text-sm"
-						>
-							<span id="theme-toggle-icon">💻</span>
-							<span id="theme-toggle-label">System</span>
-						</button>
+					<!-- Footer -->
+					<div class="p-4 border-t border-glass-border text-xs text-center text-gray-500">
+						&copy; Rice Search
 					</div>
 				</aside>
 
 				<!-- Main Content Wrapper -->
-				<div class="flex-1 flex flex-col h-full overflow-hidden relative">
+				<div class="flex-1 flex flex-col h-full overflow-hidden relative transition-all duration-300">
 					<!-- Top Header (System Widget) -->
 					<header class="h-16 glass flex items-center justify-between px-6 z-10 shrink-0">
 						<!-- Breadcrumb / Page Title -->
 						<div class="flex items-center">
+							<button class="md:hidden mr-4 p-2 rounded-md hover:bg-white/10" onclick="document.querySelector('aside').classList.toggle('hidden'); document.querySelector('aside').classList.toggle('absolute'); document.querySelector('aside').classList.toggle('bg-slate-900'); document.querySelector('aside').classList.toggle('w-full'); document.querySelector('aside').classList.toggle('h-full')">
+								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+								</svg>
+							</button>
 							<h1 class="text-lg font-semibold tracking-tight">{ data.Title }</h1>
 						</div>
 
 						<!-- System Widget (Right Corner) -->
 						<div class="flex items-center gap-4">
+                            <!-- Theme Toggle (Icon Only) -->
+							<button 
+								id="theme-toggle-btn"
+								onclick="cycleTheme()"
+								class="p-2 rounded-full hover:bg-white/10 text-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500/50"
+								title="Toggle Theme"
+							>
+								💻
+							</button>
+
+							<div class="w-px h-6 bg-glass-border"></div>
+
 							<!-- Environment / Metrics Pill (Glass) -->
-							<div class="hidden sm:flex items-center gap-4 px-4 py-1.5 rounded-full bg-black/20 border border-white/5 text-xs font-mono">
+							<div class="hidden sm:flex items-center gap-4 px-4 py-1.5 rounded-full bg-black/5 dark:bg-white/5 border border-glass-border text-xs font-mono">
 								<!-- Health -->
 								<div class="flex items-center gap-2">
 									@HealthDot(data.HealthStatus)
-									<span class="opacity-80">{ healthLabel(data.HealthStatus) }</span>
+									<span class="opacity-80 text-gray-700 dark:text-gray-300">{ healthLabel(data.HealthStatus) }</span>
 								</div>
 								
 								<div id="global-status" class="hidden flex items-center gap-2 text-primary-400">
 									<!-- Content injected via SSE -->
 								</div>
 
-								<div class="w-px h-3 bg-white/20"></div>
+								<div class="w-px h-3 bg-gray-300 dark:bg-white/20"></div>
 
 								<!-- Version -->
-								<span class="opacity-60">v{ data.Version }</span>
+								<span class="opacity-60 text-gray-600 dark:text-gray-400">v{ data.Version }</span>
 								
 								if data.QdrantURL != "" {
-									<div class="w-px h-3 bg-white/20"></div>
-									<a href={ templ.URL(data.QdrantURL + "/dashboard") } target="_blank" class="hover:text-primary-400 transition-colors">Qdrant</a>
+									<div class="w-px h-3 bg-gray-300 dark:bg-white/20"></div>
+									<a href={ templ.URL(data.QdrantURL + "/dashboard") } target="_blank" class="hover:text-primary-600 dark:hover:text-primary-400 transition-colors">Qdrant</a>
 								}
 							</div>
-							
-							<!-- Mobile Menu Button (Visible only on small screens) -->
-							<button class="md:hidden p-2 rounded-md hover:bg-white/10" onclick="document.querySelector('aside').classList.toggle('hidden'); document.querySelector('aside').classList.toggle('absolute'); document.querySelector('aside').classList.toggle('bg-black/90'); document.querySelector('aside').classList.toggle('w-full'); document.querySelector('aside').classList.toggle('h-full')">
-								<svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
-								</svg>
-							</button>
 						</div>
 					</header>
 

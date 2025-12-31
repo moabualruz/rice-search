@@ -18,7 +18,7 @@ export default defineConfig({
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-    baseURL: "http://127.0.0.1:8081", // Testing port from our plan
+    baseURL: "http://127.0.0.1:8082", // Testing port from our plan
 
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: "on-first-retry",
@@ -45,9 +45,9 @@ export default defineConfig({
 
   /* Run your local dev server before starting the tests */
   webServer: {
-    command: `build\\rice-search-server.exe --http-port 8081 --grpc-port 50052`,
+    command: `build\\rice-search-server.exe --http-port 8082 --grpc-port 50053`,
     cwd: "../../",
-    url: "http://127.0.0.1:8081/health",
+    url: "http://127.0.0.1:8082/health",
     reuseExistingServer: !process.env.CI,
     stdout: "pipe",
     stderr: "pipe",
