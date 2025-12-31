@@ -1,5 +1,5 @@
 """
-ricegrep search command implementation.
+Rice Search Client search command implementation.
 
 Provides grep-like search output from Rice Search backend.
 """
@@ -8,8 +8,8 @@ from typing import Optional
 from rich.console import Console
 from rich.text import Text
 
-from src.cli.ricegrep.api_client import get_api_client
-from src.cli.ricegrep.config import get_config
+from src.cli.ricesearch.api_client import get_api_client
+from src.cli.ricesearch.config import get_config
 
 console = Console()
 

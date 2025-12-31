@@ -1,6 +1,6 @@
-# ricegrep - Rice Search CLI
+# Rice Search Client
 
-A grep-like command-line tool for indexing and searching code with Rice Search.
+A command-line tool for indexing and searching code with the Rice Search platform.
 
 ## Installation
 
@@ -15,13 +15,13 @@ pip install -e .
 
 ```bash
 # Basic search
-ricegrep search "authentication"
+ricesearch search "authentication"
 
 # With options
-ricegrep search "database connection" --limit 20 --org-id myorg
+ricesearch search "database connection" --limit 20 --org-id myorg
 
 # Dense-only search (no hybrid)
-ricegrep search "function" --no-hybrid
+ricesearch search "function" --no-hybrid
 ```
 
 **Output format:** `file:chunk_index: content_preview (score)`
@@ -30,16 +30,16 @@ ricegrep search "function" --no-hybrid
 
 ```bash
 # Watch current directory
-ricegrep watch
+ricesearch watch
 
 # Watch specific path
-ricegrep watch ./src
+ricesearch watch ./src
 
 # Skip initial scan
-ricegrep watch ./src --no-initial
+ricesearch watch ./src --no-initial
 
 # With organization
-ricegrep watch . --org-id myorg
+ricesearch watch . --org-id myorg
 ```
 
 Features:
@@ -53,16 +53,16 @@ Features:
 
 ```bash
 # Show config
-ricegrep config show
+ricesearch config show
 
 # Set backend URL
-ricegrep config set backend_url http://localhost:8000
+ricesearch config set backend_url http://localhost:8000
 
 # Set default org
-ricegrep config set org_id myorg
+ricesearch config set org_id myorg
 ```
 
-Config stored in: `~/.ricegrep/config.yaml`
+Config stored in: `~/.ricesearch/config.yaml`
 
 ## Ignore Rules
 

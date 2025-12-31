@@ -1,5 +1,5 @@
 """
-ricegrep - grep-like CLI for Rice Search.
+ricesearch - Rice Search Client CLI.
 
 A command-line tool for indexing and searching code with Rice Search backend.
 """
@@ -8,13 +8,13 @@ import typer
 from typing import Optional
 from rich.console import Console
 
-from src.cli.ricegrep.config import get_config
-from src.cli.ricegrep.search import search_command
-from src.cli.ricegrep.watch import watch_command
+from src.cli.ricesearch.config import get_config
+from src.cli.ricesearch.search import search_command
+from src.cli.ricesearch.watch import watch_command
 
 app = typer.Typer(
-    name="ricegrep",
-    help="Grep-like CLI for Rice Search - local code search and indexing",
+    name="ricesearch",
+    help="Rice Search Client - local code search and indexing",
     add_completion=False
 )
 console = Console()
@@ -71,21 +71,21 @@ def config(
     View or edit CLI configuration.
     
     Examples:
-        ricegrep config show
-        ricegrep config set backend_url http://localhost:8000
-        ricegrep config set org_id myorg
+        ricesearch config show
+        ricesearch config set backend_url http://localhost:8000
+        ricesearch config set org_id myorg
     """
     cfg = get_config()
     
     if action == "show":
-        console.print("\n[bold]ricegrep configuration:[/bold]\n")
+        console.print("\n[bold]Rice Search Client configuration:[/bold]\n")
         for k, v in cfg.show().items():
             console.print(f"  {k}: {v}")
         console.print(f"\n[dim]Config file: {cfg.CONFIG_FILE}[/dim]")
     
     elif action == "set":
         if not key or value is None:
-            console.print("[red]Error:[/red] Usage: ricegrep config set <key> <value>")
+            console.print("[red]Error:[/red] Usage: ricesearch config set <key> <value>")
             return
         
         cfg.set(key, value)
@@ -98,7 +98,7 @@ def config(
 @app.command()
 def version():
     """Show version information."""
-    console.print("ricegrep v0.1.0 (Rice Search CLI)")
+    console.print("Rice Search Client v0.1.0")
     console.print("[dim]Part of the Rice Search platform[/dim]")
 
 

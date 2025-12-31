@@ -1,5 +1,5 @@
 """
-ricegrep watch command implementation.
+Rice Search Client watch command implementation.
 
 Monitors directories for changes and indexes files via Rice Search backend.
 """
@@ -13,9 +13,9 @@ from watchdog.events import FileSystemEventHandler, FileSystemEvent
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from src.cli.ricegrep.api_client import get_api_client
-from src.cli.ricegrep.config import get_config
-from src.cli.ricegrep.ignore import IgnoreRules
+from src.cli.ricesearch.api_client import get_api_client
+from src.cli.ricesearch.config import get_config
+from src.cli.ricesearch.ignore import IgnoreRules
 
 console = Console()
 

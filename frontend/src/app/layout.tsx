@@ -1,9 +1,25 @@
 import type { Metadata } from 'next'
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import './globals.css'
 import Providers from './providers'
 
-const inter = Inter({ subsets: ['latin'] })
+// Brand font: Terminus Nerd Font
+const terminus = localFont({
+  src: [
+    {
+      path: '../../public/fonts/TerminessNerdFont-Regular.ttf',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/TerminessNerdFont-Bold.ttf',
+      weight: '700',
+      style: 'normal',
+    },
+  ],
+  variable: '--font-terminus',
+  display: 'swap',
+})
 
 export const metadata: Metadata = {
   title: 'Rice Search - Enterprise Intelligence',
@@ -17,9 +33,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={terminus.className}>
         <Providers>{children}</Providers>
       </body>
     </html>
   )
 }
+

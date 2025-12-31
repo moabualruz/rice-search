@@ -1,7 +1,7 @@
 """
-ricegrep CLI configuration management.
+Rice Search Client CLI configuration management.
 
-Handles loading/saving CLI configuration from ~/.ricegrep/config.yaml
+Handles loading/saving CLI configuration from ~/.ricesearch/config.yaml
 """
 
 import os
@@ -10,10 +10,10 @@ from typing import Optional
 import yaml
 
 
-class RicegrepConfig:
+class RicesearchConfig:
     """CLI configuration manager."""
     
-    CONFIG_DIR = Path.home() / ".ricegrep"
+    CONFIG_DIR = Path.home() / ".ricesearch"
     CONFIG_FILE = CONFIG_DIR / "config.yaml"
     
     DEFAULT_CONFIG = {
@@ -76,11 +76,11 @@ class RicegrepConfig:
 
 
 # Singleton instance
-_config: Optional[RicegrepConfig] = None
+_config: Optional[RicesearchConfig] = None
 
-def get_config() -> RicegrepConfig:
+def get_config() -> RicesearchConfig:
     """Get global config instance."""
     global _config
     if _config is None:
-        _config = RicegrepConfig()
+        _config = RicesearchConfig()
     return _config

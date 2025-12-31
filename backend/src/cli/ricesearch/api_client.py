@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 import base64
 
-from src.cli.ricegrep.config import get_config
+from src.cli.ricesearch.config import get_config
 
 
 class APIClient:
