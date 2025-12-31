@@ -9,9 +9,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        primary: "#6366f1", // Indigo 500
-        secondary: "#a855f7", // Purple 500
-        dark: "#0f172a", // Slate 900
+        // Brand colors from .branding/logo.svg
+        primary: "#009e20",
+        accent: "#00a020",
+        // No neon colors - using refined palette
+        dark: {
+          DEFAULT: "#0d1117",
+          secondary: "#161b22",
+          tertiary: "#21262d",
+        },
+        success: "#009e20",
+        warning: "#d29922",
+        error: "#f85149",
+      },
+      fontFamily: {
+        mono: ["Terminus", "Consolas", "Monaco", "monospace"],
       },
     },
   },

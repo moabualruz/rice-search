@@ -1,139 +1,143 @@
-"use client";
+'use client';
 
-import { useState } from 'react';
-import { Button, Input, Card } from '@/components/ui-elements';
-import { Upload, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
-import { api } from '@/lib/api';
-import { useSession, signIn, signOut } from "next-auth/react";
-import { redirect } from 'next/navigation';
+import { useState, useEffect } from 'react';
 
-export default function AdminPage() {
-  const { data: session, status: sessionStatus } = useSession();
-  const [file, setFile] = useState<File | null>(null);
-  const [uploading, setUploading] = useState(false);
-  const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
+interface SystemStatus {
+  status: string;
+  components: {
+    qdrant?: { status: string; collections?: number };
+    celery?: { status: string };
+  };
+}
 
-  if (sessionStatus === "loading") {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
+interface ConfigData {
+  sparse_enabled: boolean;
+  sparse_model: string;
+  embedding_model: string;
+  rrf_k: number;
+}
 
-  if (sessionStatus === "unauthenticated") {
-     return (
-        <div className="min-h-screen flex items-center justify-center bg-slate-900">
-           <Card className="text-center p-10 space-y-6">
-              <h1 className="text-2xl font-bold">Admin Access Required</h1>
-              <p className="text-slate-400">You must be logged in to manage documents.</p>
-              <Button onClick={() => signIn("keycloak")}>Login with Keycloak</Button>
-           </Card>
-        </div>
-     )
-  }
+export default function AdminDashboard() {
+  const [health, setHealth] = useState<SystemStatus | null>(null);
+  const [config, setConfig] = useState<ConfigData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const handleUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!file || !session?.accessToken) return;
-
-    setUploading(true);
-    setStatus('idle');
-
-    try {
-      await api.ingest(file, session.accessToken as string);
-      setStatus('success');
-      setFile(null);
-    } catch (err) {
-      console.error(err);
-      setStatus('error');
-    } finally {
-      setUploading(false);
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const healthRes = await fetch('http://localhost:8000/health');
+        const healthData = await healthRes.json();
+        setHealth(healthData);
+      } catch (e) {
+        setHealth({ status: 'error', components: {} });
+      }
+      setLoading(false);
     }
+    fetchData();
+  }, []);
+
+  if (loading) {
+    return <div className="text-slate-400">Loading...</div>;
+  }
+
+  return (
+    <div>
+      <h1 className="text-3xl font-bold text-white mb-8">Mission Control</h1>
+
+      {/* System Status */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <StatusCard
+          title="System Status"
+          status={health?.status === 'ok' ? 'Healthy' : 'Degraded'}
+          statusColor={health?.status === 'ok' ? 'green' : 'yellow'}
+          icon="🖥️"
+        />
+        <StatusCard
+          title="Qdrant"
+          status={health?.components?.qdrant?.status || 'Unknown'}
+          statusColor={health?.components?.qdrant?.status === 'up' ? 'green' : 'red'}
+          icon="🗄️"
+          detail={`${health?.components?.qdrant?.collections || 0} collections`}
+        />
+        <StatusCard
+          title="Workers"
+          status={health?.components?.celery?.status || 'Unknown'}
+          statusColor={health?.components?.celery?.status === 'up' ? 'green' : 'red'}
+          icon="⚡"
+        />
+      </div>
+
+      {/* Quick Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+          <h2 className="text-xl font-semibold text-white mb-4">Active Features</h2>
+          <div className="space-y-3">
+            <FeatureRow label="Hybrid Search (SPLADE)" enabled={true} />
+            <FeatureRow label="MCP Protocol" enabled={false} />
+            <FeatureRow label="AST Parsing" enabled={true} />
+            <FeatureRow label="OpenTelemetry" enabled={false} />
+          </div>
+        </div>
+
+        <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+          <h2 className="text-xl font-semibold text-white mb-4">Quick Actions</h2>
+          <div className="space-y-3">
+            <button className="w-full px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+              Rebuild Index
+            </button>
+            <button className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors">
+              Clear Cache
+            </button>
+            <button className="w-full px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600 transition-colors">
+              Export Config
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StatusCard({
+  title,
+  status,
+  statusColor,
+  icon,
+  detail,
+}: {
+  title: string;
+  status: string;
+  statusColor: 'green' | 'yellow' | 'red';
+  icon: string;
+  detail?: string;
+}) {
+  const colorClasses = {
+    green: 'bg-green-500/20 text-green-400 border-green-500/30',
+    yellow: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    red: 'bg-red-500/20 text-red-400 border-red-500/30',
   };
 
   return (
-    <main className="min-h-screen p-8 max-w-4xl mx-auto space-y-8">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        <div className="flex items-center gap-4">
-            <span className="text-sm text-slate-400">Logged in as {session?.user?.name || session?.user?.email}</span>
-            <Button variant="outline" size="sm" onClick={() => signOut()}>Logout</Button>
-            <a href="/" className="text-sm text-slate-400 hover:text-white">Back to Search</a>
-        </div>
+    <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
+      <div className="flex items-center justify-between mb-4">
+        <span className="text-2xl">{icon}</span>
+        <span className={`px-3 py-1 rounded-full text-sm border ${colorClasses[statusColor]}`}>
+          {status}
+        </span>
       </div>
+      <h3 className="text-lg font-medium text-white">{title}</h3>
+      {detail && <p className="text-slate-400 text-sm mt-1">{detail}</p>}
+    </div>
+  );
+}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Ingestion Card */}
-        <Card className="space-y-6">
-          <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-            <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
-              <Upload size={20} />
-            </div>
-            <div>
-              <h2 className="font-semibold text-lg">Ingest Documents</h2>
-              <p className="text-sm text-slate-500">Upload PDF, TXT, or MD files</p>
-            </div>
-          </div>
-
-          <form onSubmit={handleUpload} className="space-y-4">
-            <div className={`
-              border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center transition-colors
-              ${file ? 'border-indigo-500/50 bg-indigo-500/5' : 'border-slate-800 hover:border-slate-700'}
-            `}>
-              <input 
-                type="file" 
-                id="file-upload" 
-                className="hidden" 
-                onChange={(e) => setFile(e.target.files?.[0] || null)}
-              />
-              <label htmlFor="file-upload" className="cursor-pointer space-y-2 w-full">
-                <div className="mx-auto w-12 h-12 bg-slate-800 rounded-full flex items-center justify-center text-slate-400">
-                  {file ? <FileText size={20} /> : <Upload size={20} />}
-                </div>
-                <div className="text-sm">
-                  {file ? (
-                    <span className="text-indigo-400 font-medium">{file.name}</span>
-                  ) : (
-                    <span className="text-slate-400">Click to select file</span>
-                  )}
-                </div>
-              </label>
-            </div>
-            
-            <div className="flex justify-end">
-              <Button type="submit" disabled={!file} loading={uploading}>
-                Upload Document
-              </Button>
-            </div>
-          </form>
-
-          {status === 'success' && (
-            <div className="flex items-center gap-2 p-3 bg-green-500/10 text-green-400 rounded-lg text-sm">
-              <CheckCircle2 size={16} />
-              Document uploaded successfully! Processing in background.
-            </div>
-          )}
-           {status === 'error' && (
-            <div className="flex items-center gap-2 p-3 bg-red-500/10 text-red-400 rounded-lg text-sm">
-              <AlertCircle size={16} />
-              Upload failed. Check backend logs.
-            </div>
-          )}
-        </Card>
-
-        {/* System Status Placeholder */}
-        <Card className="space-y-6 opacity-50 pointer-events-none">
-           <div className="flex items-center gap-3 border-b border-slate-800 pb-4">
-            <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg">
-              <FileText size={20} />
-            </div>
-            <div>
-              <h2 className="font-semibold text-lg">System Health</h2>
-              <p className="text-sm text-slate-500">Monitor Indexing & Workers</p>
-            </div>
-          </div>
-          <div className="h-40 flex items-center justify-center text-slate-600">
-            Coming Soon
-          </div>
-        </Card>
-      </div>
-    </main>
+function FeatureRow({ label, enabled }: { label: string; enabled: boolean }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-slate-300">{label}</span>
+      <span className={enabled ? 'text-green-400' : 'text-slate-500'}>
+        {enabled ? '✓ Enabled' : '○ Disabled'}
+      </span>
+    </div>
   );
 }
