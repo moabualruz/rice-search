@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     RRF_K: int = 60
     EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
+    # MCP Protocol (Phase 10)
+    MCP_ENABLED: bool = False
+    MCP_TRANSPORT: str = "stdio"  # stdio, tcp, sse
+    MCP_TCP_HOST: str = "0.0.0.0"
+    MCP_TCP_PORT: int = 9090
+    MCP_SSE_PORT: int = 9091
+
     class Config:
         env_file = ".env"
 

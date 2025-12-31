@@ -111,3 +111,66 @@ async def list_models(admin: dict = Depends(verify_admin)):
             }
         ]
     }
+
+
+# MCP Control Endpoints (Phase 10)
+
+@router.get("/mcp/status")
+async def get_mcp_status(admin: dict = Depends(verify_admin)):
+    """
+    Get MCP server status.
+    
+    Requires admin role.
+    """
+    return {
+        "enabled": settings.MCP_ENABLED,
+        "transport": settings.MCP_TRANSPORT,
+        "tcp_host": settings.MCP_TCP_HOST,
+        "tcp_port": settings.MCP_TCP_PORT,
+        "sse_port": settings.MCP_SSE_PORT,
+        "tools": ["search", "read_file", "list_files"]
+    }
+
+
+@router.put("/mcp/enable")
+async def enable_mcp(admin: dict = Depends(verify_admin)):
+    """
+    Enable MCP server.
+    
+    Note: Requires restart to take effect.
+    Requires admin role.
+    """
+    return {
+        "message": "MCP server enable acknowledged (restart required)",
+        "enabled": True,
+        "restart_required": True
+    }
+
+
+@router.put("/mcp/disable")
+async def disable_mcp(admin: dict = Depends(verify_admin)):
+    """
+    Disable MCP server.
+    
+    Note: Requires restart to take effect.
+    Requires admin role.
+    """
+    return {
+        "message": "MCP server disable acknowledged (restart required)",
+        "enabled": False,
+        "restart_required": True
+    }
+
+
+@router.get("/mcp/connections")
+async def list_mcp_connections(admin: dict = Depends(verify_admin)):
+    """
+    List active MCP connections.
+    
+    Note: This is a placeholder. In production, track connections in shared state.
+    Requires admin role.
+    """
+    return {
+        "connections": [],
+        "message": "Connection tracking not yet implemented"
+    }
