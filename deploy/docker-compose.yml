@@ -40,6 +40,20 @@ services:
       - rice-net
 
   # ---------------------------------------------------------------------------
+  # IDENTITY
+  # ---------------------------------------------------------------------------
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0.0
+    command: start-dev
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8080:8080"
+    networks:
+      - rice-net
+
+  # ---------------------------------------------------------------------------
   # PYTHON MONOLITH (API & WORKER)
   # ---------------------------------------------------------------------------
   # In production, these run from the same image.

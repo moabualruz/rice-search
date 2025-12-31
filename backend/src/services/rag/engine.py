@@ -1,23 +1,13 @@
 import os
 from typing import List, Dict
+from langchain_core.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
 try:
-    from langchain_core.prompts import PromptTemplate
-    from langchain.chains import LLMChain
-    # Fallback/Fake LLM
-    try:
-        from langchain_community.llms import FakeListLLM
-    except ImportError:
-        from langchain.llms.fake import FakeListLLM
-    # OpenAI
-    try:
-        from langchain_openai import OpenAI
-    except ImportError:
-        from langchain_community.llms import OpenAI
+    from langchain_community.llms import FakeListLLM, OpenAI
 except ImportError:
-    from langchain.prompts import PromptTemplate
+    # Handle older versions or missing extras if needed, but aim for community
     from langchain.llms.fake import FakeListLLM
-    from langchain.chains import LLMChain
-    from langchain_community.llms import OpenAI
+    from langchain.llms import OpenAI
 
 from src.services.search.retriever import Retriever
 
@@ -46,7 +36,7 @@ class RAGEngine:
             Answer:"""
         )
         
-        self.chain = LLMChain(llm=self.llm, prompt=self.prompt)
+        self.chain = self.prompt | self.llm | StrOutputParser()
 
     def ask(self, query: str) -> Dict:
         """
@@ -65,7 +55,7 @@ class RAGEngine:
         context_text = "\n\n".join([d["text"] for d in docs])
         
         # 3. Generate
-        answer = self.chain.run(context=context_text, question=query)
+        answer = self.chain.invoke({"context": context_text, "question": query})
         
         return {
             "answer": answer,

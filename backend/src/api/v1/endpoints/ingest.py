@@ -1,16 +1,21 @@
 import shutil
 import os
 import uuid
-from fastapi import APIRouter, UploadFile, File, HTTPException
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
+from typing import Dict
 from src.tasks.ingestion import ingest_file_task
+from src.api.v1.dependencies import verify_admin
 
 router = APIRouter()
 
 TEMP_DIR = "/tmp/ingest" 
 os.makedirs(TEMP_DIR, exist_ok=True)
 
-@router.post("/file")
-async def ingest_file(file: UploadFile = File(...)):
+@router.post("/file", status_code=202)
+async def upload_file(
+    file: UploadFile = File(...),
+    admin: dict = Depends(verify_admin)
+) -> Dict:
     """
     Upload a file to ingest into the Vector DB.
     """

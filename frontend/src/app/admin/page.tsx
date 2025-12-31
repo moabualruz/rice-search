@@ -4,21 +4,40 @@ import { useState } from 'react';
 import { Button, Input, Card } from '@/components/ui-elements';
 import { Upload, FileText, CheckCircle2, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useSession, signIn, signOut } from "next-auth/react";
+import { redirect } from 'next/navigation';
 
 export default function AdminPage() {
+  const { data: session, status: sessionStatus } = useSession();
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
+  if (sessionStatus === "loading") {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (sessionStatus === "unauthenticated") {
+     return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-900">
+           <Card className="text-center p-10 space-y-6">
+              <h1 className="text-2xl font-bold">Admin Access Required</h1>
+              <p className="text-slate-400">You must be logged in to manage documents.</p>
+              <Button onClick={() => signIn("keycloak")}>Login with Keycloak</Button>
+           </Card>
+        </div>
+     )
+  }
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file) return;
+    if (!file || !session?.accessToken) return;
 
     setUploading(true);
     setStatus('idle');
 
     try {
-      await api.ingest(file);
+      await api.ingest(file, session.accessToken as string);
       setStatus('success');
       setFile(null);
     } catch (err) {
@@ -33,7 +52,11 @@ export default function AdminPage() {
     <main className="min-h-screen p-8 max-w-4xl mx-auto space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-        <a href="/" className="text-sm text-slate-400 hover:text-white">Back to Search</a>
+        <div className="flex items-center gap-4">
+            <span className="text-sm text-slate-400">Logged in as {session?.user?.name || session?.user?.email}</span>
+            <Button variant="outline" size="sm" onClick={() => signOut()}>Logout</Button>
+            <a href="/" className="text-sm text-slate-400 hover:text-white">Back to Search</a>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

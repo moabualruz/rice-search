@@ -25,13 +25,19 @@ export const api = {
     }
   },
 
-  ingest: async (file: File) => {
+  ingest: async (file: File, token?: string) => {
     const formData = new FormData();
     formData.append("file", file);
+
+    const headers: HeadersInit = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
 
     const res = await fetch(`${API_BASE}/ingest/file`, {
       method: "POST",
       body: formData,
+      headers: token ? headers : undefined,
     });
 
     if (!res.ok) {
