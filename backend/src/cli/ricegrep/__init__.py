@@ -1,0 +1,1 @@
+# ricegrep CLI package
