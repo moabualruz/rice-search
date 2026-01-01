@@ -1,5 +1,6 @@
 import pytest
 import os
+import re
 from playwright.sync_api import Page, expect
 
 @pytest.mark.e2e
@@ -17,8 +18,9 @@ def test_frontend_loads(page: Page):
 
     # Check title
     # Note: You might need to adjust this depending on actual metadata
+    # Expect 'rice ?earch' branding
+    # Note: ? is a regex special character, so we escape it
     try:
-        expect(page).to_have_title("Rice Search")
+        expect(page).to_have_title(re.compile(r"rice \?earch", re.IGNORECASE))
     except AssertionError:
-        # Fallback check for text content if title is dynamic/missing
-        expect(page.locator("body")).to_contain_text("Rice Search")
+        expect(page.locator("body")).to_contain_text("rice ?earch")

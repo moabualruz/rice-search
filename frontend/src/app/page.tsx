@@ -50,14 +50,14 @@ export default function Home() {
           <div className="flex items-center justify-center gap-4 mb-4">
             <Image 
               src="/logo.svg" 
-              alt="Rice Search" 
+              alt="rice ?earch" 
               width={64} 
               height={64}
               className="rounded-xl"
             />
           </div>
           <h1 className="text-5xl font-extrabold tracking-tight sm:text-7xl text-primary">
-            Rice Search
+            rice ?earch
           </h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
             Enterprise-grade Neural Search & Retrieval Augmented Generation.

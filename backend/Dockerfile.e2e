@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/playwright/python:v1.40.0-jammy
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+
+# Copy dependency definition
+COPY pyproject.toml .
+
+# Install dependencies (including dev/e2e)
+# Upgrade pip to avoid resolution issues (v23 -> v25)
+RUN pip install --upgrade pip
+# We use --no-cache-dir to keep image size down, but the build layer will be cached by Docker
+RUN pip install --no-cache-dir -e .[dev]
+
+# Copy the rest of the application
+COPY . .
+
+# Default command
+CMD ["pytest", "tests/e2e"]

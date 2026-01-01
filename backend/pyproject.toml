@@ -3,7 +3,7 @@ name = "rice-search-backend"
 version = "0.1.0"
 description = "Enterprise Neural Search Backend"
 authors = [{name = "Rice Search Team"}]
-requires-python = ">=3.11"
+requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
@@ -14,7 +14,7 @@ dependencies = [
     "langchain-community>=0.3.0",
     "langchain-core>=0.3.0",
     "langchain-text-splitters>=0.3.0",
-    "unstructured[local-inference]>=0.15.0",
+    "unstructured>=0.11.0",
     "sentence-transformers>=3.1.0",
     "torch>=2.4.0",
     "pyjwt[crypto]>=2.9.0",
@@ -28,7 +28,6 @@ dependencies = [
     "opentelemetry-instrumentation-requests>=0.46b0",
     "transformers>=4.36.0",
     "mcp>=0.9.0",
-    "typer>=0.9.0",
     "rich>=13.0.0",
     "watchdog>=3.0.0",
     "pathspec>=0.11.0",
@@ -43,8 +42,9 @@ dev = [
     "black>=24.0.0",
     "isort>=5.13.0",
     "flake8>=7.0.0",
-    "pytest-playwright>=0.5.0",
-    "playwright>=1.44.0"
+    "pytest-playwright==0.4.4",
+    "playwright==1.40.0",
+    "pytest-cov>=4.1.0"
 ]
 
 [build-system]

@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  font-size: 125%; /* Scaled 1.25x */
+}
+
 /* Brand Colors from .branding */
 :root {
   /* Primary: Forest Green from logo.svg */

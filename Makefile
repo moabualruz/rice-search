@@ -23,4 +23,5 @@ test:
 	cd backend && pytest
 
 e2e:
+	docker compose -f deploy/docker-compose.yml build tests-e2e
 	docker compose -f deploy/docker-compose.yml run --rm tests-e2e

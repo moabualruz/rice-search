@@ -18,8 +18,9 @@ def test_search_interaction(page: Page):
     # 1. Navigate to Home
     page.goto(base_url)
     
-    # Verify Title
-    expect(page).to_have_title("Rice Search")
+    # Verify Title (Lowercase branding with ?earch)
+    # expect(page).to_have_title("rice ?earch") # Exact match check
+    expect(page).to_have_title(re.compile(r"rice \?earch", re.IGNORECASE))
     
     # 2. Check Modes
     # Default is RAG "Ask AI"

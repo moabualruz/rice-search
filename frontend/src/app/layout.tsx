@@ -22,7 +22,7 @@ const terminus = localFont({
 })
 
 export const metadata: Metadata = {
-  title: 'Rice Search - Enterprise Intelligence',
+  title: 'rice ?earch - Enterprise Intelligence',
   description: 'Local-first Neural Search Platform',
 }
 

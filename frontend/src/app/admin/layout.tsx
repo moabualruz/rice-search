@@ -27,13 +27,13 @@ export default function AdminLayout({
           <Link href="/" className="flex items-center gap-3">
             <Image 
               src="/logo.svg" 
-              alt="Rice Search" 
+              alt="rice ?earch" 
               width={40} 
               height={40}
               className="rounded-lg"
             />
             <div>
-              <span className="text-xl font-bold text-white">Rice Search</span>
+              <span className="text-xl font-bold text-white">rice ?earch</span>
               <p className="text-slate-400 text-sm">Admin Console</p>
             </div>
           </Link>
