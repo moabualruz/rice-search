@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 
 interface SystemStatus {
   status: string;
@@ -13,7 +14,7 @@ interface SystemStatus {
 
 interface AdminStatus {
   status: string;
-  features: Record<string, boolean>;
+  features: Record<string, any>;
   models: Record<string, boolean>;
 }
 
@@ -47,6 +48,39 @@ export default function AdminDashboard() {
   const showMessage = (type: 'success' | 'error', text: string) => {
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
+  };
+
+  const toggleFeature = async (key: string, value: boolean) => {
+    try {
+       // Optimistic update
+       setAdminStatus(prev => prev ? {
+         ...prev,
+         features: {
+           ...prev.features,
+           [key === 'sparse_enabled' ? 'hybrid_search' : 
+            key === 'ast_parsing_enabled' ? 'ast_parsing' : 
+            key === 'mcp_enabled' ? 'mcp_protocol' : key]: value
+         }
+       } : null);
+
+       const res = await fetch(`${API_BASE}/config`, {
+         method: 'PUT',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify({ [key]: value })
+       });
+       
+       if (res.ok) {
+         const data = await res.json();
+         showMessage('success', `${key} updated. ${data.restart_required ? 'Restart required.' : ''}`);
+         // Refetch to ensure consistency
+         setTimeout(fetchData, 500);
+       } else {
+         throw new Error('Update failed');
+       }
+    } catch (e) {
+      showMessage('error', `Failed to update ${key}`);
+      fetchData(); // Revert
+    }
   };
 
   const rebuildIndex = async () => {
@@ -106,21 +140,45 @@ export default function AdminDashboard() {
         />
       </div>
 
-      {/* Quick Stats */}
+      {/* Configuration Management */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          <h2 className="text-xl font-semibold text-white mb-4">Active Features</h2>
-          <div className="space-y-3">
-            <FeatureRow label="Hybrid Search (SPLADE)" enabled={adminStatus?.features?.hybrid_search ?? true} />
-            <FeatureRow label="AST Parsing" enabled={adminStatus?.features?.ast_parsing ?? true} />
-            <FeatureRow label="MCP Protocol" enabled={adminStatus?.features?.mcp_protocol ?? false} />
-            <FeatureRow label="OpenTelemetry" enabled={adminStatus?.features?.opentelemetry ?? false} />
+          <h2 className="text-xl font-semibold text-white mb-4">Feature Management</h2>
+          <div className="space-y-4">
+            <ToggleRow 
+              label="Hybrid Search (SPLADE)" 
+              enabled={adminStatus?.features?.hybrid_search ?? false} 
+              onToggle={() => toggleFeature('sparse_enabled', !adminStatus?.features?.hybrid_search)}
+            />
+            <ToggleRow 
+              label="Neural Reranker" 
+              enabled={adminStatus?.features?.rerank_enabled ?? true} 
+              onToggle={() => toggleFeature('rerank_enabled', !adminStatus?.features?.rerank_enabled)}
+            />
+            <div className="pl-8 text-xs text-slate-500 mb-2">
+               Model: {adminStatus?.features?.rerank_model || 'jinaai/jina-reranker-v2-base-multilingual'}
+            </div>
+            
+            <ToggleRow 
+              label="AST Parsing (Tree-sitter)" 
+              enabled={adminStatus?.features?.ast_parsing ?? false} 
+              onToggle={() => toggleFeature('ast_parsing_enabled', !adminStatus?.features?.ast_parsing)}
+            />
+            <ToggleRow 
+              label="MCP Protocol" 
+              enabled={adminStatus?.features?.mcp_protocol ?? false} 
+              onToggle={() => toggleFeature('mcp_enabled', !adminStatus?.features?.mcp_protocol)}
+            />
           </div>
         </div>
 
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
           <h2 className="text-xl font-semibold text-white mb-4">Quick Actions</h2>
           <div className="space-y-3">
+             <Link href="/admin/models" className="w-full block px-4 py-2 bg-purple-900/50 text-purple-200 border border-purple-700/50 rounded-lg hover:bg-purple-900/80 transition-colors text-center font-semibold">
+               Manage Model Registry
+             </Link>
+             <div className="h-px bg-slate-700 my-2" />
             <button 
               onClick={rebuildIndex}
               className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-accent transition-colors"
@@ -142,6 +200,26 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ToggleRow({ label, enabled, onToggle }: { label: string; enabled: boolean; onToggle: () => void }) {
+  return (
+    <div className="flex items-center justify-between p-2 rounded hover:bg-slate-700/50 transition-colors">
+      <span className="text-slate-300 font-medium">{label}</span>
+      <button 
+        onClick={onToggle}
+        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-slate-900 ${
+          enabled ? 'bg-primary' : 'bg-slate-600'
+        }`}
+      >
+        <span
+          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            enabled ? 'translate-x-6' : 'translate-x-1'
+          }`}
+        />
+      </button>
     </div>
   );
 }
@@ -175,17 +253,6 @@ function StatusCard({
       </div>
       <h3 className="text-lg font-medium text-white">{title}</h3>
       {detail && <p className="text-slate-400 text-sm mt-1">{detail}</p>}
-    </div>
-  );
-}
-
-function FeatureRow({ label, enabled }: { label: string; enabled: boolean }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-slate-300">{label}</span>
-      <span className={enabled ? 'text-green-400' : 'text-slate-500'}>
-        {enabled ? '✓ Enabled' : '○ Disabled'}
-      </span>
     </div>
   );
 }

@@ -65,10 +65,12 @@ export const api = {
   },
 
   listFiles: async (
-    pattern?: string
+    pattern?: string,
+    orgId?: string
   ): Promise<{ files: string[]; count: number }> => {
     const url = new URL(`${API_BASE}/files/list`);
     if (pattern) url.searchParams.append("pattern", pattern);
+    if (orgId) url.searchParams.append("org_id", orgId);
 
     const res = await fetch(url.toString());
     if (!res.ok) throw new Error("Failed to list files");
