@@ -21,10 +21,41 @@ from qdrant_client.models import (
 from src.db.qdrant import get_qdrant_client
 from src.core.config import settings
 
-# Load dense model
-model = SentenceTransformer(settings.EMBEDDING_MODEL)
+from src.services.model_manager import get_model_manager
+
+# Lazy load dense model via Manager
 qdrant = get_qdrant_client()
 COLLECTION_NAME = "rice_chunks"
+
+def get_dense_model():
+    """Get or load dense model via ModelManager."""
+    manager = get_model_manager()
+    
+    def loader():
+        from src.core.device import get_device
+        from src.services.admin.admin_store import get_admin_store
+        
+        # Check if GPU is enabled for this model
+        store = get_admin_store()
+        models = store.get_models()
+        gpu_enabled = models.get("dense", {}).get("gpu_enabled", True)
+        
+        if gpu_enabled:
+            device = get_device()
+        else:
+            device = "cpu"
+            
+        logger.info(f"Loading dense model on {device}")
+        return SentenceTransformer(settings.EMBEDDING_MODEL, device=device)
+    
+    # Register/Load
+    manager.load_model("dense", loader)
+    status = manager.get_model_status("dense")
+    
+    # Return instance if loaded
+    if status["loaded"]:
+        return manager._models["dense"]["instance"]
+    raise RuntimeError("Failed to load dense model")
 
 # Lazy load sparse embedder
 _sparse_embedder = None
@@ -104,6 +135,7 @@ class Retriever:
         Dense-only semantic search.
         """
         # 1. Encode query
+        model = get_dense_model()
         vector = model.encode(query).tolist()
 
         # 2. Build filter
@@ -154,6 +186,7 @@ class Retriever:
         rrf_k = rrf_k or settings.RRF_K
         
         # 1. Generate dense embedding
+        model = get_dense_model()
         dense_vector = model.encode(query).tolist()
         
         # 2. Generate sparse embedding

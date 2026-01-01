@@ -118,4 +118,19 @@ export const api = {
     if (!res.ok) throw new Error("Failed to delete store");
     return res.json();
   },
+
+  // Connections (Phase 16 P2)
+  listConnections: async (): Promise<{ connections: any[] }> => {
+    const res = await fetch(`${API_BASE}/admin/public/connections`);
+    if (!res.ok) throw new Error("Failed to list connections");
+    return res.json();
+  },
+
+  deleteConnection: async (id: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/admin/public/connections/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete connection");
+    return res.json();
+  },
 };

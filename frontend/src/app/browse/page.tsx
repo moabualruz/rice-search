@@ -1,36 +1,33 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { api } from '@/lib/api';
 import { Input, Button, Card } from '@/components/ui-elements';
-import { FileText, Folder, Search, ArrowLeft, Loader2, Code, AlertCircle } from 'lucide-react';
+import { FileText, Folder, FolderOpen, Search, ArrowLeft, Loader2, Code, AlertCircle, ChevronRight, ChevronDown } from 'lucide-react';
+
+type TreeNode = {
+  name: string;
+  path: string;
+  type: 'file' | 'folder';
+  children?: TreeNode[];
+};
 
 export default function FileExplorer() {
   // State
   const [files, setFiles] = useState<string[]>([]);
-  const [filteredFiles, setFilteredFiles] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('');
   const [selectedFile, setSelectedFile] = useState<string | null>(null);
   const [fileContent, setFileContent] = useState<{ content: string; language: string } | null>(null);
   const [contentLoading, setContentLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
   // Initial load
   useEffect(() => {
     loadFiles();
   }, []);
-
-  // Filter effect
-  useEffect(() => {
-    if (!filter.trim()) {
-      setFilteredFiles(files);
-      return;
-    }
-    const lowerFilter = filter.toLowerCase();
-    setFilteredFiles(files.filter(f => f.toLowerCase().includes(lowerFilter)));
-  }, [filter, files]);
 
   // Actions
   const loadFiles = async () => {
@@ -39,7 +36,6 @@ export default function FileExplorer() {
       setError(null);
       const res = await api.listFiles();
       setFiles(res.files);
-      setFilteredFiles(res.files);
     } catch (err) {
       setError("Failed to load file list.");
       console.error(err);
@@ -62,6 +58,94 @@ export default function FileExplorer() {
       setContentLoading(false);
     }
   };
+
+  const toggleFolder = (path: string) => {
+    const next = new Set(expandedFolders);
+    if (next.has(path)) {
+      next.delete(path);
+    } else {
+      next.add(path);
+    }
+    setExpandedFolders(next);
+  };
+
+  // Transform flat list to tree
+  const fileTree = useMemo(() => {
+    const root: TreeNode[] = [];
+    
+    // Filter first
+    const filtered = filter 
+      ? files.filter(f => f.toLowerCase().includes(filter.toLowerCase()))
+      : files;
+
+    filtered.forEach(path => {
+      const parts = path.split('/');
+      let currentLevel = root;
+      let currentPath = '';
+
+      parts.forEach((part, index) => {
+        currentPath = currentPath ? `${currentPath}/${part}` : part;
+        const isFile = index === parts.length - 1;
+        
+        const existingNode = currentLevel.find(n => n.name === part);
+        
+        if (existingNode) {
+          if (!isFile) {
+            currentLevel = existingNode.children!;
+          }
+        } else {
+          const newNode: TreeNode = {
+            name: part,
+            path: currentPath,
+            type: isFile ? 'file' : 'folder',
+            children: isFile ? undefined : []
+          };
+          currentLevel.push(newNode);
+          if (!isFile) {
+            currentLevel = newNode.children!;
+          }
+        }
+      });
+    });
+
+    // Recursive sort: folders first, then files, both alphabetical
+    const sortNodes = (nodes: TreeNode[]) => {
+      nodes.sort((a, b) => {
+        if (a.type === b.type) return a.name.localeCompare(b.name);
+        return a.type === 'folder' ? -1 : 1;
+      });
+      nodes.forEach(n => {
+        if (n.children) sortNodes(n.children);
+      });
+    };
+    
+    sortNodes(root);
+    return root;
+  }, [files, filter]);
+
+  // Keep filtered folders expanded
+  useEffect(() => {
+    if (filter) {
+        // Simple heuristic: if searching, expand everything to show matches
+        // Or strictly: we don't strictly need to track expanded state for filter view
+        // But a cleaner UX might be to auto-expand all parents of matches. 
+        // For now, let's just assume search result view is fully expanded or flat?
+        // Let's stick to tree structure even in search, but maybe auto expand all?
+        // Implementing auto-expand all for now on filter change
+        const allPaths = new Set<string>();
+        const traverse = (nodes: TreeNode[]) => {
+            nodes.forEach(n => {
+                if (n.type === 'folder') {
+                    allPaths.add(n.path);
+                    if (n.children) traverse(n.children);
+                }
+            });
+        };
+        traverse(fileTree);
+        setExpandedFolders(allPaths);
+    }
+  }, [filter, fileTree]);
+
 
   return (
     <main className="flex min-h-screen flex-col bg-dark">
@@ -93,7 +177,7 @@ export default function FileExplorer() {
       {/* Content */}
       <div className="flex-1 flex overflow-hidden h-[calc(100vh-73px)]">
         
-        {/* Left Sidebar: File List */}
+        {/* Left Sidebar: File Tree */}
         <div className="w-1/3 min-w-[300px] border-r border-border overflow-y-auto bg-dark-secondary flex flex-col">
           {loading ? (
             <div className="flex items-center justify-center h-full text-text-muted">
@@ -105,26 +189,19 @@ export default function FileExplorer() {
                <p>{error}</p>
                <Button onClick={loadFiles} variant="outline" size="sm" className="mt-4">Retry</Button>
             </div>
-          ) : filteredFiles.length === 0 ? (
+          ) : files.length === 0 ? (
             <div className="p-8 text-center text-text-muted">
               No files found.
             </div>
           ) : (
-            <div className="flex flex-col">
-              {filteredFiles.map((file) => (
-                <button
-                  key={file}
-                  onClick={() => handleFileClick(file)}
-                  className={`flex items-center gap-3 px-4 py-3 text-sm text-left border-b border-border/50 transition-colors
-                    ${selectedFile === file 
-                      ? 'bg-primary/10 text-primary border-l-4 border-l-primary' 
-                      : 'text-text-secondary hover:bg-dark-tertiary hover:text-text border-l-4 border-l-transparent'
-                    }`}
-                >
-                  <FileText size={16} className="shrink-0" />
-                  <span className="truncate font-mono text-xs">{file}</span>
-                </button>
-              ))}
+            <div className="p-2">
+              <FileTree 
+                nodes={fileTree} 
+                selectedFile={selectedFile} 
+                onSelect={handleFileClick} 
+                expandedFolders={expandedFolders}
+                onToggleFolder={toggleFolder}
+              />
             </div>
           )}
         </div>
@@ -169,5 +246,77 @@ export default function FileExplorer() {
 
       </div>
     </main>
+  );
+}
+
+// Recursive Tree Component
+function FileTree({ 
+  nodes, 
+  selectedFile, 
+  onSelect, 
+  expandedFolders, 
+  onToggleFolder,
+  level = 0
+}: { 
+  nodes: TreeNode[]; 
+  selectedFile: string | null; 
+  onSelect: (path: string) => void;
+  expandedFolders: Set<string>;
+  onToggleFolder: (path: string) => void;
+  level?: number;
+}) {
+  return (
+    <div className="flex flex-col">
+      {nodes.map((node) => (
+        <div key={node.path}>
+          {node.type === 'folder' ? (
+            <div>
+              <button
+                onClick={() => onToggleFolder(node.path)}
+                className={`flex items-center gap-2 w-full text-left py-1 px-2 text-sm text-text-secondary hover:bg-dark-tertiary rounded
+                  ${expandedFolders.has(node.path) ? 'text-text' : ''}`}
+                style={{ paddingLeft: `${level * 12 + 8}px` }}
+              >
+                {expandedFolders.has(node.path) ? (
+                   <ChevronDown size={14} className="text-text-muted" />
+                ) : (
+                   <ChevronRight size={14} className="text-text-muted" />
+                )}
+                {expandedFolders.has(node.path) ? (
+                  <FolderOpen size={16} className="text-primary/80" />
+                ) : (
+                  <Folder size={16} className="text-primary/60" />
+                )}
+                <span className="truncate">{node.name}</span>
+              </button>
+              
+              {expandedFolders.has(node.path) && node.children && (
+                <FileTree 
+                  nodes={node.children} 
+                  selectedFile={selectedFile} 
+                  onSelect={onSelect}
+                  expandedFolders={expandedFolders}
+                  onToggleFolder={onToggleFolder}
+                  level={level + 1}
+                />
+              )}
+            </div>
+          ) : (
+            <button
+              onClick={() => onSelect(node.path)}
+              className={`flex items-center gap-2 w-full text-left py-1 px-2 text-sm transition-colors rounded
+                ${selectedFile === node.path 
+                  ? 'bg-primary/10 text-primary font-medium' 
+                  : 'text-text-secondary hover:bg-dark-tertiary hover:text-text'
+                }`}
+              style={{ paddingLeft: `${level * 12 + 28}px` }} // Indent matching folder icon offset
+            >
+              <FileText size={14} className={selectedFile === node.path ? "text-primary" : "text-slate-500"} />
+              <span className="truncate font-mono text-xs">{node.name}</span>
+            </button>
+          )}
+        </div>
+      ))}
+    </div>
   );
 }

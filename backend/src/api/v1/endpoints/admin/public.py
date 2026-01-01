@@ -4,24 +4,29 @@ Public Admin endpoints with Redis persistence.
 All state is persisted to Redis and survives restarts.
 """
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
-from typing import Optional, List
-import uuid
+from typing import Optional, List, Literal
+from uuid import uuid4
 import psutil
 from datetime import datetime
 
 from src.core.config import settings
 from src.services.admin.admin_store import get_admin_store
+from src.api.deps import requires_role, get_current_user
 
 router = APIRouter()
 
+class ConnectionRegister(BaseModel):
+    """CLI connection registration."""
+    user_id: str
+    device_name: str
+    version: str = "1.0.0"
 
 class ModelUpdate(BaseModel):
     """Model update request."""
     active: Optional[bool] = None
     gpu_enabled: Optional[bool] = None
-
 
 class ConfigUpdate(BaseModel):
     """Configuration update request."""
@@ -30,15 +35,13 @@ class ConfigUpdate(BaseModel):
     ast_parsing_enabled: Optional[bool] = None
     mcp_enabled: Optional[bool] = None
 
-
 class UserCreate(BaseModel):
     email: str
-    role: str = "member"
+    role: Literal["admin", "member", "viewer"] = "member"
     org_id: str = "default"
 
-
 class UserUpdate(BaseModel):
-    role: Optional[str] = None
+    role: Optional[Literal["admin", "member", "viewer"]] = None
     active: Optional[bool] = None
     org_id: Optional[str] = None
 
@@ -63,32 +66,14 @@ async def get_model(model_id: str):
     return models[model_id]
 
 
-@router.put("/models/{model_id}")
-async def update_model(model_id: str, update: ModelUpdate):
-    """Update a model's settings (persisted to Redis)."""
-    store = get_admin_store()
-    models = store.get_models()
-    
-    if model_id not in models:
-        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
-    
-    model = models[model_id]
-    
-    if update.active is not None:
-        model["active"] = update.active
-    if update.gpu_enabled is not None:
-        model["gpu_enabled"] = update.gpu_enabled
-    
-    store.set_model(model_id, model)
-    
-    return {
+@router.put("/models/{model_id}", dependencies=[Depends(requires_role("admin"))])
         "message": f"Model {model_id} updated",
         "model": model,
         "restart_required": True
     }
 
 
-@router.post("/models")
+@router.post("/models", dependencies=[Depends(requires_role("admin"))])
 async def add_model(model: dict):
     """Add a new model (persisted to Redis)."""
     store = get_admin_store()
@@ -110,7 +95,7 @@ async def add_model(model: dict):
     return {"message": f"Model {model_id} added", "model": new_model}
 
 
-@router.delete("/models/{model_id}")
+@router.delete("/models/{model_id}", dependencies=[Depends(requires_role("admin"))])
 async def delete_model(model_id: str):
     """Delete a model (persisted to Redis)."""
     store = get_admin_store()
@@ -136,7 +121,7 @@ async def get_config():
     return store.get_effective_config()
 
 
-@router.put("/config")
+@router.put("/config", dependencies=[Depends(requires_role("admin"))])
 async def update_config(update: ConfigUpdate):
     """Update configuration (persisted to Redis)."""
     store = get_admin_store()
@@ -181,7 +166,7 @@ async def get_config_history(limit: int = 10):
     return {"snapshots": history}
 
 
-@router.post("/config/snapshot")
+@router.post("/config/snapshot", dependencies=[Depends(requires_role("admin"))])
 async def create_config_snapshot(label: str = None):
     """Create a config snapshot manually."""
     store = get_admin_store()
@@ -191,7 +176,7 @@ async def create_config_snapshot(label: str = None):
     raise HTTPException(status_code=500, detail="Failed to create snapshot")
 
 
-@router.post("/config/rollback/{index}")
+@router.post("/config/rollback/{index}", dependencies=[Depends(requires_role("admin"))])
 async def rollback_config(index: int = 0):
     """Rollback to a previous config snapshot (0 = most recent)."""
     store = get_admin_store()
@@ -221,7 +206,7 @@ async def get_user(user_id: str):
     return users[user_id]
 
 
-@router.post("/users")
+@router.post("/users", dependencies=[Depends(requires_role("admin"))])
 async def create_user(user: UserCreate):
     """Create a new user (persisted to Redis)."""
     store = get_admin_store()
@@ -239,7 +224,7 @@ async def create_user(user: UserCreate):
     return {"message": f"User {user.email} created", "user": new_user}
 
 
-@router.put("/users/{user_id}")
+@router.put("/users/{user_id}", dependencies=[Depends(requires_role("admin"))])
 async def update_user(user_id: str, update: UserUpdate):
     """Update a user (persisted to Redis)."""
     store = get_admin_store()
@@ -261,7 +246,7 @@ async def update_user(user_id: str, update: UserUpdate):
     return {"message": f"User {user_id} updated", "user": user}
 
 
-@router.delete("/users/{user_id}")
+@router.delete("/users/{user_id}", dependencies=[Depends(requires_role("admin"))])
 async def delete_user(user_id: str):
     """Delete a user (persisted to Redis)."""
     store = get_admin_store()
@@ -274,7 +259,47 @@ async def delete_user(user_id: str):
         raise HTTPException(status_code=400, detail="Cannot delete primary admin")
     
     store.delete_user(user_id)
+    store.delete_user(user_id)
     return {"message": f"User {user_id} deleted"}
+
+
+# ============== Connections Endpoints ==============
+
+@router.get("/connections")
+async def list_connections():
+    """List all active CLI connections."""
+    store = get_admin_store()
+    connections = store.get_connections()
+    return {"connections": list(connections.values())}
+
+@router.post("/connections/register", dependencies=[Depends(get_current_user)])
+async def register_connection(data: ConnectionRegister):
+    """Register a CLI connection."""
+    store = get_admin_store()
+    connection_id = f"conn-{uuid.uuid4().hex[:8]}"
+    
+    connection = {
+        "id": connection_id,
+        "user_id": data.user_id,
+        "device_name": data.device_name,
+        "version": data.version,
+        "last_seen": datetime.now().isoformat(),
+        "ip": "127.0.0.1" # Mock IP for now
+    }
+    
+    store.set_connection(connection_id, connection)
+    store.increment_counter("active_connections")
+    
+    return {"message": "Connection registered", "connection": connection}
+
+@router.delete("/connections/{connection_id}", dependencies=[Depends(requires_role("admin"))])
+async def delete_connection(connection_id: str):
+    """Revoke a connection."""
+    store = get_admin_store()
+    if store.delete_connection(connection_id):
+        store.increment_counter("active_connections", -1)
+        return {"message": "Connection deleted"}
+    raise HTTPException(status_code=404, detail="Connection not found")
 
 
 # ============== MCP Endpoints ==============
@@ -293,7 +318,7 @@ async def get_mcp_status():
     }
 
 
-@router.put("/mcp/toggle")
+@router.put("/mcp/toggle", dependencies=[Depends(requires_role("admin"))])
 async def toggle_mcp():
     """Toggle MCP server on/off."""
     store = get_admin_store()
@@ -331,7 +356,7 @@ async def get_system_status():
     }
 
 
-@router.post("/system/rebuild-index")
+@router.post("/system/rebuild-index", dependencies=[Depends(requires_role("admin"))])
 async def rebuild_index():
     """Trigger index rebuild via Celery."""
     from src.worker import celery_app
@@ -355,7 +380,7 @@ async def rebuild_index():
         }
 
 
-@router.post("/system/clear-cache")
+@router.post("/system/clear-cache", dependencies=[Depends(requires_role("admin"))])
 async def clear_cache():
     """Clear Redis cache (actually clears cache keys)."""
     store = get_admin_store()

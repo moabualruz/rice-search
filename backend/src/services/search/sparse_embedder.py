@@ -35,37 +35,68 @@ class SparseEmbedder:
     The vectors are compatible with Qdrant's sparse vector storage.
     """
     
+from src.services.model_manager import get_model_manager
+
+class SparseEmbedder:
+    """
+    Sparse embedding service using SPLADE v3.
+    """
+    
     _instance: Optional["SparseEmbedder"] = None
     
     def __init__(self, model_name: str = None, device: str = None):
-        """
-        Initialize the SPLADE embedder.
-        
-        Args:
-            model_name: HuggingFace model ID (default: from settings)
-            device: Device to run on ("cuda", "cpu", or None for auto)
-        """
+        """Initialize wrapper. Model is lazy-loaded via ModelManager."""
         self.model_name = model_name or settings.SPARSE_MODEL
         
-        # Auto-detect device using centralized logic
+        # Auto-detect device
         if device is None:
             from src.core.device import get_device
             self.device = get_device()
         else:
             self.device = device
+            
+        self.tokenizer = None
+        # Model is managed externally
         
-        logger.info(f"Loading SPLADE model: {self.model_name} on {self.device}")
+    def _load_model(self):
+        """Load model via ModelManager."""
+        manager = get_model_manager()
         
-        self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-        self.model = AutoModelForMaskedLM.from_pretrained(self.model_name)
-        self.model.to(self.device)
-        self.model.eval()
+        def loader():
+            import torch
+            from transformers import AutoTokenizer, AutoModelForMaskedLM
+            from src.services.admin.admin_store import get_admin_store
+            from src.core.device import get_device
+            
+            # Check if GPU is enabled for sparse model
+            store = get_admin_store()
+            models = store.get_models()
+            gpu_enabled = models.get("sparse", {}).get("gpu_enabled", True)
+            
+            if gpu_enabled:
+                device = get_device()
+            else:
+                device = "cpu"
+            
+            logger.info(f"Loading SPLADE model: {self.model_name} on {device}")
+            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+            model = AutoModelForMaskedLM.from_pretrained(self.model_name)
+            model.to(device)
+            model.eval()
+            return {"model": model, "tokenizer": tokenizer}
+            
+        manager.load_model("sparse", loader)
+        status = manager.get_model_status("sparse")
         
-        logger.info(f"SPLADE model loaded successfully")
-    
+        if status["loaded"]:
+            data = manager._models["sparse"]["instance"]
+            self.model = data["model"]
+            self.tokenizer = data["tokenizer"]
+        else:
+            raise RuntimeError("Failed to load SPLADE model")
+
     @classmethod
     def get_instance(cls) -> "SparseEmbedder":
-        """Get or create singleton instance for memory efficiency."""
         if cls._instance is None:
             cls._instance = cls()
         return cls._instance
@@ -80,6 +111,7 @@ class SparseEmbedder:
         Returns:
             SparseVector with indices (token IDs) and values (weights)
         """
+        self._load_model()
         with torch.no_grad():
             # Tokenize
             inputs = self.tokenizer(

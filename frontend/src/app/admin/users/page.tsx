@@ -12,7 +12,7 @@ interface User {
 }
 
 const API_BASE = 'http://localhost:8000/api/v1/admin/public';
-const roles = ['admin', 'member', 'readonly'];
+const roles = ['admin', 'member', 'viewer'];
 
 export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);

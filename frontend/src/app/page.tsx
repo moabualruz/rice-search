@@ -13,6 +13,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState<string | null>(null);
+  const [stepsTaken, setStepsTaken] = useState<number>(0);
 
   const handleSearch = async (e?: React.FormEvent) => {
     e?.preventDefault();
@@ -21,12 +22,15 @@ export default function Home() {
     setLoading(true);
     setAnswer(null);
     setResults([]);
+    setStepsTaken(0);
 
     try {
       const res = await api.search(query, mode);
       if (mode === 'rag') {
         setAnswer(res.answer || "No answer generated.");
         setResults(res.sources || []);
+        // @ts-ignore - steps_taken is new
+        if (res.steps_taken) setStepsTaken(res.steps_taken);
       } else {
         setResults(res.results || []);
       }
@@ -103,9 +107,16 @@ export default function Home() {
           {/* AI Answer */}
           {answer && (
             <Card className="border-purple-500/20 bg-purple-500/5">
-              <div className="flex items-center gap-2 mb-4 text-purple-400">
-                <Sparkles size={18} />
-                <span className="text-sm font-semibold uppercase tracking-wider">AI Answer</span>
+              <div className="flex items-center gap-2 mb-4 text-purple-400 justify-between">
+                <div className="flex items-center gap-2">
+                  <Sparkles size={18} />
+                  <span className="text-sm font-semibold uppercase tracking-wider">AI Answer</span>
+                </div>
+                {stepsTaken > 1 && (
+                   <span className="text-xs bg-purple-500/20 px-2 py-0.5 rounded text-purple-300">
+                     Deep Dive: {stepsTaken} steps
+                   </span>
+                )}
               </div>
               <div className="prose prose-invert max-w-none text-slate-200">
                 <ReactMarkdown>{answer}</ReactMarkdown>

@@ -23,6 +23,7 @@ class AdminStore:
     CONFIG_KEY = "rice:admin:config"
     USERS_KEY = "rice:admin:users"
     STORES_KEY = "rice:admin:stores"
+    CONNECTIONS_KEY = "rice:admin:connections"
     AUDIT_KEY = "rice:admin:audit"
     METRICS_KEY = "rice:admin:metrics"
     
@@ -51,13 +52,20 @@ class AdminStore:
                         "name": settings.EMBEDDING_MODEL,
                         "type": "embedding",
                         "active": True,
-                        "gpu_enabled": False
+                        "gpu_enabled": True
                     },
                     "sparse": {
                         "id": "sparse",
                         "name": settings.SPARSE_MODEL,
                         "type": "sparse_embedding",
                         "active": settings.SPARSE_ENABLED,
+                        "gpu_enabled": True
+                    },
+                    "reranker": {
+                        "id": "reranker",
+                        "name": settings.RERANK_MODEL,
+                        "type": "reranker",
+                        "active": settings.RERANK_ENABLED,
                         "gpu_enabled": True
                     }
                 }
@@ -292,6 +300,47 @@ class AdminStore:
             return False
         except Exception as e:
             logger.error(f"Failed to delete store: {e}")
+            return False
+            
+    # ============== Connections ==============
+
+    def get_connections(self) -> Dict[str, dict]:
+        """Get all active connections."""
+        self._ensure_defaults()
+        try:
+            data = self.redis.get(self.CONNECTIONS_KEY)
+            return json.loads(data) if data else {}
+        except Exception as e:
+            logger.error(f"Failed to get connections: {e}")
+            return {}
+
+    def set_connection(self, connection_id: str, connection: dict) -> bool:
+        """Register or update a connection."""
+        try:
+            connections = self.get_connections()
+            connections[connection_id] = connection
+            self.redis.set(self.CONNECTIONS_KEY, json.dumps(connections))
+            # No audit log for heartbeat updates to avoid noise, only new/changes roughly?
+            # actually let's log only if new
+            if connection_id not in connections:
+                self.log_audit("connection_registered", f"Connection {connection_id} registered")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set connection: {e}")
+            return False
+
+    def delete_connection(self, connection_id: str) -> bool:
+        """Delete a connection."""
+        try:
+            connections = self.get_connections()
+            if connection_id in connections:
+                del connections[connection_id]
+                self.redis.set(self.CONNECTIONS_KEY, json.dumps(connections))
+                self.log_audit("connection_deleted", f"Connection {connection_id} deleted")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to delete connection: {e}")
             return False
     
     # ============== Audit Log ==============

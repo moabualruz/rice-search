@@ -87,9 +87,11 @@ export default function StoreGallery() {
                 <div className="flex items-center justify-between text-xs text-text-secondary pt-4 border-t border-border">
                    <div className="font-mono">{store.id}</div>
                    {/* Link to detail page (future) */}
-                   <Button variant="ghost" size="sm" className="h-8 gap-2 hover:bg-dark-tertiary" onClick={() => alert("Detail page coming next!")}>
-                     Manage <Settings size={14} />
-                   </Button>
+                   <Link href={`/stores/${store.id}`}>
+                     <Button variant="ghost" size="sm" className="h-8 gap-2 hover:bg-dark-tertiary">
+                       Manage <Settings size={14} />
+                     </Button>
+                   </Link>
                 </div>
               </Card>
             ))}

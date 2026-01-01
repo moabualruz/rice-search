@@ -38,20 +38,40 @@ class Reranker:
         return cls._instance
     
     def _load_model(self):
-        """Lazy load the cross-encoder model."""
+        """Lazy load the cross-encoder model via ModelManager."""
         if self._loaded:
             return
         
-        try:
+        from src.services.model_manager import get_model_manager
+        manager = get_model_manager()
+        
+        def loader():
             from src.core.device import get_device
-            device = get_device()
+            from src.services.admin.admin_store import get_admin_store
+            
+            # Check if GPU is enabled for reranker
+            store = get_admin_store()
+            models = store.get_models()
+            gpu_enabled = models.get("reranker", {}).get("gpu_enabled", True)
+            
+            if gpu_enabled:
+                device = get_device()
+            else:
+                device = "cpu"
+                
             logger.info(f"Loading reranker model: {self.model_name} on {device}")
-            self.model = CrossEncoder(self.model_name, device=device)
+            return CrossEncoder(self.model_name, device=device)
+        
+        manager.load_model("reranker", loader)
+        status = manager.get_model_status("reranker")
+        
+        if status["loaded"]:
+            self.model = manager._models["reranker"]["instance"]
             self._loaded = True
             logger.info("Reranker model loaded successfully")
-        except Exception as e:
-            logger.error(f"Failed to load reranker model: {e}")
-            raise
+        else:
+            logger.error("Failed to load reranker model")
+            raise RuntimeError("Failed to load reranker model")
     
     def rerank(
         self,
