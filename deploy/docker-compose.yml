@@ -119,6 +119,23 @@ services:
               count: all
               capabilities: [gpu]
 
+  tests-e2e:
+    image: mcr.microsoft.com/playwright/python:v1.40.0-jammy
+    working_dir: /app
+    volumes:
+      - ../backend:/app
+    environment:
+      - FRONTEND_URL=http://frontend:3000
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+    # Install deps and run tests. Using -e .[dev] to get pytest-playwright.
+    command: /bin/bash -c "pip install -e .[dev] && pytest tests/e2e"
+    depends_on:
+      - frontend
+      - backend-api
+    networks:
+      - rice-net
+
   # ---------------------------------------------------------------------------
   # FRONTEND (NEXT.JS)
   # ---------------------------------------------------------------------------
