@@ -49,10 +49,11 @@ class Retriever:
         limit: int = 5, 
         org_id: str = "public",
         hybrid: bool = None,
-        rerank: bool = None
+        rerank: bool = None,
+        analyze_query: bool = None
     ) -> List[Dict]:
         """
-        Search using dense or hybrid mode with optional reranking.
+        Search using dense or hybrid mode with optional reranking and query analysis.
         
         Args:
             query: Search query
@@ -60,10 +61,23 @@ class Retriever:
             org_id: Organization ID for multi-tenancy filtering
             hybrid: Enable hybrid search (default: from settings)
             rerank: Enable reranking (default: from settings)
+            analyze_query: Enable query intent analysis (default: from settings)
             
         Returns:
             List of search results with score, text, and metadata
         """
+        # Query analysis for intent and scope extraction
+        use_analysis = analyze_query if analyze_query is not None else settings.QUERY_ANALYSIS_ENABLED
+        language_filter = None
+        processed_query = query
+        
+        if use_analysis:
+            from src.services.search.query_analyzer import analyze_query as do_analyze
+            analysis = do_analyze(query)
+            processed_query = analysis.processed_query
+            if analysis.language_hints:
+                language_filter = analysis.language_hints[0]
+        
         # Determine if hybrid search should be used
         use_hybrid = hybrid if hybrid is not None else settings.SPARSE_ENABLED
         use_rerank = rerank if rerank is not None else settings.RERANK_ENABLED
@@ -72,9 +86,9 @@ class Retriever:
         fetch_limit = limit * 3 if use_rerank else limit
         
         if use_hybrid:
-            results = Retriever.hybrid_search(query, fetch_limit, org_id)
+            results = Retriever.hybrid_search(processed_query, fetch_limit, org_id, language_filter)
         else:
-            results = Retriever.dense_search(query, fetch_limit, org_id)
+            results = Retriever.dense_search(processed_query, fetch_limit, org_id, language_filter)
         
         # Apply reranking if enabled
         if use_rerank and results:
@@ -85,7 +99,7 @@ class Retriever:
         return results[:limit]
     
     @staticmethod
-    def dense_search(query: str, limit: int = 5, org_id: str = "public") -> List[Dict]:
+    def dense_search(query: str, limit: int = 5, org_id: str = "public", language_filter: str = None) -> List[Dict]:
         """
         Dense-only semantic search.
         """
@@ -93,14 +107,22 @@ class Retriever:
         vector = model.encode(query).tolist()
 
         # 2. Build filter
-        query_filter = Filter(
-            must=[
+        filter_conditions = [
+            FieldCondition(
+                key="org_id",
+                match=MatchValue(value=org_id)
+            )
+        ]
+        
+        if language_filter:
+            filter_conditions.append(
                 FieldCondition(
-                    key="org_id",
-                    match=MatchValue(value=org_id)
+                    key="language",
+                    match=MatchValue(value=language_filter)
                 )
-            ]
-        )
+            )
+        
+        query_filter = Filter(must=filter_conditions)
         
         # 3. Search
         try:
@@ -121,6 +143,7 @@ class Retriever:
         query: str, 
         limit: int = 5, 
         org_id: str = "public",
+        language_filter: str = None,
         rrf_k: int = None
     ) -> List[Dict]:
         """
@@ -137,19 +160,27 @@ class Retriever:
         sparse_embedder = get_sparse_embedder()
         if not sparse_embedder:
             # Fallback to dense-only
-            return Retriever.dense_search(query, limit, org_id)
+            return Retriever.dense_search(query, limit, org_id, language_filter)
         
         sparse_result = sparse_embedder.embed(query)
         
-        # 3. Build filter
-        query_filter = Filter(
-            must=[
+        # 3. Build filter with optional language
+        filter_conditions = [
+            FieldCondition(
+                key="org_id",
+                match=MatchValue(value=org_id)
+            )
+        ]
+        
+        if language_filter:
+            filter_conditions.append(
                 FieldCondition(
-                    key="org_id",
-                    match=MatchValue(value=org_id)
+                    key="language",
+                    match=MatchValue(value=language_filter)
                 )
-            ]
-        )
+            )
+        
+        query_filter = Filter(must=filter_conditions)
         
         # 4. Execute hybrid search with RRF fusion
         try:

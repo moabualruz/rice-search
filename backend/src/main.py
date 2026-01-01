@@ -10,13 +10,15 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-from src.api.v1.endpoints import ingest, search
+from src.api.v1.endpoints import ingest, search, files, stores
 from src.api.v1.endpoints import metrics
 from src.api.v1.endpoints.admin import config as admin_config
 from src.api.v1.endpoints.admin import public as admin_public
 
 app.include_router(ingest.router, prefix=f"{settings.API_V1_STR}/ingest", tags=["ingestion"])
 app.include_router(search.router, prefix=f"{settings.API_V1_STR}/search", tags=["search"])
+app.include_router(files.router, prefix=f"{settings.API_V1_STR}/files", tags=["files"])
+app.include_router(stores.router, prefix=f"{settings.API_V1_STR}/stores", tags=["stores"])
 app.include_router(admin_config.router, prefix=f"{settings.API_V1_STR}/admin", tags=["admin"])
 app.include_router(admin_public.router, prefix=f"{settings.API_V1_STR}/admin/public", tags=["admin-public"])
 app.include_router(metrics.router, tags=["metrics"])

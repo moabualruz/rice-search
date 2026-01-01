@@ -63,4 +63,57 @@ export const api = {
     }
     return res.json();
   },
+
+  listFiles: async (
+    pattern?: string
+  ): Promise<{ files: string[]; count: number }> => {
+    const url = new URL(`${API_BASE}/files/list`);
+    if (pattern) url.searchParams.append("pattern", pattern);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error("Failed to list files");
+    return res.json();
+  },
+
+  getFileContent: async (
+    path: string
+  ): Promise<{ path: string; content: string; language: string }> => {
+    const url = new URL(`${API_BASE}/files/content`);
+    url.searchParams.append("path", path);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) throw new Error("Failed to get file content");
+    return res.json();
+  },
+
+  // Stores (Phase 16 P2)
+  listStores: async (): Promise<any[]> => {
+    const res = await fetch(`${API_BASE}/stores/`);
+    if (!res.ok) throw new Error("Failed to list stores");
+    return res.json();
+  },
+
+  createStore: async (data: any): Promise<any> => {
+    const res = await fetch(`${API_BASE}/stores/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error("Failed to create store");
+    return res.json();
+  },
+
+  getStore: async (id: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/stores/${id}`);
+    if (!res.ok) throw new Error("Failed to get store");
+    return res.json();
+  },
+
+  deleteStore: async (id: string): Promise<any> => {
+    const res = await fetch(`${API_BASE}/stores/${id}`, {
+      method: "DELETE",
+    });
+    if (!res.ok) throw new Error("Failed to delete store");
+    return res.json();
+  },
 };

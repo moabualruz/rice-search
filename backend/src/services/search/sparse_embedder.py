@@ -47,9 +47,10 @@ class SparseEmbedder:
         """
         self.model_name = model_name or settings.SPARSE_MODEL
         
-        # Auto-detect device
+        # Auto-detect device using centralized logic
         if device is None:
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            from src.core.device import get_device
+            self.device = get_device()
         else:
             self.device = device
         

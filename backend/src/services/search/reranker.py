@@ -43,8 +43,10 @@ class Reranker:
             return
         
         try:
-            logger.info(f"Loading reranker model: {self.model_name}")
-            self.model = CrossEncoder(self.model_name)
+            from src.core.device import get_device
+            device = get_device()
+            logger.info(f"Loading reranker model: {self.model_name} on {device}")
+            self.model = CrossEncoder(self.model_name, device=device)
             self._loaded = True
             logger.info("Reranker model loaded successfully")
         except Exception as e:

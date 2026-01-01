@@ -22,6 +22,7 @@ class AdminStore:
     MODELS_KEY = "rice:admin:models"
     CONFIG_KEY = "rice:admin:config"
     USERS_KEY = "rice:admin:users"
+    STORES_KEY = "rice:admin:stores"
     AUDIT_KEY = "rice:admin:audit"
     METRICS_KEY = "rice:admin:metrics"
     
@@ -75,6 +76,19 @@ class AdminStore:
                     }
                 }
                 self.redis.set(self.USERS_KEY, json.dumps(default_users))
+            
+            # Initialize stores if not exist
+            if not self.redis.exists(self.STORES_KEY):
+                default_stores = {
+                    "public": {
+                        "id": "public",
+                        "name": "Public Index",
+                        "type": "production",
+                        "description": "Default public index",
+                        "created_at": datetime.now().isoformat()
+                    }
+                }
+                self.redis.set(self.STORES_KEY, json.dumps(default_stores))
             
             self._initialized = True
         except Exception as e:
@@ -240,6 +254,44 @@ class AdminStore:
             return False
         except Exception as e:
             logger.error(f"Failed to delete user: {e}")
+            return False
+    
+    # ============== Stores ==============
+
+    def get_stores(self) -> Dict[str, dict]:
+        """Get all stores."""
+        self._ensure_defaults()
+        try:
+            data = self.redis.get(self.STORES_KEY)
+            return json.loads(data) if data else {}
+        except Exception as e:
+            logger.error(f"Failed to get stores: {e}")
+            return {}
+
+    def set_store(self, store_id: str, store: dict) -> bool:
+        """Set a store."""
+        try:
+            stores = self.get_stores()
+            stores[store_id] = store
+            self.redis.set(self.STORES_KEY, json.dumps(stores))
+            self.log_audit("store_updated", f"Store {store_id} updated")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to set store: {e}")
+            return False
+
+    def delete_store(self, store_id: str) -> bool:
+        """Delete a store."""
+        try:
+            stores = self.get_stores()
+            if store_id in stores:
+                del stores[store_id]
+                self.redis.set(self.STORES_KEY, json.dumps(stores))
+                self.log_audit("store_deleted", f"Store {store_id} deleted")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Failed to delete store: {e}")
             return False
     
     # ============== Audit Log ==============

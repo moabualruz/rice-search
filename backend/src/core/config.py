@@ -15,11 +15,14 @@ class Settings(BaseSettings):
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
+    # Embedding Model (V3 Spec: Code-optimized)
+    EMBEDDING_MODEL: str = "jinaai/jina-embeddings-v2-base-code"
+    EMBEDDING_DIM: int = 768  # Jina code embeddings dimension
+
     # Hybrid Search (Phase 9)
     SPARSE_MODEL: str = "naver/splade-v3"
     SPARSE_ENABLED: bool = True
     RRF_K: int = 60
-    EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
 
     # MCP Protocol (Phase 10)
     MCP_ENABLED: bool = False
@@ -33,12 +36,20 @@ class Settings(BaseSettings):
     AST_LANGUAGES: List[str] = ["py", "js", "ts", "go", "rs", "java", "cpp"]
     AST_MAX_CHUNK_LINES: int = 200
 
-    # Reranking (REQ-SRCH-03)
+    # Reranking (REQ-SRCH-03 - V3 Spec)
     RERANK_ENABLED: bool = True
-    RERANK_MODEL: str = "BAAI/bge-reranker-base"
-    RERANK_TOP_K: int = 10  # Rerank top K results from initial retrieval
+    RERANK_MODEL: str = "jinaai/jina-reranker-v2-base-multilingual"
+    RERANK_TOP_K: int = 10
+
+    # Query Understanding (REQ-SRCH-01)
+    QUERY_ANALYSIS_ENABLED: bool = True
+    QUERY_MODEL: str = "microsoft/codebert-base"
+
+    # Hardware Acceleration
+    FORCE_GPU: bool = True  # Force GPU usage for all models/services if available
 
     class Config:
         env_file = ".env"
 
 settings = Settings()
+

@@ -150,8 +150,10 @@ export default function Home() {
         </div>
       </div>
       
-      {/* Footer Link to Admin */}
-      <div className="fixed bottom-4 right-4">
+      {/* Footer Links */}
+      <div className="fixed bottom-4 right-4 flex gap-4">
+         <a href="/stores" className="text-xs text-slate-600 hover:text-slate-400 transition-colors">Manage Stores</a>
+         <a href="/browse" className="text-xs text-slate-600 hover:text-slate-400 transition-colors">Browse Files</a>
          <a href="/admin" className="text-xs text-slate-600 hover:text-slate-400 transition-colors">Admin Dashboard &rarr;</a>
       </div>
     </main>
