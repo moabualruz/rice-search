@@ -52,15 +52,17 @@ def get_dense_model():
             
         logger.info(f"Loading dense model on {device}")
         
-        # Load model - initially loads on CPU
-        model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        # Load model directly on target device (Zero Copy)
+        # Load model directly on target device (Zero Copy)
+        # Use FP16 for GPU to save memory
+        model_kwargs = {"torch_dtype": torch.float16} if device == "cuda" else {}
         
-        # Move to target device and clear CPU copy
-        if device == "cuda":
-            model = model.to(device)
-            # Force garbage collection to free CPU tensors
-            gc.collect()
-            torch.cuda.empty_cache()
+        model = SentenceTransformer(
+            settings.EMBEDDING_MODEL, 
+            device=device,
+            trust_remote_code=True,
+            model_kwargs=model_kwargs
+        )
         
         return model
     

@@ -8,7 +8,7 @@ Enables dynamic GPU resource management (pause/resume).
 import logging
 import gc
 import torch
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 import psutil
 import subprocess
 
@@ -92,6 +92,22 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Failed to unload model {model_id}: {e}")
             return False
+
+    def unload_all_except(self, keep_ids: List[str]) -> int:
+        """
+        Unload all models except those in keep_ids.
+        Returns number of models unloaded.
+        """
+        count = 0
+        # Snapshot keys to avoid runtime modification issues during iteration
+        current_ids = list(self._models.keys())
+        for mid in current_ids:
+            if mid not in keep_ids:
+                # Only unload if currently loaded to report accurate count
+                if self._models[mid]["loaded"]:
+                    if self.unload_model(mid):
+                        count += 1
+        return count
 
     def load_model(self, model_id: str, loader_func: Callable[[], Any]) -> bool:
         """

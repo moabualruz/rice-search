@@ -87,11 +87,13 @@ class SparseEmbedder:
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             
             # Load model directly on target device
+            # Load model directly on target device
             if device_map:
                 model = AutoModelForMaskedLM.from_pretrained(
                     self.model_name,
                     device_map=device_map,
-                    low_cpu_mem_usage=True  # Avoid CPU copy
+                    low_cpu_mem_usage=True,  # Avoid CPU copy
+                    torch_dtype=torch.float16
                 )
             else:
                 model = AutoModelForMaskedLM.from_pretrained(self.model_name)
@@ -119,64 +121,62 @@ class SparseEmbedder:
     def embed(self, text: str) -> SparseVector:
         """
         Generate a sparse embedding for a single text.
-        
-        Args:
-            text: Input text to embed
-            
-        Returns:
-            SparseVector with indices (token IDs) and values (weights)
+        Delegates to embed_batch.
+        """
+        return self.embed_batch([text])[0]
+    
+    def embed_batch(self, texts: List[str]) -> List[SparseVector]:
+        """
+        Generate sparse embeddings for a batch of texts using vectorized inference.
         """
         self._load_model()
         with torch.no_grad():
-            # Tokenize
+            # Tokenize Batch (Auto padding)
             inputs = self.tokenizer(
-                text,
+                texts,
                 return_tensors="pt",
                 truncation=True,
+                padding=True,
                 max_length=512
             ).to(self.device)
             
             # Forward pass
             outputs = self.model(**inputs)
-            
-            # SPLADE aggregation: max pooling over sequence, then ReLU + log
-            # This produces sparse activations
             logits = outputs.logits  # (batch, seq_len, vocab_size)
+            
+            # Apply attention mask to ignore padding tokens during max pooling
+            # attention_mask is (batch, seq_len), unsqueeze to (batch, seq_len, 1)
+            attention_mask = inputs["attention_mask"].unsqueeze(-1)
+            # Set logits of padded tokens to negative infinity so they don't affect max
+            logits = logits + (1.0 - attention_mask) * -10000.0
             
             # Max pooling over sequence dimension
             max_logits, _ = torch.max(logits, dim=1)  # (batch, vocab_size)
             
             # SPLADE activation: log(1 + ReLU(x))
-            sparse_vec = torch.log(1 + torch.relu(max_logits))  # (batch, vocab_size)
+            sparse_vecs = torch.log(1 + torch.relu(max_logits))  # (batch, vocab_size)
             
-            # Get non-zero indices and values
-            sparse_vec = sparse_vec.squeeze(0)  # (vocab_size,)
-            non_zero_mask = sparse_vec > 0
-            indices = non_zero_mask.nonzero().squeeze(-1).cpu().tolist()
-            values = sparse_vec[non_zero_mask].cpu().tolist()
+            # Extract sparse vectors (CPU side)
+            results = []
+            sparse_vecs_cpu = sparse_vecs.cpu()
             
-            # Ensure indices is always a list
-            if isinstance(indices, int):
-                indices = [indices]
-            if isinstance(values, float):
-                values = [values]
+            for i in range(len(texts)):
+                vec = sparse_vecs_cpu[i]
+                non_zero_mask = vec > 0
+                
+                # Get indices and values
+                indices = non_zero_mask.nonzero().squeeze(-1).tolist()
+                values = vec[non_zero_mask].tolist()
+                
+                # Ensure types
+                if isinstance(indices, int):
+                    indices = [indices]
+                if isinstance(values, float):
+                    values = [values]
+                
+                results.append(SparseVector(indices=indices, values=values))
             
-            return SparseVector(indices=indices, values=values)
-    
-    def embed_batch(self, texts: List[str]) -> List[SparseVector]:
-        """
-        Generate sparse embeddings for a batch of texts.
-        
-        Args:
-            texts: List of input texts
-            
-        Returns:
-            List of SparseVector objects
-        """
-        results = []
-        for text in texts:
-            results.append(self.embed(text))
-        return results
+            return results
     
     def to_qdrant_format(self, sparse_vec: SparseVector) -> Dict:
         """

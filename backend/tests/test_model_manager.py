@@ -87,3 +87,73 @@ class TestModelManager:
         
         assert usage["available"] is False
         assert usage["used_mb"] == 0
+
+    def test_unload_all_except(self):
+        """Test exclusive unloading."""
+        manager = ModelManager()
+        
+        # Load 3 models
+        def mock_loader():
+            # Mock object with .cpu() method to simulate unloadable model
+            m = Mock()
+            m.cpu.return_value = m
+            return m
+
+        manager.load_model("m1", mock_loader)
+        manager.load_model("m2", mock_loader)
+        manager.load_model("m3", mock_loader)
+        
+        # Unload all except m1
+        count = manager.unload_all_except(["m1"])
+        
+        assert count == 2
+        assert manager.get_model_status("m1")["loaded"] is True
+        assert manager.get_model_status("m2")["loaded"] is False
+        assert manager.get_model_status("m3")["loaded"] is False
+
+        # Unload all except m1 (again) -> 0
+        assert manager.unload_all_except(["m1"]) == 0
+        
+        # Unload all -> m1 unloads
+        count = manager.unload_all_except([])
+        assert count == 1
+        assert manager.get_model_status("m1")["loaded"] is False
+
+    @patch("src.services.model_manager.torch.cuda.is_available", return_value=False)
+    @patch("src.services.model_manager.gc.collect")
+    @patch("src.services.model_manager.torch.cuda.empty_cache")
+    def test_unload_cpu_logic(self, mock_empty_cache, mock_gc, mock_cuda):
+        """Test unload logic for CPU-only scenario."""
+        manager = ModelManager()
+        
+        # Mock model with .cpu() method
+        mock_model = Mock()
+        mock_model.cpu = Mock()
+        
+        manager.load_model("cpu_model", lambda: mock_model)
+        manager.unload_model("cpu_model")
+        
+        # Assertions
+        mock_model.cpu.assert_called_once()
+        mock_gc.assert_called_once()
+        mock_empty_cache.assert_not_called() # Should NOT be called on CPU
+
+    @patch("src.services.model_manager.torch.cuda.is_available", return_value=True)
+    @patch("src.services.model_manager.gc.collect")
+    @patch("src.services.model_manager.torch.cuda.empty_cache")
+    def test_unload_gpu_logic(self, mock_empty_cache, mock_gc, mock_cuda):
+        """Test unload logic for GPU scenario (verifying cleanup)."""
+        manager = ModelManager()
+        
+        # Mock model
+        mock_model = Mock()
+        # Mock behavior: .cpu() moves it to cpu
+        mock_model.cpu = Mock()
+        
+        manager.load_model("gpu_model", lambda: mock_model)
+        manager.unload_model("gpu_model")
+        
+        # Assertions
+        mock_model.cpu.assert_called_once() # Ensure it was moved to CPU first
+        mock_gc.assert_called_once()
+        mock_empty_cache.assert_called_once() # Verify GPU cache cleared
