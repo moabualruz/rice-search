@@ -71,6 +71,18 @@ class AdminStore:
                 }
                 self.redis.set(self.MODELS_KEY, json.dumps(default_models))
             
+            # Initialize config if not exist
+            if not self.redis.exists(self.CONFIG_KEY):
+                default_config = {
+                    "sparse_enabled": settings.SPARSE_ENABLED,
+                    "rrf_k": settings.RRF_K,
+                    "ast_parsing_enabled": settings.AST_PARSING_ENABLED,
+                    "query_analysis_enabled": settings.QUERY_ANALYSIS_ENABLED,
+                    "worker_pool": "threads",  # solo, threads, or gevent
+                    "worker_concurrency": 10   # Number of concurrent workers
+                }
+                self.redis.set(self.CONFIG_KEY, json.dumps(default_config))
+            
             # Initialize users if not exist
             if not self.redis.exists(self.USERS_KEY):
                 default_users = {

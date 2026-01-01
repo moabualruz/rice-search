@@ -33,7 +33,9 @@ class ConfigUpdate(BaseModel):
     sparse_enabled: Optional[bool] = None
     rrf_k: Optional[int] = None
     ast_parsing_enabled: Optional[bool] = None
-    mcp_enabled: Optional[bool] = None
+    query_analysis_enabled: Optional[bool] = None
+    worker_pool: Optional[str] = None
+    worker_concurrency: Optional[int] = None
 
 class UserCreate(BaseModel):
     email: str
@@ -171,8 +173,24 @@ async def update_config(update: ConfigUpdate):
         store.set_config("mcp_enabled", update.mcp_enabled)
         updated.append(f"mcp_enabled={update.mcp_enabled}")
     
+    if update.query_analysis_enabled is not None:
+        store.set_config("query_analysis_enabled", update.query_analysis_enabled)
+        updated.append(f"query_analysis_enabled={update.query_analysis_enabled}")
+    
+    if update.worker_pool is not None:
+        if update.worker_pool not in ["solo", "threads", "gevent"]:
+            raise HTTPException(status_code=400, detail="worker_pool must be solo, threads, or gevent")
+        store.set_config("worker_pool", update.worker_pool)
+        updated.append(f"worker_pool={update.worker_pool}")
+    
+    if update.worker_concurrency is not None:
+        if update.worker_concurrency < 1 or update.worker_concurrency > 100:
+            raise HTTPException(status_code=400, detail="worker_concurrency must be between 1 and 100")
+        store.set_config("worker_concurrency", update.worker_concurrency)
+        updated.append(f"worker_concurrency={update.worker_concurrency}")
+    
     if not updated:
-        return {"message": "No changes requested"}
+        return {"message": "No changes made"}
     
     # Auto-save snapshot before changes
     store.save_config_snapshot(f"before_update_{datetime.now().strftime('%H%M%S')}")

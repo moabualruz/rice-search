@@ -64,6 +64,7 @@ class SparseEmbedder:
         
         def loader():
             import torch
+            import gc
             from transformers import AutoTokenizer, AutoModelForMaskedLM
             from src.services.admin.admin_store import get_admin_store
             from src.core.device import get_device
@@ -73,16 +74,30 @@ class SparseEmbedder:
             models = store.get_models()
             gpu_enabled = models.get("sparse", {}).get("gpu_enabled", True)
             
-            if gpu_enabled:
-                device = get_device()
+            if gpu_enabled and torch.cuda.is_available():
+                device = "cuda"
+                device_map = "cuda:0"  # Load directly on GPU
             else:
                 device = "cpu"
+                device_map = None
             
             logger.info(f"Loading SPLADE model: {self.model_name} on {device}")
+            
+            # Load tokenizer (always CPU, small memory footprint)
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            model = AutoModelForMaskedLM.from_pretrained(self.model_name)
-            model.to(device)
+            
+            # Load model directly on target device
+            if device_map:
+                model = AutoModelForMaskedLM.from_pretrained(
+                    self.model_name,
+                    device_map=device_map,
+                    low_cpu_mem_usage=True  # Avoid CPU copy
+                )
+            else:
+                model = AutoModelForMaskedLM.from_pretrained(self.model_name)
+            
             model.eval()
+            
             return {"model": model, "tokenizer": tokenizer}
             
         manager.load_model("sparse", loader)

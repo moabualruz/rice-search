@@ -32,21 +32,37 @@ def get_dense_model():
     manager = get_model_manager()
     
     def loader():
+        import gc
+        import torch
+        import logging
         from src.core.device import get_device
         from src.services.admin.admin_store import get_admin_store
+        
+        logger = logging.getLogger(__name__)
         
         # Check if GPU is enabled for this model
         store = get_admin_store()
         models = store.get_models()
         gpu_enabled = models.get("dense", {}).get("gpu_enabled", True)
         
-        if gpu_enabled:
-            device = get_device()
+        if gpu_enabled and torch.cuda.is_available():
+            device = "cuda"
         else:
             device = "cpu"
             
         logger.info(f"Loading dense model on {device}")
-        return SentenceTransformer(settings.EMBEDDING_MODEL, device=device)
+        
+        # Load model - initially loads on CPU
+        model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        
+        # Move to target device and clear CPU copy
+        if device == "cuda":
+            model = model.to(device)
+            # Force garbage collection to free CPU tensors
+            gc.collect()
+            torch.cuda.empty_cache()
+        
+        return model
     
     # Register/Load
     manager.load_model("dense", loader)

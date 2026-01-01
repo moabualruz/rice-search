@@ -46,6 +46,8 @@ class Reranker:
         manager = get_model_manager()
         
         def loader():
+            import gc
+            import torch
             from src.core.device import get_device
             from src.services.admin.admin_store import get_admin_store
             
@@ -60,7 +62,17 @@ class Reranker:
                 device = "cpu"
                 
             logger.info(f"Loading reranker model: {self.model_name} on {device}")
-            return CrossEncoder(self.model_name, device=device)
+            
+            # Load model
+            model = CrossEncoder(self.model_name, device=device)
+            
+            # Clear CPU memory if on GPU
+            if device == "cuda":
+                gc.collect()
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            
+            return model
         
         manager.load_model("reranker", loader)
         status = manager.get_model_status("reranker")
