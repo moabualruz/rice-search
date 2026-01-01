@@ -146,9 +146,9 @@ class Retriever:
         return results[:limit]
     
     @staticmethod
-    def dense_search(query: str, limit: int = 5, org_id: str = "public", language_filter: str = None) -> List[Dict]:
+    def dense_search(query: str, limit: int = 5, org_id: str = "public", language: str = None) -> List[Dict]:
         """
-        Dense-only semantic search.
+        Dense-only semantic search with optional language filter.
         """
         # 1. Encode query
         model = get_dense_model()
@@ -162,11 +162,11 @@ class Retriever:
             )
         ]
         
-        if language_filter:
+        if language:
             filter_conditions.append(
                 FieldCondition(
                     key="language",
-                    match=MatchValue(value=language_filter)
+                    match=MatchValue(value=language)
                 )
             )
         
@@ -185,6 +185,7 @@ class Retriever:
 
         # 4. Format results
         return Retriever._format_results(results)
+
     
     @staticmethod
     def hybrid_search(

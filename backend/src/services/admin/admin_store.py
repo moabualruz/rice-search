@@ -189,6 +189,9 @@ class AdminStore:
             "mcp_tcp_port": settings.MCP_TCP_PORT,
             "rerank_enabled": overrides.get("rerank_enabled", settings.RERANK_ENABLED),
             "rerank_model": settings.RERANK_MODEL,
+            "query_analysis_enabled": overrides.get("query_analysis_enabled", getattr(settings, "QUERY_ANALYSIS_ENABLED", False)),
+            "worker_pool": overrides.get("worker_pool", "threads"),
+            "worker_concurrency": overrides.get("worker_concurrency", 10),
             "qdrant_url": settings.QDRANT_URL,
             "redis_url": settings.REDIS_URL
         }

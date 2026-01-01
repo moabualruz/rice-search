@@ -28,17 +28,25 @@ def clean_redis(test_redis_client):
     yield test_redis_client
 
 
-@pytest.fixture(scope="session")
-def api_client():
-    """FastAPI test client."""
+@pytest.fixture(scope="function")
+def api_client(admin_store):
+    """FastAPI test client with mock overrides."""
+    from src.services.admin.admin_store import get_admin_store
+    
+    app.dependency_overrides[get_admin_store] = lambda: admin_store
+    
     with TestClient(app) as client:
         yield client
+    
+    app.dependency_overrides.clear()
 
 
 @pytest.fixture
 def admin_store(clean_redis):
     """Admin store with clean Redis."""
-    store = AdminStore(redis_client=clean_redis)
+    store = AdminStore()
+    store._redis = clean_redis  # Inject test Redis client
+    store._ensure_defaults()
     return store
 
 

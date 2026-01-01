@@ -9,7 +9,10 @@ from src.services.admin.admin_store import get_admin_store
 
 logger = logging.getLogger(__name__)
 
-async def get_current_user(x_user_id: Optional[str] = Header(None, alias="X-User-ID")) -> dict:
+async def get_current_user(
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID"),
+    store = Depends(get_admin_store)
+) -> dict:
     """
     Get current user from X-User-ID header (simulated auth for now).
     Verifies user exists in Redis.
@@ -26,7 +29,7 @@ async def get_current_user(x_user_id: Optional[str] = Header(None, alias="X-User
             detail="Missing X-User-ID header"
         )
 
-    store = get_admin_store()
+    # store is injected via Depends
     users = store.get_users()
     
     if x_user_id not in users:

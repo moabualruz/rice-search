@@ -34,6 +34,7 @@ class ConfigUpdate(BaseModel):
     rrf_k: Optional[int] = None
     ast_parsing_enabled: Optional[bool] = None
     query_analysis_enabled: Optional[bool] = None
+    mcp_enabled: Optional[bool] = None
     worker_pool: Optional[str] = None
     worker_concurrency: Optional[int] = None
 

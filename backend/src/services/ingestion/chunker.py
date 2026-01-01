@@ -24,3 +24,11 @@ class DocumentChunker:
                 "chunk_index": i
             })
         return chunks
+
+def chunk_text(text: str, chunk_size: int = 1000) -> List[str]:
+    """
+    Standalone function to chunk text (wrapper for compatibility).
+    """
+    splitter = DocumentChunker(chunk_size=chunk_size, chunk_overlap=0)
+    chunks = splitter.chunk_text(text, {})
+    return [c["content"] for c in chunks]
