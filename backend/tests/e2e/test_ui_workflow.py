@@ -1,4 +1,5 @@
 import pytest
+import re
 from playwright.sync_api import Page, expect
 import os
 
@@ -26,14 +27,14 @@ def test_search_interaction(page: Page):
     # Default is RAG "Ask AI"
     rag_btn = page.get_by_role("button", name="Ask AI")
     # Verify it has active class (purple)
-    expect(rag_btn).to_have_class(lambda s: "bg-purple-500" in s)
+    expect(rag_btn).to_have_class(re.compile(r"bg-purple-500"))
     
     # 3. Switch to Search Mode
     search_btn = page.get_by_role("button", name="Search")
     search_btn.click()
     
     # Verify active class changes (indigo)
-    expect(search_btn).to_have_class(lambda s: "bg-indigo-500" in s)
+    expect(search_btn).to_have_class(re.compile(r"bg-indigo-500"))
     
     # Verify placeholder changes
     input_field = page.get_by_placeholder("Search documents...")

@@ -17,10 +17,9 @@ def test_frontend_loads(page: Page):
         pytest.fail(f"Failed to load frontend at {base_url}: {e}")
 
     # Check title
-    # Note: You might need to adjust this depending on actual metadata
     # Expect 'rice ?earch' branding
     # Note: ? is a regex special character, so we escape it
-    try:
-        expect(page).to_have_title(re.compile(r"rice \?earch", re.IGNORECASE))
-    except AssertionError:
-        expect(page.locator("body")).to_contain_text("rice ?earch")
+    expect(page).to_have_title(re.compile(r"rice \?earch", re.IGNORECASE))
+    
+    # Check body for branding as fallback verification (optional, but good for debugging)
+    # expect(page.locator("body")).to_contain_text("rice ?earch")
