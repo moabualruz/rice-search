@@ -2,7 +2,7 @@
 Ingestion Tasks.
 Delegates to Indexer service.
 """
-from src.worker import celery_app
+from src.worker.celery_app import app as celery_app
 from src.db.qdrant import get_qdrant_client
 from src.core.config import settings
 from sentence_transformers import SentenceTransformer

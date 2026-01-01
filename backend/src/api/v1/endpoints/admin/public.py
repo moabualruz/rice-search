@@ -404,7 +404,7 @@ async def get_system_status():
 @router.post("/system/rebuild-index", dependencies=[Depends(requires_role("admin"))])
 async def rebuild_index():
     """Trigger index rebuild via Celery."""
-    from src.worker import celery_app
+    from src.worker.celery_app import app as celery_app
     
     store = get_admin_store()
     store.log_audit("rebuild_index", "Index rebuild triggered", "admin")

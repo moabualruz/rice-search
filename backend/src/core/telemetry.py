@@ -1,25 +1,35 @@
+from fastapi import FastAPI
 from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import (
-    BatchSpanProcessor,
-    ConsoleSpanExporter,
-    SimpleSpanProcessor,
-)
+from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+from opentelemetry.instrumentation.requests import RequestsInstrumentor
 
-def setup_telemetry(service_name: str = "rice-search-backend"):
+def setup_telemetry(app: FastAPI, service_name: str, endpoint: str):
     """
-    Configures OpenTelemetry to export traces to console.
+    Sets up OpenTelemetry tracing with OTLP exporter if enabled.
     """
-    resource = Resource.create({"service.name": service_name})
+    if not endpoint:
+        return
+
+    # Create Resource
+    resource = Resource(attributes={
+        "service.name": service_name
+    })
+
+    # Setup Provider
     provider = TracerProvider(resource=resource)
-    
-    # Export to Console for MVP (visible in Docker logs)
-    # Use SimpleSpanProcessor for immediate output in dev/debug
-    processor = SimpleSpanProcessor(ConsoleSpanExporter())
-    provider.add_span_processor(processor)
-    
-    # Sets the global default tracer provider
     trace.set_tracer_provider(provider)
+
+    # Setup Exporter (OTLP gRPC)
+    exporter = OTLPSpanExporter(endpoint=endpoint, insecure=True)
+    processor = BatchSpanProcessor(exporter)
+    provider.add_span_processor(processor)
+
+    # Instrument FastAPI
+    FastAPIInstrumentor.instrument_app(app)
     
-    return provider
+    # Instrument Requests
+    RequestsInstrumentor().instrument()

@@ -17,7 +17,12 @@ async def get_current_user(
     Get current user from X-User-ID header (simulated auth for now).
     Verifies user exists in Redis.
     """
+    print(f"DEBUG_AUTH: x_user_id={x_user_id}")
     if not x_user_id:
+        # Check all headers manually if getting none
+        # from fastapi import Request
+        # but here we rely on Header
+        print("DEBUG_AUTH: Missing Header")
         # Default to anonymous/viewer if no header? 
         # Or force login? For admin API, let's enforce it or default to a read-only viewer.
         # For now, let's assume if missing, it's strictly unauthorized for admin actions.

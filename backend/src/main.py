@@ -1,14 +1,20 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import time
+import os
 from src.core.config import settings
 from src.db.qdrant import get_qdrant_client
-from src.worker import celery_app, echo_task
+from src.worker.celery_app import app as celery_app, echo_task
+from src.core.telemetry import setup_telemetry
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
+
+# Setup Telemetry (if Jaeger endpoint is provided)
+# Using http://jaeger:4317 inside docker network
+setup_telemetry(app, "rice-search-api", os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4317"))
 
 from src.api.v1.endpoints import ingest, search, files, stores
 from src.api.v1.endpoints import metrics

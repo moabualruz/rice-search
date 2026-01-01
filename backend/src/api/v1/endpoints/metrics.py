@@ -96,3 +96,9 @@ def get_metrics_text() -> str:
 async def prometheus_metrics():
     """Prometheus metrics endpoint."""
     return get_metrics_text()
+
+
+@router.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "ok"}

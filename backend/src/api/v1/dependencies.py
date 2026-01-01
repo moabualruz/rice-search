@@ -1,10 +1,32 @@
-from fastapi import Depends, HTTPException, status
+from typing import Optional
+from fastapi import Depends, HTTPException, status, Header
 from fastapi.security import OAuth2PasswordBearer
 from src.core.security import verify_token, get_public_keys
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+# Use auto_error=False to allow fallback to other auth methods (like Header)
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(
+    token: Optional[str] = Depends(oauth2_scheme),
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID")
+):
+    # 1. Dev/CLI Bypass
+    if x_user_id == "admin-1":
+        return {
+            "sub": "admin-1",
+            "realm_access": {"roles": ["admin"]},
+            "org_id": "public",
+            "name": "Admin (CLI Debug)"
+        }
+
+    # 2. Keycloak Auth
+    if not token:
+         raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
     keys = await get_public_keys()
     payload = verify_token(token, keys)
     

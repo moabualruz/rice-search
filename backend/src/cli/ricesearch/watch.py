@@ -80,10 +80,14 @@ class IndexHandler(FileSystemEventHandler):
         console.print(f"[blue]Indexing:[/blue] {path}")
         result = self.client.index_file(path, self.org_id)
         
-        if result.get("status") == "success":
+        if result.get("status") in ("success", "queued"):
             self.file_hashes[str(path)] = new_hash
-            chunks = result.get("chunks_indexed", 0)
-            console.print(f"[green]✓ Indexed {chunks} chunks[/green]")
+            if result.get("status") == "queued":
+                task_id = result.get("task_id", "unknown")
+                console.print(f"[green]✓ Queued (Task: {task_id})[/green]")
+            else:
+                chunks = result.get("chunks_indexed", 0)
+                console.print(f"[green]✓ Indexed {chunks} chunks[/green]")
         else:
             msg = result.get("message", "Unknown error")
             console.print(f"[red]✗ Failed: {msg}[/red]")

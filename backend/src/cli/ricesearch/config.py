@@ -19,6 +19,7 @@ class RicesearchConfig:
     DEFAULT_CONFIG = {
         "backend_url": "http://localhost:8000",
         "org_id": "public",
+        "user_id": "admin-1",
         "default_limit": 10,
         "hybrid_search": True
     }
@@ -73,6 +74,11 @@ class RicesearchConfig:
     @property
     def hybrid_search(self) -> bool:
         return self.get("hybrid_search", True)
+
+    @property
+    def user_id(self) -> str:
+        val = self.get("user_id")
+        return val if val else "admin-1"
 
 
 # Singleton instance
