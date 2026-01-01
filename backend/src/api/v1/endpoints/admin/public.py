@@ -67,10 +67,36 @@ async def get_model(model_id: str):
 
 
 @router.put("/models/{model_id}", dependencies=[Depends(requires_role("admin"))])
-        "message": f"Model {model_id} updated",
-        "model": model,
-        "restart_required": True
-    }
+async def update_model(model_id: str, updates: dict):
+    """
+    Update a model configuration and apply changes at runtime.
+    Supports toggling gpu_enabled and active status.
+    """
+    store = get_admin_store()
+    models = store.get_models()
+    
+    if model_id not in models:
+        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
+    
+    old_model = models[model_id]
+    
+    # Check if gpu_enabled or active changed
+    gpu_changed = "gpu_enabled" in updates and updates["gpu_enabled"] != old_model.get("gpu_enabled")
+    active_changed = "active" in updates and updates["active"] != old_model.get("active")
+    
+    # Update in store
+    updated = {**old_model, **updates}
+    store.set_model(model_id, updated)
+    
+    # Apply runtime changes
+    from src.services.model_manager import get_model_manager
+    manager = get_model_manager()
+    
+    if gpu_changed or active_changed:
+        # Unload model to force reload with new settings
+        manager.unload_model(model_id)
+        
+    return {"message": "Model updated", "model": updated}
 
 
 @router.post("/models", dependencies=[Depends(requires_role("admin"))])
