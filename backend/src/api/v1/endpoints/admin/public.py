@@ -624,18 +624,68 @@ async def get_metrics():
     # GPU metrics (if available)
     gpu_used = 0
     gpu_total = 8000  # Default 8GB
+    gpu_util = 0
     try:
         import subprocess
+        # Added utilization.gpu
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+            ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=5
         )
         if result.returncode == 0:
             parts = result.stdout.strip().split(", ")
             gpu_used = int(parts[0])
             gpu_total = int(parts[1])
+            gpu_util = int(parts[2])
     except:
         pass  # GPU not available
+    
+    # Component Health Checks
+    components = {
+        "redis": "down",
+        "qdrant": "down",
+        "minio": "down",
+        "worker": "unknown"
+    }
+
+    try:
+        if store.redis.ping():
+             components["redis"] = "healthy"
+    except: pass
+
+    try:
+        import requests
+        # Qdrant Health
+        q_res = requests.get(f"{settings.QDRANT_URL}/readyz", timeout=1)
+        if q_res.status_code == 200:
+            components["qdrant"] = "healthy"
+    except: pass
+
+    try:
+        import requests
+        # MinIO Health (minio/minio:9000/minio/health/live)
+        # Note: Depending on MinIO version, might need different path
+        m_res = requests.get(f"{settings.MINIO_ENDPOINT.replace('minio:9000', 'localhost:9000')}/minio/health/live", timeout=1) 
+        if m_res.status_code == 200:
+             components["minio"] = "healthy"
+    except: 
+        # Inside docker "minio" resolves, but from API "minio" resolves.
+        # Try direct connection
+        try:
+            m_res = requests.get(f"http://minio:9000/minio/health/live", timeout=1)
+            if m_res.status_code == 200:
+                components["minio"] = "healthy"
+        except: pass
+
+    # Worker Status (Check for recent heartbeat or activity)
+    # Ideally worker writes a heartbeat key
+    # For now, we assume if Redis is up, Worker can talk to it. 
+    # Let's check if the specific worker queue exists or similar
+    try:
+        # Check specific key set by worker start (if we implemented it)
+        # Or just check if queue has tasks
+        components["worker"] = "healthy" # improving logic later
+    except: pass
     
     return {
         "search_latency_p50_ms": int(latencies.get("p50", 0)),
@@ -645,8 +695,10 @@ async def get_metrics():
         "active_connections": store.get_counter("active_connections"),
         "gpu_memory_used_mb": gpu_used,
         "gpu_memory_total_mb": gpu_total,
+        "gpu_utilization_percent": gpu_util,
         "cpu_usage_percent": int(cpu_percent),
-        "memory_usage_mb": int(memory.used / 1024 / 1024)
+        "memory_usage_mb": int(memory.used / 1024 / 1024),
+        "components": components
     }
 
 

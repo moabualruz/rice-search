@@ -73,9 +73,8 @@ class QueryAnalyzer:
     SYMBOL_PATTERN = re.compile(r'\b([A-Z][a-zA-Z0-9]*|[a-z_][a-z0-9_]*(?:_[a-z0-9_]+)+)\b')
     
     def __init__(self):
-        self._model = None
-        self._tokenizer = None
-        self._model_loaded = False
+        # Stateless
+        pass
     
     @classmethod
     def get_instance(cls) -> "QueryAnalyzer":
@@ -84,20 +83,24 @@ class QueryAnalyzer:
             cls._instance = cls()
         return cls._instance
     
-    def _load_model(self):
-        """Lazy load CodeBERT model (optional, for advanced analysis)."""
-        if self._model_loaded or not settings.QUERY_ANALYSIS_ENABLED:
-            return
+    def _get_model(self):
+        """Get model tuple (model, tokenizer) from manager."""
+        if not settings.QUERY_ANALYSIS_ENABLED:
+            return None
+            
+        from src.services.model_manager import get_model_manager
+        manager = get_model_manager()
         
-        try:
+        def loader():
             from transformers import AutoTokenizer, AutoModel
             logger.info(f"Loading query model: {settings.QUERY_MODEL}")
-            self._tokenizer = AutoTokenizer.from_pretrained(settings.QUERY_MODEL)
-            self._model = AutoModel.from_pretrained(settings.QUERY_MODEL)
-            self._model_loaded = True
-            logger.info("Query model loaded successfully")
-        except Exception as e:
-            logger.warning(f"Could not load query model: {e}. Using pattern-based analysis.")
+            tokenizer = AutoTokenizer.from_pretrained(settings.QUERY_MODEL)
+            model = AutoModel.from_pretrained(settings.QUERY_MODEL)
+            # Query model usually small, keep on CPU or auto
+            return {"model": model, "tokenizer": tokenizer}
+            
+        manager.load_model("query_analyzer", loader)
+        return manager.get_model_instance("query_analyzer")
     
     def analyze(self, query: str) -> QueryAnalysis:
         """

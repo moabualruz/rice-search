@@ -59,13 +59,18 @@ def get_dense_model():
         
         model_kwargs = {"torch_dtype": torch.float16} if device == "cuda" else {}
         
+        # Load model on CPU first to avoid meta-tensor issues
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(
             settings.EMBEDDING_MODEL, 
-            device=device,
+            device="cpu", # Force CPU load
             trust_remote_code=True,
             model_kwargs=model_kwargs
         )
+        
+        # Move to target device
+        if device != "cpu":
+            model.to(device)
         
         return model
     

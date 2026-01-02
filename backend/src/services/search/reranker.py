@@ -27,8 +27,6 @@ class Reranker:
             model_name: HuggingFace model name for cross-encoder
         """
         self.model_name = model_name or settings.RERANK_MODEL
-        self.model = None # type: ignore
-        self._loaded = False
     
     @classmethod
     def get_instance(cls) -> "Reranker":
@@ -37,11 +35,8 @@ class Reranker:
             cls._instance = cls()
         return cls._instance
     
-    def _load_model(self):
-        """Lazy load the cross-encoder model via ModelManager."""
-        if self._loaded:
-            return
-        
+    def _get_model(self):
+        """Get the model instance from ModelManager, loading it if necessary."""
         from src.services.model_manager import get_model_manager
         manager = get_model_manager()
         
@@ -65,7 +60,12 @@ class Reranker:
             logger.info(f"Loading reranker model: {self.model_name} on {device}")
             
             # Load model
-            model = CrossEncoder(self.model_name, device=device, trust_remote_code=True)
+            # Load model on CPU first
+            model = CrossEncoder(self.model_name, device="cpu", trust_remote_code=True)
+            
+            if device != "cpu":
+                 model.model.to(device)
+                 model._target_device = torch.device(device)
             
             # Clear CPU memory if on GPU
             if device == "cuda":
@@ -75,16 +75,9 @@ class Reranker:
             
             return model
         
+        # Ensure loaded using Manager
         manager.load_model("reranker", loader)
-        status = manager.get_model_status("reranker")
-        
-        if status["loaded"]:
-            self.model = manager._models["reranker"]["instance"]
-            self._loaded = True
-            logger.info("Reranker model loaded successfully")
-        else:
-            logger.error("Failed to load reranker model")
-            # Don't raise here, stick to loaded=False so rerank() handles it
+        return manager.get_model_instance("reranker")
             
     def rerank(
         self,
@@ -95,15 +88,6 @@ class Reranker:
     ) -> List[Dict[str, Any]]:
         """
         Rerank search results using cross-encoder.
-        
-        Args:
-            query: Original search query
-            results: List of search results with 'text' field
-            top_k: Number of results to return (default: all)
-            score_threshold: Minimum rerank score (default: None)
-            
-        Returns:
-            Reranked results with updated scores
         """
         if not results:
             return results
@@ -112,14 +96,13 @@ class Reranker:
             return results
         
         try:
-            # Lazy load model
-            self._load_model()
+            # Get model from manager (ephemeral reference)
+            model = self._get_model()
             
-            if self.model is None:
+            if model is None:
                 logger.warning("Reranker model not available, returning original results")
                 return results
         
-            # Prepare pairs for cross-encoder
             # Prepare pairs for cross-encoder
             pairs = []
             for result in results:
@@ -129,7 +112,7 @@ class Reranker:
                 pairs.append((query, text))
             
             # Get cross-encoder scores
-            scores = self.model.predict(pairs)
+            scores = model.predict(pairs)
             
             # Attach scores and sort
             scored_results = []
@@ -164,23 +147,12 @@ class Reranker:
             return results
     
     def score_pair(self, query: str, text: str) -> float:
-        """
-        Score a single query-text pair.
-        
-        Args:
-            query: Search query
-            text: Document text
-            
-        Returns:
-            Relevance score
-        """
-        self._load_model()
-        
-        if self.model is None:
-            return 0.0
-        
+        """Score a single query-text pair."""
         try:
-            score = self.model.predict([(query, text)])[0]
+            model = self._get_model()
+            if model is None:
+                return 0.0
+            score = model.predict([(query, text)])[0]
             return float(score)
         except Exception as e:
             logger.error(f"Pair scoring failed: {e}")

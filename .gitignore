@@ -76,3 +76,7 @@ __pycache__/
 
 # Next.js cache
 .next/
+
+# Rust / Client
+client/target/
+client/Cargo.lock

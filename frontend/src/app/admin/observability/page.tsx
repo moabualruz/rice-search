@@ -17,8 +17,10 @@ interface Metrics {
   active_connections: number;
   gpu_memory_used_mb: number;
   gpu_memory_total_mb: number;
+  gpu_utilization_percent: number;
   cpu_usage_percent: number;
   memory_usage_mb: number;
+  components: Record<string, string>;
 }
 
 const API_BASE = 'http://localhost:8000/api/v1/admin/public';
@@ -48,8 +50,8 @@ export default function ObservabilityPage() {
 
   useEffect(() => {
     fetchData();
-    // Refresh every 10 seconds
-    const interval = setInterval(fetchData, 10000);
+    // Refresh every 5 seconds for quicker updates
+    const interval = setInterval(fetchData, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -60,7 +62,7 @@ export default function ObservabilityPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Observability</h1>
-          <p className="text-slate-400">System metrics and logs (auto-refreshing)</p>
+          <p className="text-slate-400">Real-time system health and metrics</p>
         </div>
         <button 
           onClick={fetchData}
@@ -70,7 +72,20 @@ export default function ObservabilityPage() {
         </button>
       </div>
 
+      {/* Component Health */}
+      <h2 className="text-xl font-semibold text-white mb-4">Service Status</h2>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {['redis', 'qdrant', 'minio', 'worker'].map((component) => (
+            <ComponentCard 
+                key={component}
+                label={component.charAt(0).toUpperCase() + component.slice(1)}
+                status={metrics?.components?.[component] || 'unknown'}
+            />
+        ))}
+      </div>
+
       {/* Metrics Overview */}
+      <h2 className="text-xl font-semibold text-white mb-4">Performance</h2>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
         <MetricCard 
           label="Search P95" 
@@ -83,9 +98,9 @@ export default function ObservabilityPage() {
           status="good" 
         />
         <MetricCard 
-          label="GPU Memory" 
-          value={`${((metrics?.gpu_memory_used_mb ?? 0) / 1024).toFixed(1)} GB`} 
-          status={metrics && metrics.gpu_memory_used_mb > 6000 ? 'warning' : 'good'} 
+          label="GPU Utilization" 
+          value={`${metrics?.gpu_utilization_percent ?? 0}%`} 
+          status="good" 
         />
         <MetricCard 
           label="Connections" 
@@ -182,6 +197,19 @@ export default function ObservabilityPage() {
       </div>
     </div>
   );
+}
+
+function ComponentCard({ label, status }: { label: string; status: string }) {
+    const isHealthy = status === 'healthy';
+    return (
+        <div className="bg-slate-800 rounded-xl p-4 border border-slate-700 flex items-center justify-between">
+            <span className="text-slate-300 font-medium">{label}</span>
+            <span className={`flex items-center gap-2 text-sm font-semibold capitalize ${isHealthy ? 'text-green-400' : 'text-red-400'}`}>
+                <span className={`w-2 h-2 rounded-full ${isHealthy ? 'bg-green-400 animate-pulse' : 'bg-red-400'}`} />
+                {status}
+            </span>
+        </div>
+    );
 }
 
 function MetricCard({ label, value, status }: { label: string; value: string; status: 'good' | 'warning' | 'error' }) {

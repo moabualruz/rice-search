@@ -18,7 +18,12 @@ class DocumentParser:
             return text_content
         except Exception as e:
             # Fallback for simple text files if Unstructured fails or missing dep
-            if file_path.endswith((".txt", ".md", ".py", ".js", ".go")):
+            # Try to read as plain text regardless of extension
+            try:
                 with open(file_path, "r", encoding="utf-8") as f:
                     return f.read()
-            raise e
+            except UnicodeDecodeError:
+                # If it's not text, then we genuinely can't parse it
+                raise e
+            except Exception:
+                raise e

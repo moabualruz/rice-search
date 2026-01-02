@@ -20,9 +20,7 @@ class SparseEmbedder:
     
     def __init__(self, model_name: str = None):
         self.model_name = model_name or settings.SPARSE_MODEL
-        self.model = None
-        self.tokenizer = None
-        self._loaded = False
+        # No persistent checking
         
     @classmethod
     def get_instance(cls) -> "SparseEmbedder":
@@ -30,25 +28,20 @@ class SparseEmbedder:
             cls._instance = cls()
         return cls._instance
         
-    def _load_model(self):
-        """Lazy load model via ModelManager."""
-        if self._loaded:
-            return
-            
+    def _get_model(self):
+        """Get model tuple (model, tokenizer, device) from manager."""
+        from src.services.model_manager import get_model_manager
         manager = get_model_manager()
         
         def loader():
             import gc
             logger.info(f"Loading sparse model: {self.model_name}")
-            
-            # Determine device (CPU preferred for sparse usually, unless batch)
-            # But prompt says "GPU support via Docker".
-            # Check availability
             import torch
             from transformers import AutoTokenizer, AutoModelForMaskedLM
             
             device = "cuda" if torch.cuda.is_available() and settings.FORCE_GPU else "cpu"
             
+            # Explicitly load on CPU (default) then move
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
             model = AutoModelForMaskedLM.from_pretrained(self.model_name)
             model.to(device)
@@ -56,51 +49,44 @@ class SparseEmbedder:
             
             return {"model": model, "tokenizer": tokenizer, "device": device}
             
-        # We store both model and tokenizer in the manager instance
         manager.load_model("sparse", loader)
-        status = manager.get_model_status("sparse")
-        
-        if status["loaded"]:
-            data = manager._models["sparse"]["instance"]
-            self.model = data["model"]
-            self.tokenizer = data["tokenizer"]
-            self.device = data["device"]
-            self._loaded = True
-        else:
-            raise RuntimeError("Failed to load sparse model")
+        return manager.get_model_instance("sparse") # Returns the dict
 
     def embed(self, text: str) -> SparseEmbedding:
         """
         Generate sparse embedding for text.
-        Returns object with .indices (List[int]) and .values (List[float]).
         """
-        self._load_model()
+        instance_data = self._get_model()
+        if not instance_data:
+             logger.error("Sparse model not available")
+             # Return empty or raise
+             return SparseEmbedding(indices=[], values=[])
+
+        model = instance_data["model"]
+        tokenizer = instance_data["tokenizer"]
+        device = instance_data["device"]
+        
         import torch
         
         with torch.no_grad():
             # tokenize
-            tokens = self.tokenizer(
+            tokens = tokenizer(
                 text, 
                 return_tensors="pt", 
                 truncation=True, 
                 max_length=512,
                 padding=True
             )
-            tokens = {k: v.to(self.device) for k, v in tokens.items()}
+            tokens = {k: v.to(device) for k, v in tokens.items()}
             
             # inference
-            output = self.model(**tokens)
+            output = model(**tokens)
             logits = output.logits # (1, seq_len, vocab_size)
             
             # SPLADE formula: max(log(1 + relu(logits)), dim=0)
-            # But for query, usually just relu and aggregate
-            # We use the standard SPLADE max pooling
             
             # max over sequence length
             relu_logits = torch.relu(logits)
-            # log1p is strictly speaking part of SPLADE, but often omitted in simple implementations if model is trained for it
-            # The prompt mentions `naver/splade-cocondenser-ensembledistil`.
-            # Standard inference: values, _ = torch.max(torch.log(1 + torch.relu(logits)) * attention_mask.unsqueeze(-1), dim=1)
             
             attention_mask = tokens["attention_mask"].unsqueeze(-1)
             # (1, seq_len, vocab)

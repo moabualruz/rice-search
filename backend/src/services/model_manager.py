@@ -101,6 +101,15 @@ class ModelManager:
             import torch
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
+            
+            # Sync with Redis
+            try:
+                from src.services.admin.admin_store import get_admin_store
+                store = get_admin_store()
+                if store.redis:
+                    store.redis.delete(f"model_status:{model_id}:loaded")
+            except Exception as e:
+                logger.warning(f"Failed to sync model status to Redis: {e}")
                 
             logger.info(f"Model {model_id} unloaded successfully")
             return True
@@ -141,6 +150,19 @@ class ModelManager:
             self._models[model_id]["instance"] = instance
             self._models[model_id]["loaded"] = True
             self._models[model_id]["last_accessed"] = time.time()
+            
+            # Sync with Redis
+            try:
+                from src.services.admin.admin_store import get_admin_store
+                store = get_admin_store()
+                if store.redis:
+                    # Set a key that indicates this model is loaded in SOME process
+                    # We use a set to track all loaded models across processes if needed, 
+                    # but simple key is easier for status check
+                    store.redis.set(f"model_status:{model_id}:loaded", "true")
+            except Exception as e:
+                logger.warning(f"Failed to sync model status to Redis: {e}")
+                
             return True
         except Exception as e:
             logger.error(f"Failed to load model {model_id}: {e}")
@@ -148,12 +170,30 @@ class ModelManager:
 
     def get_model_status(self, model_id: str) -> Dict[str, Any]:
         """Get status of a specific model."""
-        if model_id not in self._models:
-            return {"id": model_id, "loaded": False, "registered": False}
+        # Check local state first
+        is_loaded = False
+        model_type = "unknown"
+        
+        if model_id in self._models:
+             is_loaded = self._models[model_id]["loaded"]
+             model_type = self._models[model_id]["type"]
+        
+        # If not loaded locally, check Redis (other workers)
+        if not is_loaded:
+            try:
+                from src.services.admin.admin_store import get_admin_store
+                store = get_admin_store()
+                # Check shared key
+                if store.redis:
+                     if store.redis.exists(f"model_status:{model_id}:loaded"):
+                         is_loaded = True
+            except Exception:
+                pass
+
         return {
             "id": model_id,
-            "type": self._models[model_id]["type"],
-            "loaded": self._models[model_id]["loaded"]
+            "type": model_type,
+            "loaded": is_loaded
         }
 
     def get_model_instance(self, model_id: str) -> Any:
@@ -165,13 +205,27 @@ class ModelManager:
 
     def get_all_models(self) -> Dict[str, Dict[str, Any]]:
         """Get status of all registered models."""
-        return {
-            mid: {
-                "type": data["type"], 
-                "loaded": data["loaded"]
-            } 
-            for mid, data in self._models.items()
-        }
+        # Get local status
+        statuses = {}
+        
+        for mid, data in self._models.items():
+            is_loaded = data["loaded"]
+            if not is_loaded:
+                 # Check redis fallback
+                 try:
+                     from src.services.admin.admin_store import get_admin_store
+                     store = get_admin_store()
+                     if store.redis and store.redis.exists(f"model_status:{mid}:loaded"):
+                         is_loaded = True
+                 except:
+                     pass
+            
+            statuses[mid] = {
+                "type": data["type"],
+                "loaded": is_loaded
+            }
+        
+        return statuses
 
     
     def check_ttl(self) -> int:
@@ -258,6 +312,9 @@ class ModelManager:
             from transformers import AutoTokenizer, AutoModel, AutoModelForMaskedLM, AutoModelForSequenceClassification
             
             tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+            
+            # Load on CPU first to avoid "meta tensor" errors
+            # Explicitly avoiding device="cuda" in from_pretrained
             
             if model_type == "sparse_embedding":
                 model = AutoModelForMaskedLM.from_pretrained(model_id, trust_remote_code=trust_remote_code)

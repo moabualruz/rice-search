@@ -130,10 +130,24 @@ class AdminStore:
     
     def get_models(self) -> Dict[str, dict]:
         """Get all models."""
+        # Ensure defaults first (lazy init)
         self._ensure_defaults()
+        
         try:
             data = self.redis.get(self.MODELS_KEY)
-            return json.loads(data) if data else {}
+            models = json.loads(data) if data else {}
+            
+            # Resilience: If models key exists but is empty/corrupt, or if flushed
+            if not models:
+                 # Check if we should re-seed defaults (e.g. after a flush)
+                 # Force re-init check by setting flag to False
+                 self._initialized = False
+                 self._ensure_defaults()
+                 # Fetch again
+                 data = self.redis.get(self.MODELS_KEY)
+                 models = json.loads(data) if data else {}
+                 
+            return models
         except Exception as e:
             logger.error(f"Failed to get models: {e}")
             return {}
