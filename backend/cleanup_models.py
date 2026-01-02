@@ -1,24 +1,46 @@
-import sys
-import os
-sys.path.append(os.getcwd())
+import logging
+import json
 from src.services.admin.admin_store import get_admin_store
+from src.core.config import settings
+from src.api.v1.endpoints.admin.public import get_protected_models
 
-def main():
-    print("Checking for test artifacts...")
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def debug_protection():
     store = get_admin_store()
     models = store.get_models()
-    print("Current Models:")
-    for mid, m in models.items():
-        print(f" - {mid}: {m.get('name')}")
+    protected = get_protected_models()
     
-    # Target 1: The explicit long ID which I named "Protected Reranker"
-    target = "jinaai/jina-reranker-v2-base-multilingual"
-    if target in models:
-        print(f"Deleting duplicate/test model: {target}")
-        store.delete_model(target) # Bypasses API check
-        print("Deleted.")
-    else:
-        print(f"Target {target} not found.")
+    logger.info(f"Protected Set: {protected}")
+    
+    defaults = [
+        settings.EMBEDDING_MODEL,
+        settings.SPARSE_MODEL,
+        settings.RERANK_MODEL,
+        settings.QUERY_UNDERSTANDING_MODEL
+    ]
+    logger.info(f"Settings Defaults: {defaults}")
+
+    for mid, data in models.items():
+        is_protected = mid in protected
+        logger.info(f"Model {mid}: Protected={is_protected} (Name: {data.get('name')})")
+        
+        if data.get('name') in defaults and not is_protected:
+            logger.error(f"MISMATCH: {mid} should be protected but is not!")
+            
+    # Cleanup Logic
+    # Remove anything not in protected set? 
+    # User said: "if there is any other model in the system... it can be removed"
+    # So we strictly keep only the 4 defaults.
+    
+    for mid in list(models.keys()):
+        if mid not in protected:
+            logger.warning(f"Removing non-default model: {mid}")
+            del models[mid]
+            
+    store.redis.set(store.MODELS_KEY, json.dumps(models))
+    logger.info("Cleanup complete.")
 
 if __name__ == "__main__":
-    main()
+    debug_protection()

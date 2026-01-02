@@ -142,7 +142,12 @@ export default function AdminDashboard() {
         </div>
 
         <div className="bg-slate-800 rounded-xl p-6 border border-slate-700">
-          <h2 className="text-xl font-semibold text-white mb-4">Active Features</h2>
+          <div className="flex justify-between items-center mb-4">
+             <h2 className="text-xl font-semibold text-white">Feature Management</h2>
+             <button onClick={() => setShowSettings(true)} className="text-xs text-primary hover:text-white transition-colors uppercase font-bold tracking-wider">
+               Configure
+             </button>
+          </div>
           <div className="space-y-3">
              <FeatureStatus label="Hybrid Search" enabled={adminStatus?.features?.hybrid_search} />
              <FeatureStatus label="Neural Reranker" enabled={adminStatus?.features?.rerank_enabled ?? true} />
@@ -221,7 +226,11 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
            ast_parsing_enabled: config.ast_parsing_enabled,
            mcp_enabled: config.mcp_enabled,
            worker_pool: config.worker_pool,
-           worker_concurrency: config.worker_concurrency
+           worker_concurrency: config.worker_concurrency,
+           model_auto_unload: config.model_auto_unload,
+           model_ttl_seconds: config.model_ttl_seconds,
+           mcp_transport: config.mcp_transport,
+           mcp_tcp_port: config.mcp_tcp_port
         })
       });
       onClose();
@@ -267,22 +276,83 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                 enabled={config.mcp_enabled ?? false} 
                 onToggle={(v) => updateConfig('mcp_enabled', v)} 
               />
+              {config.mcp_enabled && (
+                  <div className="mt-3 ml-4 pl-4 border-l border-slate-700 grid grid-cols-2 gap-4">
+                      <div>
+                          <label className="block text-xs font-medium text-slate-400 mb-1">Transport</label>
+                          <select 
+                            value={config.mcp_transport ?? 'stdio'}
+                            onChange={(e) => updateConfig('mcp_transport', e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                          >
+                             <option value="stdio">STDIO (Local)</option>
+                             <option value="tcp">TCP (Network)</option>
+                             <option value="sse">SSE (Web)</option>
+                          </select>
+                      </div>
+                      {config.mcp_transport === 'tcp' && (
+                          <div>
+                              <label className="block text-xs font-medium text-slate-400 mb-1">Port</label>
+                              <input 
+                                type="number" 
+                                value={config.mcp_tcp_port ?? 9090}
+                                onChange={(e) => updateConfig('mcp_tcp_port', parseInt(e.target.value))}
+                                className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                              />
+                          </div>
+                      )}
+                  </div>
+              )}
             </div>
           </section>
 
           {/* Tuning Section */}
           <section>
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Performance Tuning</h3>
+            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Performance & Resources</h3>
             <div className="space-y-4">
+               
+               {/* RRF Tuning */}
                <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">RRF Constant (k)</label>
+                  <div className="flex items-center gap-2 mb-1">
+                      <label className="block text-sm font-medium text-slate-300">RRF Constant (k)</label>
+                      <div className="group relative cursor-help">
+                          <span className="text-slate-500 text-xs border border-slate-600 rounded-full w-4 h-4 flex items-center justify-center">?</span>
+                          <div className="hidden group-hover:block absolute left-full top-0 ml-2 w-64 p-2 bg-black border border-slate-700 rounded text-xs text-slate-300 z-50">
+                             Controls the rank fusion balance. Higher values (e.g. 60) favor stability, lower values favor high-ranking hits.
+                          </div>
+                      </div>
+                  </div>
                   <input 
                     type="number" 
                     value={config.rrf_k ?? 60}
                     onChange={(e) => updateConfig('rrf_k', parseInt(e.target.value))}
                     className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white"
                   />
-                  <p className="text-xs text-slate-500 mt-1">Controls rank fusion balance (default: 60).</p>
+               </div>
+
+               {/* Model Memory Management */}
+               <div className="p-4 bg-slate-900/40 rounded-lg border border-slate-800">
+                  <h4 className="text-sm font-medium text-slate-200 mb-3">Memory Optimization</h4>
+                  <ToggleSetting 
+                    label="Auto-Unload Models" 
+                    desc="Free up GPU/RAM by unloading unused models."
+                    enabled={config.model_auto_unload ?? true} 
+                    onToggle={(v) => updateConfig('model_auto_unload', v)} 
+                  />
+                  {config.model_auto_unload && (
+                      <div className="mt-3 ml-1">
+                        <label className="block text-xs font-medium text-slate-400 mb-1">Idle Timeout (Seconds)</label>
+                        <div className="flex gap-2">
+                            <input 
+                                type="number" 
+                                value={config.model_ttl_seconds ?? 300}
+                                onChange={(e) => updateConfig('model_ttl_seconds', parseInt(e.target.value))}
+                                className="w-24 bg-slate-900 border border-slate-700 rounded px-2 py-1 text-white text-sm"
+                            />
+                            <span className="text-xs text-slate-500 self-center">default: 300s (5m)</span>
+                        </div>
+                      </div>
+                  )}
                </div>
                
                <div className="grid grid-cols-2 gap-4">
@@ -307,21 +377,6 @@ function SettingsModal({ onClose }: { onClose: () => void }) {
                       className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-white"
                     />
                  </div>
-               </div>
-            </div>
-          </section>
-
-          {/* Model Info (Read Only) */}
-          <section>
-            <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Active Models (Read Only)</h3>
-            <div className="grid grid-cols-1 gap-2 text-sm">
-               <div className="flex justify-between p-2 bg-slate-900 rounded border border-slate-800">
-                  <span className="text-slate-400">Embedding</span>
-                  <span className="text-slate-200 font-mono">{config.embedding_model}</span>
-               </div>
-               <div className="flex justify-between p-2 bg-slate-900 rounded border border-slate-800">
-                  <span className="text-slate-400">Sparse</span>
-                  <span className="text-slate-200 font-mono">{config.sparse_model}</span>
                </div>
             </div>
           </section>

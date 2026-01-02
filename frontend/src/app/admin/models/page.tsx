@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Button, Input, Card } from '@/components/ui-elements';
-import { ArrowLeft, Plus, Cpu, Zap, Trash2, AlertTriangle, Download, Server } from 'lucide-react';
+import { ArrowLeft, Plus, Cpu, Zap, Trash2, AlertTriangle, Download, Server, Lock } from 'lucide-react';
 
 const API_BASE = 'http://localhost:8003/api/v1/admin/public';
 
@@ -16,22 +16,54 @@ interface Model {
   active: boolean;
   gpu_enabled: boolean;
   protected?: boolean;
+  loaded?: boolean;
 }
 
 export default function AdminModels() {
   const [models, setModels] = useState<Model[]>([]);
-  // ... (rest of state omitted for brevity, logic unchanged) ...
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  
+  // Settings Config (Fetched separately or passed)
+  const [ttlConfig, setTtlConfig] = useState<{ttl: number, auto_unload: boolean}>({ttl: 300, auto_unload: true});
 
   useEffect(() => {
     loadModels();
+    // Poll for status updates
+    const interval = setInterval(loadModels, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+     // Fetch TTL config
+     fetch(`${API_BASE}/config`).then(r => r.json()).then(d => {
+         setTtlConfig({
+             ttl: d.model_ttl_seconds ?? 300,
+             auto_unload: d.model_auto_unload ?? true
+         });
+     });
   }, []);
 
   const showMessage = (type: 'success' | 'error', text: string) => {
+    // ... existing ... 
     setMessage({ type, text });
     setTimeout(() => setMessage(null), 3000);
+  };
+  
+  // Added TTL Update Handler
+  const updateTTL = async (ttl: number, auto_unload: boolean) => {
+      try {
+          await fetch(`${API_BASE}/config`, {
+              method: 'PUT',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ model_ttl_seconds: ttl, model_auto_unload: auto_unload })
+          });
+          setTtlConfig({ ttl, auto_unload });
+          showMessage('success', 'Global Model Settings Updated');
+      } catch(e) {
+          showMessage('error', 'Failed to update settings');
+      }
   };
 
   const loadModels = async () => {
@@ -47,7 +79,10 @@ export default function AdminModels() {
       setLoading(false);
     }
   };
-
+  
+  // ... existing updateModel ...
+  // ... existing handleAddModel ...
+  // ... existing deleteModel ...
   const handleAddModel = async (model: any) => {
      try {
        const res = await fetch(`${API_BASE}/models`, {
@@ -136,6 +171,39 @@ export default function AdminModels() {
              {message.text}
           </div>
         )}
+        
+        {/* Global Settings Card */}
+        <div className="bg-slate-900 border border-slate-700 rounded-xl p-6 mb-8 flex items-center justify-between">
+            <div>
+                <h3 className="text-lg font-bold text-white mb-1">Global Model Settings</h3>
+                <p className="text-sm text-slate-400">Apply to all active models.</p>
+            </div>
+            <div className="flex items-center gap-6">
+                <div className="flex items-center gap-3">
+                    <label className="text-sm text-slate-300">Auto-Unload (Lazy Loading)</label>
+                    <label className="relative inline-flex items-center cursor-pointer">
+                          <input 
+                            type="checkbox" 
+                            className="sr-only peer"
+                            checked={ttlConfig.auto_unload}
+                            onChange={(e) => updateTTL(ttlConfig.ttl, e.target.checked)}
+                          />
+                          <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
+                </div>
+                {ttlConfig.auto_unload && (
+                    <div className="flex items-center gap-2">
+                        <label className="text-sm text-slate-300">TTL (Seconds)</label>
+                        <input 
+                            type="number" 
+                            value={ttlConfig.ttl}
+                            onChange={(e) => updateTTL(parseInt(e.target.value), ttlConfig.auto_unload)}
+                            className="w-24 bg-slate-800 border border-slate-600 rounded px-2 py-1 text-white text-sm"
+                        />
+                    </div>
+                )}
+            </div>
+        </div>
 
         <div className="flex justify-between items-center mb-6">
            <div className="text-sm text-text-muted">
@@ -175,6 +243,8 @@ export default function AdminModels() {
                         </span>
                         <h3 className="text-lg font-mono text-text font-bold">{model.name}</h3>
                         {model.active && <span className="text-xs text-green-400 border border-green-900/50 px-2 rounded-full">Active</span>}
+                        {model.active && !model.loaded && <span className="text-xs text-yellow-400 border border-yellow-900/50 px-2 rounded-full">Offloaded (Sleeping)</span>}
+                        {model.active && model.loaded && <span className="text-xs text-blue-400 border border-blue-900/50 px-2 rounded-full">Loaded in Memory</span>}
                      </div>
                      <div className="text-sm text-text-muted font-mono pl-1">ID: {model.id}</div>
                   </div>
@@ -213,18 +283,23 @@ export default function AdminModels() {
                         </label>
                      </div>
                      
-                     {/* Delete */}
+                     {/* Delete or Lock */}
                      <div className="flex flex-col items-center gap-1 pl-4 border-l border-slate-700">
                         <span className="text-xs text-text-muted uppercase">Action</span>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className={`text-text-muted hover:text-error hover:bg-error/10 ${model.protected ? 'opacity-50 cursor-not-allowed' : ''}`}
-                          onClick={() => deleteModel(model.id)}
-                          disabled={model.protected}
-                        >
-                           <Trash2 size={16} />
-                        </Button>
+                        {model.protected ? (
+                            <div className="h-8 w-8 flex items-center justify-center text-slate-500" title="Protected Model">
+                                <Lock size={16} />
+                            </div>
+                        ) : (
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="text-text-muted hover:text-error hover:bg-error/10"
+                              onClick={() => deleteModel(model.id)}
+                            >
+                               <Trash2 size={16} />
+                            </Button>
+                        )}
                      </div>
                   </div>
                </Card>

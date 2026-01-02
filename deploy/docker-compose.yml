@@ -104,6 +104,7 @@ services:
               capabilities: [gpu]
 
   tests-e2e:
+    profiles: ["test"]
     build:
       context: ../backend
       dockerfile: Dockerfile.e2e
@@ -141,10 +142,6 @@ services:
       - "localhost:host-gateway"
     networks:
       - rice-net
-
-
-
-
 
 networks:
   rice-net:

@@ -46,26 +46,37 @@ class AdminStore:
         try:
             # Initialize models if not exist
             if not self.redis.exists(self.MODELS_KEY):
+                # Helper to slugify
+                def slugify(name: str) -> str:
+                    return name.replace("/", "-").lower()
+
                 default_models = {
-                    "dense": {
-                        "id": "dense",
+                    slugify(settings.EMBEDDING_MODEL): {
+                        "id": slugify(settings.EMBEDDING_MODEL),
                         "name": settings.EMBEDDING_MODEL,
                         "type": "embedding",
                         "active": True,
                         "gpu_enabled": True
                     },
-                    "sparse": {
-                        "id": "sparse",
+                    slugify(settings.SPARSE_MODEL): {
+                        "id": slugify(settings.SPARSE_MODEL),
                         "name": settings.SPARSE_MODEL,
                         "type": "sparse_embedding",
                         "active": settings.SPARSE_ENABLED,
                         "gpu_enabled": True
                     },
-                    "reranker": {
-                        "id": "reranker",
+                    slugify(settings.RERANK_MODEL): {
+                        "id": slugify(settings.RERANK_MODEL),
                         "name": settings.RERANK_MODEL,
                         "type": "reranker",
                         "active": settings.RERANK_ENABLED,
+                        "gpu_enabled": True
+                    },
+                    slugify(settings.QUERY_UNDERSTANDING_MODEL): {
+                        "id": slugify(settings.QUERY_UNDERSTANDING_MODEL),
+                        "name": settings.QUERY_UNDERSTANDING_MODEL,
+                        "type": "classification",
+                        "active": getattr(settings, "QUERY_ANALYSIS_ENABLED", True),
                         "gpu_enabled": True
                     }
                 }
@@ -78,8 +89,9 @@ class AdminStore:
                     "rrf_k": settings.RRF_K,
                     "ast_parsing_enabled": settings.AST_PARSING_ENABLED,
                     "query_analysis_enabled": settings.QUERY_ANALYSIS_ENABLED,
-                    "worker_pool": "threads",  # solo, threads, or gevent
-                    "worker_concurrency": 10   # Number of concurrent workers
+                    "mcp_enabled": settings.MCP_ENABLED, # Added explicit default
+                    "worker_pool": "threads",
+                    "worker_concurrency": 10
                 }
                 self.redis.set(self.CONFIG_KEY, json.dumps(default_config))
             
@@ -185,13 +197,15 @@ class AdminStore:
             "rrf_k": overrides.get("rrf_k", settings.RRF_K),
             "ast_parsing_enabled": overrides.get("ast_parsing_enabled", settings.AST_PARSING_ENABLED),
             "mcp_enabled": overrides.get("mcp_enabled", settings.MCP_ENABLED),
-            "mcp_transport": settings.MCP_TRANSPORT,
-            "mcp_tcp_port": settings.MCP_TCP_PORT,
+            "mcp_transport": overrides.get("mcp_transport", settings.MCP_TRANSPORT),
+            "mcp_tcp_port": overrides.get("mcp_tcp_port", settings.MCP_TCP_PORT),
             "rerank_enabled": overrides.get("rerank_enabled", settings.RERANK_ENABLED),
             "rerank_model": settings.RERANK_MODEL,
             "query_analysis_enabled": overrides.get("query_analysis_enabled", getattr(settings, "QUERY_ANALYSIS_ENABLED", False)),
             "worker_pool": overrides.get("worker_pool", "threads"),
             "worker_concurrency": overrides.get("worker_concurrency", 10),
+            "model_ttl_seconds": overrides.get("model_ttl_seconds", settings.MODEL_TTL_SECONDS),
+            "model_auto_unload": overrides.get("model_auto_unload", settings.MODEL_AUTO_UNLOAD),
             "qdrant_url": settings.QDRANT_URL,
             "redis_url": settings.REDIS_URL
         }

@@ -9,8 +9,8 @@ COPY pyproject.toml .
 # Install dependencies (including dev/e2e)
 # Upgrade pip to avoid resolution issues (v23 -> v25)
 RUN pip install --upgrade pip
-# We use --no-cache-dir to keep image size down, but the build layer will be cached by Docker
-RUN pip install --no-cache-dir -e .[dev]
+# We use --mount=type=cache for faster rebuilds
+RUN --mount=type=cache,target=/root/.cache/pip pip install -e .[dev]
 
 # Copy the rest of the application
 COPY . .

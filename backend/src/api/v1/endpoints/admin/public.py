@@ -38,6 +38,10 @@ class ConfigUpdate(BaseModel):
     mcp_enabled: Optional[bool] = None
     worker_pool: Optional[str] = None
     worker_concurrency: Optional[int] = None
+    model_ttl_seconds: Optional[int] = None
+    model_auto_unload: Optional[bool] = None
+    mcp_transport: Optional[str] = None
+    mcp_tcp_port: Optional[int] = None
 
 class UserCreate(BaseModel):
     email: str
@@ -144,12 +148,15 @@ async def search_models(
 
 # Helper
 def get_protected_models():
+    # Helper to slugify
+    def slugify(name: str) -> str:
+        return name.replace("/", "-").lower()
+
     return {
-        "dense", "sparse", "reranker", "classification",
-        settings.EMBEDDING_MODEL, 
-        settings.SPARSE_MODEL,
-        settings.RERANK_MODEL,
-        settings.QUERY_UNDERSTANDING_MODEL
+        slugify(settings.EMBEDDING_MODEL), 
+        slugify(settings.SPARSE_MODEL),
+        slugify(settings.RERANK_MODEL),
+        slugify(settings.QUERY_UNDERSTANDING_MODEL)
     }
 
 @router.get("/models")
@@ -332,6 +339,28 @@ async def update_config(update: ConfigUpdate):
             raise HTTPException(status_code=400, detail="worker_concurrency must be between 1 and 100")
         store.set_config("worker_concurrency", update.worker_concurrency)
         updated.append(f"worker_concurrency={update.worker_concurrency}")
+
+    if update.model_ttl_seconds is not None:
+        if update.model_ttl_seconds < 10:
+            raise HTTPException(status_code=400, detail="TTL must be at least 10 seconds")
+        store.set_config("model_ttl_seconds", update.model_ttl_seconds)
+        updated.append(f"model_ttl_seconds={update.model_ttl_seconds}")
+
+    if update.model_auto_unload is not None:
+        store.set_config("model_auto_unload", update.model_auto_unload)
+        updated.append(f"model_auto_unload={update.model_auto_unload}")
+
+    if update.mcp_transport is not None:
+        if update.mcp_transport not in ["stdio", "tcp", "sse"]:
+             raise HTTPException(status_code=400, detail="Invalid transport")
+        store.set_config("mcp_transport", update.mcp_transport)
+        updated.append(f"mcp_transport={update.mcp_transport}")
+
+    if update.mcp_tcp_port is not None:
+        if update.mcp_tcp_port < 1024 or update.mcp_tcp_port > 65535:
+             raise HTTPException(status_code=400, detail="Invalid port")
+        store.set_config("mcp_tcp_port", update.mcp_tcp_port)
+        updated.append(f"mcp_tcp_port={update.mcp_tcp_port}")
     
     if not updated:
         return {"message": "No changes made"}

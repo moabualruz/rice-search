@@ -173,12 +173,26 @@ class ModelManager:
             for mid, data in self._models.items()
         }
 
-    def check_ttl(self, ttl_seconds: int = 300) -> int:
+    
+    def check_ttl(self) -> int:
         """
         Unload models that haven't been accessed in 'ttl_seconds'.
+        Reads dynamic config from AdminStore.
         Returns number of unloaded models.
         """
-        if ttl_seconds <= 0:
+        # Read dynamic config
+        try:
+            from src.services.admin.admin_store import get_admin_store
+            store = get_admin_store()
+            config = store.get_effective_config()
+            ttl_seconds = config.get("model_ttl_seconds", settings.MODEL_TTL_SECONDS)
+            auto_unload = config.get("model_auto_unload", settings.MODEL_AUTO_UNLOAD)
+        except Exception:
+             # Fallback if admin store fails (e.g. startup)
+             ttl_seconds = settings.MODEL_TTL_SECONDS
+             auto_unload = settings.MODEL_AUTO_UNLOAD
+
+        if not auto_unload or ttl_seconds <= 0:
             return 0
             
         now = time.time()
@@ -202,7 +216,7 @@ class ModelManager:
         while getattr(self, "_running", True):
             try:
                 time.sleep(60) # Check every 60 seconds
-                self.check_ttl(settings.MODEL_TTL_SECONDS)
+                self.check_ttl() # Config is read inside
             except Exception as e:
                 logger.error(f"Error in TTL monitor: {e}")
 
