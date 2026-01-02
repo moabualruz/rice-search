@@ -10,8 +10,17 @@ async def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme),
     x_user_id: Optional[str] = Header(None)
 ):
-    # DEBUG AUTH
-    print(f"DEBUG AUTH: token={token is not None}, x_user_id={x_user_id}")
+
+    
+    from src.core.config import settings
+    if not settings.AUTH_ENABLED:
+        return {
+            "sub": "admin-local",
+            "realm_access": {"roles": ["admin"]},
+            "org_id": "public",
+            "name": "Local Admin"
+        }
+
     if x_user_id == "admin-1":
         return {
             "sub": "admin-1",

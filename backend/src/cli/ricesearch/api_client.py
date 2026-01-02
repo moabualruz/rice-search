@@ -23,10 +23,7 @@ class APIClient:
     def _get_client(self) -> httpx.Client:
         """Get HTTP client."""
         config = get_config()
-        # DEBUG
-        print(f"DEBUG: user_id={config.user_id}")
         headers = {"X-User-ID": str(config.user_id)}
-        print(f"DEBUG: headers={headers}")
         return httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=headers)
     
     def health_check(self) -> bool:
@@ -36,7 +33,6 @@ class APIClient:
                 resp = client.get("/health")
                 return resp.status_code == 200
         except Exception as e:
-            print(f"DEBUG: Health check failed: {e}")
             return False
     
     def index_file(
