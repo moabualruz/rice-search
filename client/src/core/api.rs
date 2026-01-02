@@ -1,9 +1,7 @@
-use reqwest::{Client, Body, multipart};
-use tokio::fs::File;
-use tokio_util::codec::{BytesCodec, FramedRead};
-use std::path::Path;
-use anyhow::{Result, Context};
+use anyhow::{Context, Result};
+use reqwest::{multipart, Client};
 use serde_json::Value;
+use std::path::Path;
 
 pub struct ApiClient {
     client: Client,
@@ -19,7 +17,12 @@ impl ApiClient {
     }
 
     pub async fn health_check(&self) -> bool {
-        match self.client.get(format!("{}/healthz", self.base_url)).send().await {
+        match self
+            .client
+            .get(format!("{}/healthz", self.base_url))
+            .send()
+            .await
+        {
             Ok(resp) => resp.status().is_success(),
             Err(_) => false,
         }
@@ -28,7 +31,8 @@ impl ApiClient {
     pub async fn index_file(&self, path: &Path, org_id: &str) -> Result<Value> {
         // Read file content eagerly for simplicity/robustness (<10MB files usually)
         let content = tokio::fs::read(path).await.context("Failed to read file")?;
-        let filename = path.file_name()
+        let filename = path
+            .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("unknown")
             .to_string();
@@ -38,13 +42,15 @@ impl ApiClient {
             .part("file", part)
             .text("org_id", org_id.to_string());
 
-        let resp = self.client.post(format!("{}/api/v1/ingest/file", self.base_url))
+        let resp = self
+            .client
+            .post(format!("{}/api/v1/ingest/file", self.base_url))
             .multipart(form)
             .send()
             .await?;
 
         if !resp.status().is_success() {
-             anyhow::bail!("Server returned error: {}", resp.status());
+            anyhow::bail!("Server returned error: {}", resp.status());
         }
 
         let json: Value = resp.json().await?;
@@ -59,11 +65,13 @@ impl ApiClient {
             "limit": limit
         });
 
-        let resp = self.client.post(format!("{}/api/v1/search/query", self.base_url))
+        let resp = self
+            .client
+            .post(format!("{}/api/v1/search/query", self.base_url))
             .json(&body)
             .send()
             .await?;
-        
+
         if !resp.status().is_success() {
             anyhow::bail!("Search failed: {}", resp.status());
         }

@@ -1,8 +1,8 @@
-use sha2::{Sha256, Digest};
-use std::path::Path;
-use std::fs::File;
-use std::io::{Read, BufReader};
 use anyhow::Result;
+use sha2::{Digest, Sha256};
+use std::fs::File;
+use std::io::{BufReader, Read};
+use std::path::Path;
 
 pub fn compute_file_hash(path: &Path) -> Result<String> {
     let file = File::open(path)?;

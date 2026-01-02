@@ -1,10 +1,10 @@
+mod commands;
 mod core;
 mod watcher;
-mod commands;
 
-use clap::{Parser, Subcommand};
 use anyhow::Result;
-use commands::{watch, search};
+use clap::{Parser, Subcommand};
+use commands::{search, watch};
 
 #[derive(Parser)]
 #[command(name = "ricesearch")]
@@ -21,7 +21,7 @@ enum Commands {
         /// Directory to watch
         #[arg(default_value = ".")]
         path: String,
-        
+
         /// Organization ID (optional scope)
         #[arg(short, long)]
         org_id: Option<String>,
@@ -30,7 +30,7 @@ enum Commands {
         #[arg(long, short = 'f', default_value_t = false)]
         full_index: bool,
     },
-    
+
     /// Search indexed code
     Search {
         /// Search query
@@ -39,7 +39,7 @@ enum Commands {
         /// Limit results
         #[arg(short, long, default_value_t = 10)]
         limit: usize,
-        
+
         /// Output as JSON
         #[arg(long, default_value_t = false)]
         json: bool,
@@ -51,7 +51,7 @@ enum Commands {
         #[arg(default_value = ".")]
         path: String,
     },
-    
+
     /// Manage configuration
     Config {
         #[command(subcommand)]
@@ -74,18 +74,22 @@ async fn main() -> Result<()> {
         std::env::set_var("RUST_LOG", "info");
     }
     env_logger::init();
-    
+
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::Watch { path, org_id, full_index } => {
+        Commands::Watch {
+            path,
+            org_id,
+            full_index,
+        } => {
             watch::run(path, org_id.clone(), *full_index).await?;
         }
         Commands::Search { query, limit, json } => {
             search::run(query, *limit, *json).await?;
         }
         Commands::Index { path } => {
-            // Re-use watch logic but exit after initial scan? 
+            // Re-use watch logic but exit after initial scan?
             // Or explicit scan function.
             // For MVP re-use logic part or just scan:
             // Let's call the scanner directly for Index
@@ -94,15 +98,15 @@ async fn main() -> Result<()> {
             let scanner = watcher::scanner::Scanner::new(client, "public".to_string());
             scanner.scan(std::path::Path::new(path)).await;
         }
-        Commands::Config { action } => {
-            match action {
-                ConfigAction::Show => {
-                     let c = core::config::load_config()?;
-                     println!("{:#?}", c);
-                },
-                ConfigAction::Set { key, value } => println!("Set {} = {} (Not implemented persistence yet)", key, value),
+        Commands::Config { action } => match action {
+            ConfigAction::Show => {
+                let c = core::config::load_config()?;
+                println!("{:#?}", c);
             }
-        }
+            ConfigAction::Set { key, value } => {
+                println!("Set {} = {} (Not implemented persistence yet)", key, value)
+            }
+        },
     }
 
     Ok(())

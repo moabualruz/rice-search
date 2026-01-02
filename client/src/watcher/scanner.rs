@@ -1,8 +1,8 @@
-use ignore::WalkBuilder;
-use std::path::Path;
-use log::{info, debug, warn};
 use crate::core::api::ApiClient;
 use colored::*;
+use ignore::WalkBuilder;
+use log::{debug, info, warn};
+use std::path::Path;
 
 pub struct Scanner {
     client: ApiClient,
@@ -16,7 +16,7 @@ impl Scanner {
 
     pub async fn scan(&self, path: &Path) {
         info!("Starting initial scan of: {:?}", path);
-        
+
         let walker = WalkBuilder::new(path)
             .hidden(false) // Allow hidden files (like .github)
             .ignore(true)
@@ -30,7 +30,7 @@ impl Scanner {
                 Ok(entry) => {
                     let path = entry.path();
                     if path.is_file() {
-                         self.process_file(path).await;
+                        self.process_file(path).await;
                     }
                 }
                 Err(err) => warn!("Error walking path: {}", err),
@@ -45,9 +45,9 @@ impl Scanner {
 
         // TODO: Hash check optimization could go here (store local state DB)
         // For now, we trust the backend to dedup or just re-upload (less efficient but simpler MVP)
-        
+
         println!("{} {}", "[INDEXING]".blue(), path_str);
-        
+
         match self.client.index_file(path, &self.org_id).await {
             Ok(_) => println!("{} {}", "[OK]".green(), path_str),
             Err(e) => println!("{} {} ({})", "[ERROR]".red(), path_str, e),

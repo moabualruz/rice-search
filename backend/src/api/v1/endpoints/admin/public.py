@@ -551,6 +551,56 @@ async def toggle_mcp():
 
 # ============== System Endpoints ==============
 
+# Helper for consistent health checks
+def _get_component_health(store) -> dict:
+    components = {
+        "redis": "down",
+        "qdrant": "down",
+        "minio": "down",
+        "worker": "unknown"
+    }
+
+    # 1. Redis
+    try:
+        if store.redis.ping():
+             components["redis"] = "healthy"
+    except: pass
+
+    # 2. Qdrant
+    try:
+        import requests
+        q_res = requests.get(f"{settings.QDRANT_URL}/readyz", timeout=1)
+        if q_res.status_code == 200:
+            components["qdrant"] = "healthy"
+    except: pass
+
+    # 3. MinIO
+    try:
+        import requests
+        # Try internal docker name first, then localhost fallback
+        endpoints = [
+             f"http://minio:9000/minio/health/live",
+             f"{settings.MINIO_ENDPOINT.replace('minio:9000', 'localhost:9000')}/minio/health/live"
+        ]
+        
+        for ep in endpoints:
+            try:
+                m_res = requests.get(ep, timeout=1)
+                if m_res.status_code == 200:
+                    components["minio"] = "healthy"
+                    break
+            except: continue
+    except: pass
+
+    # 4. Worker
+    # Ideal: Check a heartbeat key. For now, assume if Redis is up, Worker is likely okay.
+    # Future: Worker writes "worker:heartbeat" every 30s.
+    if components["redis"] == "healthy":
+        components["worker"] = "healthy" # Placeholder
+        
+    return components
+
+
 @router.get("/system/status")
 async def get_system_status():
     """Get system status overview."""
@@ -558,13 +608,27 @@ async def get_system_status():
     config = store.get_effective_config()
     models = store.get_models()
     
+    components = _get_component_health(store)
+    
+    # Aggregate status
+    overall = "healthy"
+    if "down" in components.values():
+        overall = "degraded"
+    
+    # Map to frontend expected format
     return {
-        "status": "healthy",
+        "status": overall,
         "features": {
             "hybrid_search": config.get("sparse_enabled", settings.SPARSE_ENABLED),
             "ast_parsing": config.get("ast_parsing_enabled", settings.AST_PARSING_ENABLED),
             "mcp_protocol": config.get("mcp_enabled", settings.MCP_ENABLED),
-            "opentelemetry": False  # Disabled due to stability issues
+            "opentelemetry": False
+        },
+        "components": {
+            "qdrant": {"status": "up" if components["qdrant"] == "healthy" else "down"},
+            "celery": {"status": "up" if components["worker"] == "healthy" else "down"}, # Frontend expects 'celery'
+            "redis": {"status": "up" if components["redis"] == "healthy" else "down"},
+            "minio": {"status": "up" if components["minio"] == "healthy" else "down"}
         },
         "models": {
             model_id: model.get("active", True) 
@@ -621,13 +685,12 @@ async def get_metrics():
     cpu_percent = psutil.cpu_percent(interval=0.1)
     memory = psutil.virtual_memory()
     
-    # GPU metrics (if available)
+    # GPU metrics (System)
     gpu_used = 0
-    gpu_total = 8000  # Default 8GB
+    gpu_total = 8000
     gpu_util = 0
     try:
         import subprocess
-        # Added utilization.gpu
         result = subprocess.run(
             ["nvidia-smi", "--query-gpu=memory.used,memory.total,utilization.gpu", "--format=csv,noheader,nounits"],
             capture_output=True, text=True, timeout=5
@@ -638,54 +701,19 @@ async def get_metrics():
             gpu_total = int(parts[1])
             gpu_util = int(parts[2])
     except:
-        pass  # GPU not available
+        pass
+        
+    # GPU Metrics (Service)
+    service_gpu_mb = 0
+    try:
+        import torch
+        if torch.cuda.is_available():
+            service_gpu_mb = int(torch.cuda.memory_allocated() / 1024 / 1024)
+    except:
+        pass
     
     # Component Health Checks
-    components = {
-        "redis": "down",
-        "qdrant": "down",
-        "minio": "down",
-        "worker": "unknown"
-    }
-
-    try:
-        if store.redis.ping():
-             components["redis"] = "healthy"
-    except: pass
-
-    try:
-        import requests
-        # Qdrant Health
-        q_res = requests.get(f"{settings.QDRANT_URL}/readyz", timeout=1)
-        if q_res.status_code == 200:
-            components["qdrant"] = "healthy"
-    except: pass
-
-    try:
-        import requests
-        # MinIO Health (minio/minio:9000/minio/health/live)
-        # Note: Depending on MinIO version, might need different path
-        m_res = requests.get(f"{settings.MINIO_ENDPOINT.replace('minio:9000', 'localhost:9000')}/minio/health/live", timeout=1) 
-        if m_res.status_code == 200:
-             components["minio"] = "healthy"
-    except: 
-        # Inside docker "minio" resolves, but from API "minio" resolves.
-        # Try direct connection
-        try:
-            m_res = requests.get(f"http://minio:9000/minio/health/live", timeout=1)
-            if m_res.status_code == 200:
-                components["minio"] = "healthy"
-        except: pass
-
-    # Worker Status (Check for recent heartbeat or activity)
-    # Ideally worker writes a heartbeat key
-    # For now, we assume if Redis is up, Worker can talk to it. 
-    # Let's check if the specific worker queue exists or similar
-    try:
-        # Check specific key set by worker start (if we implemented it)
-        # Or just check if queue has tasks
-        components["worker"] = "healthy" # improving logic later
-    except: pass
+    components = _get_component_health(store)
     
     return {
         "search_latency_p50_ms": int(latencies.get("p50", 0)),
@@ -693,8 +721,9 @@ async def get_metrics():
         "search_latency_p99_ms": int(latencies.get("p99", 0)),
         "index_rate_docs_per_sec": store.get_counter("indexed_docs"),
         "active_connections": store.get_counter("active_connections"),
-        "gpu_memory_used_mb": gpu_used,
+        "gpu_memory_used_mb": gpu_used, # System
         "gpu_memory_total_mb": gpu_total,
+        "gpu_memory_service_mb": service_gpu_mb, # Specific process (API)
         "gpu_utilization_percent": gpu_util,
         "cpu_usage_percent": int(cpu_percent),
         "memory_usage_mb": int(memory.used / 1024 / 1024),

@@ -4,24 +4,21 @@ import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 
-interface SystemStatus {
-  status: string;
-  components: {
-    qdrant?: { status: string; collections?: number };
-    celery?: { status: string };
-  };
-}
-
 interface AdminStatus {
   status: string;
   features: Record<string, any>;
   models: Record<string, boolean>;
+  components: {
+    qdrant?: { status: string; collections?: number };
+    celery?: { status: string };
+    redis?: { status: string };
+    minio?: { status: string };
+  };
 }
 
 const API_BASE = 'http://localhost:8000/api/v1/admin/public';
 
 export default function AdminDashboard() {
-  const [health, setHealth] = useState<SystemStatus | null>(null);
   const [adminStatus, setAdminStatus] = useState<AdminStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -30,15 +27,12 @@ export default function AdminDashboard() {
 
   const fetchData = async () => {
     try {
-      const [healthRes, statusRes] = await Promise.all([
-        fetch('http://localhost:8000/health'),
-        fetch(`${API_BASE}/system/status`)
-      ]);
-      
-      if (healthRes.ok) setHealth(await healthRes.json());
-      if (statusRes.ok) setAdminStatus(await statusRes.json());
+      const statusRes = await fetch(`${API_BASE}/system/status`);
+      if (statusRes.ok) {
+         setAdminStatus(await statusRes.json());
+      }
     } catch (e) {
-      setHealth({ status: 'error', components: {} });
+      console.error(e);
     }
     setLoading(false);
   };
@@ -95,26 +89,31 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* System Status */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
         <StatusCard
-          title="System Status"
-          status={health?.status === 'ok' ? 'Healthy' : 'Degraded'}
-          statusColor={health?.status === 'ok' ? 'green' : 'yellow'}
+          title="System"
+          status={adminStatus?.status === 'ok' || adminStatus?.status === 'healthy' ? 'Healthy' : 'Degraded'}
+          statusColor={adminStatus?.status === 'ok' || adminStatus?.status === 'healthy' ? 'green' : 'yellow'}
           icon="🖥️"
         />
         <StatusCard
           title="Qdrant"
-          status={health?.components?.qdrant?.status || 'Unknown'}
-          statusColor={health?.components?.qdrant?.status === 'up' ? 'green' : 'red'}
+          status={adminStatus?.components?.qdrant?.status || 'Unknown'}
+          statusColor={adminStatus?.components?.qdrant?.status === 'up' ? 'green' : 'red'}
           icon="🗄️"
-          detail={`${health?.components?.qdrant?.collections || 0} collections`}
+          detail={adminStatus?.components?.qdrant?.collections ? `${adminStatus.components.qdrant.collections} collections` : undefined}
         />
         <StatusCard
           title="Workers"
-          status={health?.components?.celery?.status || 'Unknown'}
-          statusColor={health?.components?.celery?.status === 'up' ? 'green' : 'red'}
+          status={adminStatus?.components?.celery?.status || 'Unknown'}
+          statusColor={adminStatus?.components?.celery?.status === 'up' ? 'green' : 'red'}
           icon="⚡"
+        />
+        <StatusCard
+          title="Redis"
+          status={adminStatus?.components?.redis?.status || 'Unknown'}
+          statusColor={adminStatus?.components?.redis?.status === 'up' ? 'green' : 'red'}
+          icon="🔄"
         />
       </div>
 

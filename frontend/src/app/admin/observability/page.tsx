@@ -17,6 +17,7 @@ interface Metrics {
   active_connections: number;
   gpu_memory_used_mb: number;
   gpu_memory_total_mb: number;
+  gpu_memory_service_mb: number;
   gpu_utilization_percent: number;
   cpu_usage_percent: number;
   memory_usage_mb: number;
@@ -158,16 +159,29 @@ export default function ObservabilityPage() {
             </div>
             <div>
               <div className="flex justify-between items-center mb-1">
-                <span className="text-slate-400">GPU Memory</span>
+                <span className="text-slate-400">GPU Memory (Service vs System)</span>
                 <span className="text-white font-mono">
                   {((metrics?.gpu_memory_used_mb ?? 0) / 1024).toFixed(1)} / {((metrics?.gpu_memory_total_mb ?? 0) / 1024).toFixed(0)} GB
                 </span>
               </div>
-              <div className="w-full bg-slate-700 rounded-full h-2">
+              <div className="w-full bg-slate-700 rounded-full h-2 flex overflow-hidden">
+                {/* Green: Our Service Usage */}
                 <div 
-                  className="bg-primary h-2 rounded-full" 
-                  style={{ width: `${((metrics?.gpu_memory_used_mb ?? 0) / (metrics?.gpu_memory_total_mb ?? 8000)) * 100}%` }}
+                  className="bg-green-500 h-2" 
+                  style={{ width: `${((metrics?.gpu_memory_service_mb ?? 0) / (metrics?.gpu_memory_total_mb ?? 8000)) * 100}%` }}
+                  title={`Rice Search: ${((metrics?.gpu_memory_service_mb ?? 0) / 1024).toFixed(1)} GB`}
                 />
+                {/* Blue: Other System Usage (Total Used - Service) */}
+                <div 
+                  className="bg-blue-500 h-2" 
+                  style={{ width: `${((Math.max(0, (metrics?.gpu_memory_used_mb ?? 0) - (metrics?.gpu_memory_service_mb ?? 0))) / (metrics?.gpu_memory_total_mb ?? 8000)) * 100}%` }}
+                  title={`System/Other: ${((Math.max(0, (metrics?.gpu_memory_used_mb ?? 0) - (metrics?.gpu_memory_service_mb ?? 0))) / 1024).toFixed(1)} GB`}
+                />
+              </div>
+              <div className="flex justify-between text-xs mt-1">
+                 <span className="text-green-400">● Rice Search</span>
+                 <span className="text-blue-400">● System/Other</span>
+                 <span className="text-slate-500">● Free</span>
               </div>
             </div>
           </div>

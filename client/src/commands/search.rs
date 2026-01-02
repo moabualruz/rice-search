@@ -1,8 +1,7 @@
-use anyhow::Result;
-use crate::core::config::load_config;
 use crate::core::api::ApiClient;
+use crate::core::config::load_config;
+use anyhow::Result;
 use colored::*;
-use serde_json::Value;
 
 pub async fn run(query: &str, limit: usize, json: bool) -> Result<()> {
     let config = load_config()?;
@@ -18,21 +17,30 @@ pub async fn run(query: &str, limit: usize, json: bool) -> Result<()> {
     // Pretty Print
     if let Some(results) = result.get("results").and_then(|v| v.as_array()) {
         if results.is_empty() {
-             println!("No results found.");
-             return Ok(());
+            println!("No results found.");
+            return Ok(());
         }
 
         for item in results {
-             let path = item.get("path").and_then(|s| s.as_str()).unwrap_or("unknown");
-             let line = item.get("start_line").and_then(|n| n.as_u64()).unwrap_or(0);
-             let snippet = item.get("content").and_then(|s| s.as_str()).unwrap_or("");
-             let score = item.get("score").and_then(|f| f.as_f64()).unwrap_or(0.0);
+            let path = item
+                .get("path")
+                .and_then(|s| s.as_str())
+                .unwrap_or("unknown");
+            let line = item.get("start_line").and_then(|n| n.as_u64()).unwrap_or(0);
+            let snippet = item.get("content").and_then(|s| s.as_str()).unwrap_or("");
+            let score = item.get("score").and_then(|f| f.as_f64()).unwrap_or(0.0);
 
-             println!("{}:{}:{:.4}", path.magenta(), line.to_string().green(), score);
-             for l in snippet.lines().take(3) { // Limit snippet lines
-                 println!("  {}", l.trim().dimmed());
-             }
-             println!();
+            println!(
+                "{}:{}:{:.4}",
+                path.magenta(),
+                line.to_string().green(),
+                score
+            );
+            for l in snippet.lines().take(3) {
+                // Limit snippet lines
+                println!("  {}", l.trim().dimmed());
+            }
+            println!();
         }
     } else {
         println!("Invalid response format.");

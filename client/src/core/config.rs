@@ -1,6 +1,6 @@
-use serde::{Deserialize, Serialize};
-use config::{Config, File};
 use anyhow::Result;
+use config::{Config, File};
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
