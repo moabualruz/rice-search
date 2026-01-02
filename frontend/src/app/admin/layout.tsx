@@ -7,8 +7,8 @@ import { usePathname } from 'next/navigation';
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: '📊' },
   { href: '/admin/models', label: 'Models', icon: '🤖' },
-  { href: '/admin/config', label: 'Config', icon: '⚙️' },
-  { href: '/admin/users', label: 'Users', icon: '👥' },
+  // { href: '/admin/config', label: 'Config', icon: '⚙️' }, // Deprecated, moved to Dashboard
+  { href: '/admin/users', label: 'Users', icon: '👥', enterprise: true },
   { href: '/admin/observability', label: 'Observability', icon: '📈' },
 ];
 
@@ -40,7 +40,9 @@ export default function AdminLayout({
         </div>
 
         <nav className="px-4">
-          {navItems.map((item) => {
+          {navItems
+            .filter(item => !item.enterprise || process.env.NEXT_PUBLIC_ENTERPRISE_MODE === 'true')
+            .map((item) => {
             const isActive = pathname === item.href || 
               (item.href !== '/admin' && pathname.startsWith(item.href));
             

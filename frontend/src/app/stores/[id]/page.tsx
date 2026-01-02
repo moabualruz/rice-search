@@ -135,10 +135,10 @@ export default function StoreDetail() {
           </div>
 
           <Button 
-            variant="danger" 
+            variant="secondary" 
             onClick={handleDelete} 
             disabled={isDeleting}
-            className="shrink-0"
+            className="shrink-0 bg-red-900/20 text-red-500 hover:bg-red-900/40 border-red-900/50"
           >
             {isDeleting ? "Deleting..." : "Delete Store"}
             <Trash2 className="w-4 h-4 ml-2" />

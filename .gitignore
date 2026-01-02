@@ -13,7 +13,6 @@ venv/
 env/
 
 # Python / Backend
-__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -59,13 +58,21 @@ htmlcov/
 #data folder
 data/
 
-
 # Temporary files
 tmp/
 test_*.txt
+*_logs.txt
+*_logs_*.txt
+*_log.txt
+*_log_*.txt
 
 # Verification Scripts (Ad-hoc)
 backend/verify_*.py
 backend/debug_*.py
 backend/inspect_*.py
 
+# # Python cache
+# __pycache__/
+
+# # Next.js cache
+# .next/

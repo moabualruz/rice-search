@@ -7,6 +7,7 @@ Enables dynamic GPU resource management (pause/resume).
 
 import logging
 import gc
+import time
 # import torch  # Lazy loaded
 from typing import Dict, Any, Optional, Callable, List
 # import psutil # Lazy loaded
@@ -15,6 +16,9 @@ from src.services.admin.admin_store import get_admin_store
 
 
 logger = logging.getLogger(__name__)
+
+import threading
+from src.core.config import settings
 
 class ModelManager:
     """
@@ -26,6 +30,13 @@ class ModelManager:
         # Registry of registered model loaders
         # format: {model_id: {"loader": config_loader_func, "instance": model_obj, "type": str}}
         self._models: Dict[str, Dict[str, Any]] = {}
+        
+        # TTL Monitor
+        if settings.MODEL_AUTO_UNLOAD:
+            self._running = True
+            self._monitor_thread = threading.Thread(target=self._ttl_monitor_loop, daemon=True)
+            self._monitor_thread.start()
+            logger.info(f"TTL Monitor started (TTL={settings.MODEL_TTL_SECONDS}s)")
     
     @classmethod
     def get_instance(cls) -> "ModelManager":
@@ -42,7 +53,8 @@ class ModelManager:
             self._models[model_id] = {
                 "type": model_type,
                 "instance": instance,
-                "loaded": instance is not None
+                "loaded": instance is not None,
+                "last_accessed": time.time() if instance is not None else 0
             }
             logger.info(f"Registered model: {model_id} ({model_type})")
         else:
@@ -128,6 +140,7 @@ class ModelManager:
             instance = loader_func()
             self._models[model_id]["instance"] = instance
             self._models[model_id]["loaded"] = True
+            self._models[model_id]["last_accessed"] = time.time()
             return True
         except Exception as e:
             logger.error(f"Failed to load model {model_id}: {e}")
@@ -146,6 +159,7 @@ class ModelManager:
     def get_model_instance(self, model_id: str) -> Any:
         """Get the loaded instance of a model. Returns None if not loaded."""
         if model_id in self._models and self._models[model_id]["loaded"]:
+            self._models[model_id]["last_accessed"] = time.time()
             return self._models[model_id]["instance"]
         return None
 
@@ -158,6 +172,39 @@ class ModelManager:
             } 
             for mid, data in self._models.items()
         }
+
+    def check_ttl(self, ttl_seconds: int = 300) -> int:
+        """
+        Unload models that haven't been accessed in 'ttl_seconds'.
+        Returns number of unloaded models.
+        """
+        if ttl_seconds <= 0:
+            return 0
+            
+        now = time.time()
+        unloaded_count = 0
+        
+        # Snapshot keys
+        current_ids = list(self._models.keys())
+        for mid in current_ids:
+            model = self._models[mid]
+            if model["loaded"]:
+                last = model.get("last_accessed", 0)
+                if now - last > ttl_seconds:
+                    logger.info(f"TTL Expired for {mid} (Idle {int(now-last)}s > {ttl_seconds}s). Unloading.")
+                    if self.unload_model(mid):
+                        unloaded_count += 1
+                        
+        return unloaded_count
+
+    def _ttl_monitor_loop(self):
+        """Background loop to check for expired models."""
+        while getattr(self, "_running", True):
+            try:
+                time.sleep(60) # Check every 60 seconds
+                self.check_ttl(settings.MODEL_TTL_SECONDS)
+            except Exception as e:
+                logger.error(f"Error in TTL monitor: {e}")
 
     
     def resolve_model_name(self, model_key: str) -> str:
@@ -194,12 +241,14 @@ class ModelManager:
                  model = SentenceTransformer(model_id, trust_remote_code=trust_remote_code, device=device)
                  return model # ST is self-contained
                  
-            from transformers import AutoTokenizer, AutoModel, AutoModelForMaskedLM
+            from transformers import AutoTokenizer, AutoModel, AutoModelForMaskedLM, AutoModelForSequenceClassification
             
             tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
             
             if model_type == "sparse_embedding":
                 model = AutoModelForMaskedLM.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+            elif model_type == "classification":
+                model = AutoModelForSequenceClassification.from_pretrained(model_id, trust_remote_code=trust_remote_code)
             else:
                 model = AutoModel.from_pretrained(model_id, trust_remote_code=trust_remote_code)
                 

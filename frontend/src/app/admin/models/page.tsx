@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { Button, Input, Card } from '@/components/ui-elements';
 import { ArrowLeft, Plus, Cpu, Zap, Trash2, AlertTriangle, Download, Server } from 'lucide-react';
 
-const API_BASE = 'http://localhost:8000/api/v1/admin/public';
+const API_BASE = 'http://localhost:8003/api/v1/admin/public';
+
+import AddModelModal from './add-model-modal';
 
 interface Model {
   id: string;
@@ -13,20 +15,14 @@ interface Model {
   type: 'embedding' | 'reranker' | 'sparse_embedding' | 'classification';
   active: boolean;
   gpu_enabled: boolean;
+  protected?: boolean;
 }
 
 export default function AdminModels() {
   const [models, setModels] = useState<Model[]>([]);
+  // ... (rest of state omitted for brevity, logic unchanged) ...
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  
-  // New model form
-  const [newModel, setNewModel] = useState({
-    name: '',
-    type: 'embedding',
-    gpu_enabled: true
-  });
-
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
@@ -52,34 +48,25 @@ export default function AdminModels() {
     }
   };
 
-  const handleAdd = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newModel.name) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/models`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newModel.name, // HuggingFace ID
-          type: newModel.type,
-          active: false, // Inactive by default until verified
-          gpu_enabled: newModel.gpu_enabled
-        })
-      });
-
-      if (res.ok) {
-        showMessage('success', 'Model added successfully. Restart required to download weights.');
-        setShowAdd(false);
-        setNewModel({ name: '', type: 'embedding', gpu_enabled: true });
-        loadModels();
-      } else {
-        const err = await res.json();
-        showMessage('error', err.detail || 'Failed to add model');
-      }
-    } catch (e) {
-      showMessage('error', 'Failed to add model');
-    }
+  const handleAddModel = async (model: any) => {
+     try {
+       const res = await fetch(`${API_BASE}/models`, {
+         method: 'POST',
+         headers: { 'Content-Type': 'application/json' },
+         body: JSON.stringify(model)
+       });
+ 
+       if (res.ok) {
+         showMessage('success', 'Model added successfully. Restart required to download weights.');
+         setShowAdd(false);
+         loadModels();
+       } else {
+         const err = await res.json();
+         showMessage('error', err.detail || 'Failed to add model');
+       }
+     } catch (e) {
+       showMessage('error', 'Failed to add model');
+     }
   };
 
   const updateModel = async (id: string, updates: Partial<Model>) => {
@@ -92,8 +79,14 @@ export default function AdminModels() {
       
       if (res.ok) {
          showMessage('success', 'Model updated. Restart may be required.');
-         // Optimistic update
-         setModels(models.map(m => m.id === id ? { ...m, ...updates } : m));
+         
+         // If we activated a model, reload list to see side effects (peers disabled)
+         if (updates.active === true) {
+             loadModels();
+         } else {
+             // Optimistic update for simple changes
+             setModels(models.map(m => m.id === id ? { ...m, ...updates } : m));
+         }
       } else {
          showMessage('error', 'Failed to update model');
       }
@@ -106,6 +99,7 @@ export default function AdminModels() {
      if (!confirm(`Delete model ${id}? This cannot be undone.`)) return;
      
      try {
+       const encodedId = encodeURIComponent(id).replace(/%2F/g, '/');
        const res = await fetch(`${API_BASE}/models/${id}`, { method: 'DELETE' });
        if (res.ok) {
          showMessage('success', 'Model deleted');
@@ -147,60 +141,18 @@ export default function AdminModels() {
            <div className="text-sm text-text-muted">
               Active Models: {models.filter(m => m.active).length} / {models.length}
            </div>
-           <Button onClick={() => setShowAdd(!showAdd)}>
+           <Button onClick={() => setShowAdd(true)}>
              <Plus size={18} className="mr-2" /> Add Model
            </Button>
         </div>
 
-        {/* Add Form */}
+        {/* Modal */}
         {showAdd && (
-          <Card className="mb-8 border-primary/30">
-            <h3 className="text-lg font-bold text-text mb-4">Add New Model</h3>
-            <form onSubmit={handleAdd} className="space-y-4">
-               <div>
-                 <label className="block text-sm text-text-secondary mb-1">HuggingFace Model ID</label>
-                 <Input 
-                   value={newModel.name} 
-                   onChange={e => setNewModel({...newModel, name: e.target.value})}
-                   placeholder="e.g. jinaai/jina-embeddings-v2-base-code" 
-                   required
-                 />
-               </div>
-               
-               <div className="flex gap-4">
-                 <div className="flex-1">
-                   <label className="block text-sm text-text-secondary mb-1">Type</label>
-                   <select 
-                     className="w-full h-10 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white focus:ring-2 focus:ring-primary outline-none"
-                     value={newModel.type}
-                     onChange={e => setNewModel({...newModel, type: e.target.value as any})}
-                   >
-                     <option value="embedding">Embedding</option>
-                     <option value="reranker">Reranker</option>
-                     <option value="sparse_embedding">Sparse (SPLADE)</option>
-                     <option value="classification">Classification</option>
-                   </select>
-                 </div>
-                 
-                 <div className="flex items-center pt-6">
-                    <label className="flex items-center gap-2 text-text cursor-pointer">
-                      <input 
-                        type="checkbox" 
-                        checked={newModel.gpu_enabled}
-                        onChange={e => setNewModel({...newModel, gpu_enabled: e.target.checked})}
-                        className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-primary focus:ring-primary"
-                      />
-                      Enable GPU
-                    </label>
-                 </div>
-               </div>
-
-               <div className="flex justify-end gap-2 pt-2">
-                 <Button type="button" variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
-                 <Button type="submit">Add to Registry</Button>
-               </div>
-            </form>
-          </Card>
+            <AddModelModal 
+                onClose={() => setShowAdd(false)}
+                onAdd={handleAddModel}
+                apiBase={API_BASE}
+            />
         )}
 
         {/* List */}
@@ -215,10 +167,11 @@ export default function AdminModels() {
                         <span className={`px-2 py-0.5 rounded text-xs uppercase font-bold tracking-wide
                           ${model.type === 'embedding' ? 'bg-blue-900/30 text-blue-400' :
                             model.type === 'reranker' ? 'bg-purple-900/30 text-purple-400' :
-                            model.type === 'sparse_embedding' ? 'bg-orange-900/30 text-orange-400' :
+                            ['sparse_embedding', 'sparse'].includes(model.type) ? 'bg-orange-900/30 text-orange-400' :
+                            model.type === 'classification' ? 'bg-teal-900/30 text-teal-400' :
                             'bg-gray-800 text-gray-400'
                           }`}>
-                          {model.type}
+                          {model.type === 'classification' ? 'Query Understanding' : model.type}
                         </span>
                         <h3 className="text-lg font-mono text-text font-bold">{model.name}</h3>
                         {model.active && <span className="text-xs text-green-400 border border-green-900/50 px-2 rounded-full">Active</span>}
@@ -266,9 +219,9 @@ export default function AdminModels() {
                         <Button 
                           variant="ghost" 
                           size="sm" 
-                          className="text-text-muted hover:text-error hover:bg-error/10"
+                          className={`text-text-muted hover:text-error hover:bg-error/10 ${model.protected ? 'opacity-50 cursor-not-allowed' : ''}`}
                           onClick={() => deleteModel(model.id)}
-                          disabled={['dense', 'sparse'].includes(model.id)} // Protect core models
+                          disabled={model.protected}
                         >
                            <Trash2 size={16} />
                         </Button>

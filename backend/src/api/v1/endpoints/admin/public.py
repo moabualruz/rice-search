@@ -10,6 +10,7 @@ from typing import Optional, List, Literal
 from uuid import uuid4
 import psutil
 from datetime import datetime
+from huggingface_hub import HfApi
 
 from src.core.config import settings
 from src.services.admin.admin_store import get_admin_store
@@ -51,29 +52,150 @@ class UserUpdate(BaseModel):
 
 # ============== Models Endpoints ==============
 
+@router.get("/models/search")
+async def search_models(
+    q: str, 
+    type: Literal["embedding", "reranker", "sparse", "classification"] = "embedding",
+    limit: int = 20
+):
+    """
+    Search Hugging Face Hub for compatible models.
+    """
+    api = HfApi()
+    
+    # Define filters based on type
+    filters = []
+    
+    
+    if type == "embedding":
+        # Must be compatible with sentence-transformers
+        filters.append("sentence-transformers")
+    elif type == "reranker":
+        # Industry standard: Must be a cross-encoder or explicitly tagged as reranker
+        # We don't want generic BERT models here.
+        # Note: Some older models might miss tags, but for safety in Admin UI, 
+        # we enforce this to avoid user frustration.
+        pass # We handle logical OR in the code below since HF API `tags` is AND
+    elif type == "classification":
+        # For Query Understanding (CodeBERT etc)
+        pass 
+        
+    # Execute search
+    try:
+        # Search args
+        search_args = {
+            "search": q,
+            "limit": limit,
+            "sort": "downloads",
+            "direction": -1,
+        }
+        
+        if type == "embedding":
+             search_args["library"] = "sentence-transformers"
+        
+        models = api.list_models(**search_args)
+        
+        results = []
+        for m in models:
+            # Client-side filtering for complex logic (HF API tags is strict AND)
+            
+            # 1. Reranker Logic: Must have 'cross-encoder' tag OR 'reranker' in name/tags
+            if type == "reranker":
+                tags = m.tags or []
+                is_cross_encoder = "cross-encoder" in tags
+                is_reranker_tag = "reranker" in tags
+                is_reranker_name = "reranker" in m.modelId.lower()
+                
+                if not (is_cross_encoder or is_reranker_tag or is_reranker_name):
+                    continue
+            
+            # 2. Sparse Logic: Look for SPLADE or sparse keywords
+            if type == "sparse":
+                tags = m.tags or []
+                name = m.modelId.lower()
+                is_splade = "splade" in name or "splade" in tags
+                is_sparse = "sparse" in name or "sparse" in tags
+                
+                if not (is_splade or is_sparse):
+                    continue
+
+            # 3. Classification Logic: Look for text-classification
+            if type == "classification":
+                tags = m.tags or []
+                name = m.modelId.lower()
+                is_cls = "text-classification" in tags
+                is_bert = "bert" in name or "roberta" in name
+                
+                if not (is_cls or is_bert):
+                    continue
+
+            results.append({
+                "id": m.modelId,
+                "name": m.modelId, # simplified
+                "downloads": m.downloads,
+                "likes": m.likes,
+                "tags": m.tags
+            })
+            
+        return {"models": results}
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Hugging Face API Error: {str(e)}")
+
+
+# Helper
+def get_protected_models():
+    return {
+        "dense", "sparse", "reranker", "classification",
+        settings.EMBEDDING_MODEL, 
+        settings.SPARSE_MODEL,
+        settings.RERANK_MODEL,
+        settings.QUERY_UNDERSTANDING_MODEL
+    }
+
 @router.get("/models")
 async def list_models():
     """List all models (persisted to Redis)."""
     store = get_admin_store()
     models = store.get_models()
-    return {"models": list(models.values())}
+    protected = get_protected_models()
+    
+    # Enrich with protected and loaded status
+    from src.services.model_manager import get_model_manager
+    manager = get_model_manager()
+    
+    result = []
+    for m in models.values():
+        m_copy = m.copy()
+        m_copy["protected"] = m["id"] in protected
+        
+        # Get runtime status
+        status = manager.get_model_status(m["id"])
+        m_copy["loaded"] = status.get("loaded", False)
+        
+        result.append(m_copy)
+        
+    return {"models": result}
 
 
-@router.get("/models/{model_id}")
+@router.get("/models/{model_id:path}")
 async def get_model(model_id: str):
     """Get a specific model."""
     store = get_admin_store()
     models = store.get_models()
     if model_id not in models:
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
-    return models[model_id]
+    
+    model = models[model_id].copy()
+    model["protected"] = model_id in get_protected_models()
+    return model
 
 
-@router.put("/models/{model_id}", dependencies=[Depends(requires_role("admin"))])
+@router.put("/models/{model_id:path}", dependencies=[Depends(requires_role("admin"))])
 async def update_model(model_id: str, updates: dict):
     """
     Update a model configuration and apply changes at runtime.
     Supports toggling gpu_enabled and active status.
+    Enforces 'Single Active Model per Type' logic.
     """
     store = get_admin_store()
     models = store.get_models()
@@ -87,6 +209,19 @@ async def update_model(model_id: str, updates: dict):
     gpu_changed = "gpu_enabled" in updates and updates["gpu_enabled"] != old_model.get("gpu_enabled")
     active_changed = "active" in updates and updates["active"] != old_model.get("active")
     
+    if active_changed and updates["active"] is True:
+        # Enforce Single Active Model per Type
+        model_type = old_model.get("type", "embedding")
+        for mid, m in models.items():
+            if mid != model_id and m.get("type") == model_type and m.get("active"):
+                # Deactivate peer
+                m["active"] = False
+                store.set_model(mid, m)
+                
+                # Unload peer from runtime if loaded
+                from src.services.model_manager import get_model_manager
+                get_model_manager().unload_model(mid)
+
     # Update in store
     updated = {**old_model, **updates}
     store.set_model(model_id, updated)
@@ -99,6 +234,8 @@ async def update_model(model_id: str, updates: dict):
         # Unload model to force reload with new settings
         manager.unload_model(model_id)
         
+    # Return enriched model
+    updated["protected"] = model_id in get_protected_models()
     return {"message": "Model updated", "model": updated}
 
 
@@ -121,10 +258,12 @@ async def add_model(model: dict):
     }
     
     store.set_model(model_id, new_model)
+    
+    new_model["protected"] = model_id in get_protected_models()
     return {"message": f"Model {model_id} added", "model": new_model}
 
 
-@router.delete("/models/{model_id}", dependencies=[Depends(requires_role("admin"))])
+@router.delete("/models/{model_id:path}", dependencies=[Depends(requires_role("admin"))])
 async def delete_model(model_id: str):
     """Delete a model (persisted to Redis)."""
     store = get_admin_store()
@@ -134,8 +273,12 @@ async def delete_model(model_id: str):
         raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
     
     # Don't allow deleting core models
-    if model_id in ["dense", "sparse"]:
-        raise HTTPException(status_code=400, detail="Cannot delete core models")
+    protected_models = get_protected_models()
+    
+    # Check if model_id matches any protected model (or is a known alias)
+    # Also strict check for system default ID
+    if model_id in protected_models:
+        raise HTTPException(status_code=400, detail=f"Cannot delete system default model: {model_id}")
     
     store.delete_model(model_id)
     return {"message": f"Model {model_id} deleted"}

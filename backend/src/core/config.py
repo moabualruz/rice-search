@@ -42,6 +42,7 @@ class Settings(BaseSettings):
     # Reranking (REQ-SRCH-03 - V3 Spec)
     RERANK_ENABLED: bool = True
     RERANK_MODEL: str = "jinaai/jina-reranker-v2-base-multilingual"
+    QUERY_UNDERSTANDING_MODEL: str = "microsoft/codebert-base"
     RERANK_TOP_K: int = 10
 
     # Query Understanding (REQ-SRCH-01)
@@ -50,6 +51,10 @@ class Settings(BaseSettings):
 
     # Hardware Acceleration
     FORCE_GPU: bool = True  # Force GPU usage for all models/services if available
+    
+    # System Optimization (Phase 5)
+    MODEL_TTL_SECONDS: int = 300  # Unload unused models after 5 minutes
+    MODEL_AUTO_UNLOAD: bool = True
 
     class Config:
         env_file = ".env"
