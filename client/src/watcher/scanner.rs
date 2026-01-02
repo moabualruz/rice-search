@@ -15,22 +15,24 @@ impl Scanner {
     }
 
     pub async fn scan(&self, path: &Path) {
-        info!("Starting initial scan of: {:?}", path);
+        // Canonicalize root for consistent relative paths
+        let root = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        info!("Starting initial scan of: {:?}", root);
 
-        let walker = WalkBuilder::new(path)
-            .hidden(false) // Allow hidden files (like .github)
+        let walker = WalkBuilder::new(&root)
+            .hidden(false) 
             .ignore(true)
             .git_ignore(true)
-            .add_custom_ignore_filename(".riceignore") // Support .riceignore
-            .filter_entry(|entry| entry.file_name() != ".git") // Explicitly exclude .git dir
+            .add_custom_ignore_filename(".riceignore")
+            .filter_entry(|entry| entry.file_name() != ".git")
             .build();
 
         for result in walker {
             match result {
                 Ok(entry) => {
-                    let path = entry.path();
-                    if path.is_file() {
-                        self.process_file(path).await;
+                    let entry_path = entry.path();
+                    if entry_path.is_file() {
+                        self.process_file(entry_path, &root).await;
                     }
                 }
                 Err(err) => warn!("Error walking path: {}", err),
@@ -39,18 +41,23 @@ impl Scanner {
         info!("Scan complete.");
     }
 
-    async fn process_file(&self, path: &Path) {
+    async fn process_file(&self, path: &Path, root: &Path) {
         let path_str = path.display().to_string();
         debug!("Processing: {}", path_str);
 
-        // TODO: Hash check optimization could go here (store local state DB)
-        // For now, we trust the backend to dedup or just re-upload (less efficient but simpler MVP)
+        // TODO: Hash check optimization could go here
+        
+        // Calculate relative path for upload name
+        // If path is absolute and root is relative (e.g. "."), we might need canonicalization.
+        // Use path diff or just assume they are compatible if from WalkBuilder.
+        let relative = path.strip_prefix(root).unwrap_or(path);
+        let upload_name = relative.to_string_lossy().replace("\\", "/");
 
-        println!("{} {}", "[INDEXING]".blue(), path_str);
+        println!("{} {}", "[INDEXING]".blue(), upload_name);
 
-        match self.client.index_file(path, &self.org_id).await {
-            Ok(_) => println!("{} {}", "[OK]".green(), path_str),
-            Err(e) => println!("{} {} ({})", "[ERROR]".red(), path_str, e),
+        match self.client.index_file(path, &upload_name, &self.org_id).await {
+            Ok(_) => println!("{} {}", "[OK]".green(), upload_name),
+            Err(e) => println!("{} {} ({})", "[ERROR]".red(), upload_name, e),
         }
     }
 }

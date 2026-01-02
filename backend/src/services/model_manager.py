@@ -31,12 +31,15 @@ class ModelManager:
         # format: {model_id: {"loader": config_loader_func, "instance": model_obj, "type": str}}
         self._models: Dict[str, Dict[str, Any]] = {}
         
+        import uuid
+        self.manager_id = str(uuid.uuid4())
+        
         # TTL Monitor
         if settings.MODEL_AUTO_UNLOAD:
             self._running = True
             self._monitor_thread = threading.Thread(target=self._ttl_monitor_loop, daemon=True)
             self._monitor_thread.start()
-            logger.info(f"TTL Monitor started (TTL={settings.MODEL_TTL_SECONDS}s)")
+            logger.info(f"TTL Monitor started (TTL={settings.MODEL_TTL_SECONDS}s) [{self.manager_id}]")
     
     @classmethod
     def get_instance(cls) -> "ModelManager":
@@ -102,11 +105,14 @@ class ModelManager:
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
             
-            # Sync with Redis
+            # Sync with Redis (Distributed Ref Count)
             try:
                 from src.services.admin.admin_store import get_admin_store
                 store = get_admin_store()
                 if store.redis:
+                    # Remove THIS manager's hold on the model
+                    store.redis.srem(f"model_status:{model_id}:instances", self.manager_id)
+                    # Cleanup legacy string key if exists
                     store.redis.delete(f"model_status:{model_id}:loaded")
             except Exception as e:
                 logger.warning(f"Failed to sync model status to Redis: {e}")
@@ -142,6 +148,13 @@ class ModelManager:
              self.register_model(model_id, "unknown")
              
         if self._models[model_id]["loaded"]:
+            # Refresh Redis just in case
+            try:
+                from src.services.admin.admin_store import get_admin_store
+                store = get_admin_store()
+                if store.redis:
+                    store.redis.sadd(f"model_status:{model_id}:instances", self.manager_id)
+            except: pass
             return True
             
         logger.info(f"Loading model: {model_id}")
@@ -156,10 +169,8 @@ class ModelManager:
                 from src.services.admin.admin_store import get_admin_store
                 store = get_admin_store()
                 if store.redis:
-                    # Set a key that indicates this model is loaded in SOME process
-                    # We use a set to track all loaded models across processes if needed, 
-                    # but simple key is easier for status check
-                    store.redis.set(f"model_status:{model_id}:loaded", "true")
+                    # Add THIS manager to the set of holders
+                    store.redis.sadd(f"model_status:{model_id}:instances", self.manager_id)
             except Exception as e:
                 logger.warning(f"Failed to sync model status to Redis: {e}")
                 
@@ -183,10 +194,13 @@ class ModelManager:
             try:
                 from src.services.admin.admin_store import get_admin_store
                 store = get_admin_store()
-                # Check shared key
                 if store.redis:
-                     if store.redis.exists(f"model_status:{model_id}:loaded"):
-                         is_loaded = True
+                    # Check if ANY manager holds it
+                    if store.redis.scard(f"model_status:{model_id}:instances") > 0:
+                        is_loaded = True
+                    # Fallback check for legacy key
+                    elif store.redis.exists(f"model_status:{model_id}:loaded"):
+                        is_loaded = True
             except Exception:
                 pass
 
@@ -208,6 +222,7 @@ class ModelManager:
         # Get local status
         statuses = {}
         
+        # First ensure we populate from local registry
         for mid, data in self._models.items():
             is_loaded = data["loaded"]
             if not is_loaded:
@@ -215,8 +230,12 @@ class ModelManager:
                  try:
                      from src.services.admin.admin_store import get_admin_store
                      store = get_admin_store()
-                     if store.redis and store.redis.exists(f"model_status:{mid}:loaded"):
-                         is_loaded = True
+                     if store.redis:
+                         # Distributed ref check
+                         if store.redis.scard(f"model_status:{mid}:instances") > 0:
+                             is_loaded = True
+                         elif store.redis.exists(f"model_status:{mid}:loaded"):
+                             is_loaded = True
                  except:
                      pass
             

@@ -28,13 +28,14 @@ pub async fn run(path: &str, org_id: Option<String>, full_index: bool) -> Result
     }
 
     // Watcher Setup
-    println!("Starting watcher on: {}", path);
+    let root = std::fs::canonicalize(path).unwrap_or_else(|_| Path::new(path).to_path_buf());
+    println!("Starting watcher on: {:?}", root);
 
     // Build Ignore Matcher
     // We want to respect .gitignore and .riceignore (if any)
-    let mut builder = ignore::gitignore::GitignoreBuilder::new(path);
-    builder.add(Path::new(path).join(".gitignore"));
-    builder.add(Path::new(path).join(".riceignore"));
+    let mut builder = ignore::gitignore::GitignoreBuilder::new(&root);
+    builder.add(root.join(".gitignore"));
+    builder.add(root.join(".riceignore"));
     let ignore_matcher = builder.build().unwrap();
 
     let (tx, rx) = channel();
@@ -44,7 +45,7 @@ pub async fn run(path: &str, org_id: Option<String>, full_index: bool) -> Result
 
     // Add a path to be watched. All files and directories at that path and
     // below will be monitored for changes.
-    watcher.watch(Path::new(path), RecursiveMode::Recursive)?;
+    watcher.watch(&root, RecursiveMode::Recursive)?;
 
     // Processing Loop
     // For a real CLI, we might want to use a debounce logic (notify-debouncer-mini)
@@ -61,18 +62,21 @@ pub async fn run(path: &str, org_id: Option<String>, full_index: bool) -> Result
             Ok(event) => {
                 match event.kind {
                     notify::EventKind::Create(_) | notify::EventKind::Modify(_) => {
-                        for path in event.paths {
-                            if !path.is_file() { continue; }
+                        for raw_path in event.paths {
+                            if !raw_path.is_file() { continue; }
 
+                            // Canonicalize to match builder expectation if needed, 
+                            // or just ensure we treat them consistently.
+                            // Notify usually returns absolute paths.
+                            
                             // 1. Ignore .git explicitly (always)
-                            if path.components().any(|c| c.as_os_str() == ".git") { continue; }
+                            if raw_path.components().any(|c| c.as_os_str() == ".git") { continue; }
 
                             // 2. Check ignores
-                            // ignore crate expects relative path mostly, or full path if built with root
-                            // match returns Ignore, Allow, or None
-                            match ignore_matcher.matched(&path, false) {
+                            // ignore crate expects path to be relative to root OR absolute if root was absolute
+                            match ignore_matcher.matched(&raw_path, false) {
                                 ignore::Match::Ignore(_) => {
-                                    // println!("Ignored: {:?}", path);
+                                    // println!("Ignored: {:?}", raw_path);
                                     continue; 
                                 },
                                 _ => {}
@@ -81,13 +85,20 @@ pub async fn run(path: &str, org_id: Option<String>, full_index: bool) -> Result
                             // Offload to async
                             let c = ApiClient::new(&config.backend_url); // Cheap clone if refactored, for now new
                             let o = oid.clone();
+                            let path_to_send = raw_path.clone(); // Clone for async block
+                            let root_for_async = root.clone();
+
                             rt.spawn(async move {
                                 // Calculate hash for audit/log
-                                let hash = crate::core::hashing::compute_file_hash(&path)
+                                let hash = crate::core::hashing::compute_file_hash(&path_to_send)
                                     .unwrap_or_else(|_| "unknown".to_string());
                                     
-                                println!("Change detected: {:?} (hash: {})", path, &hash[..8]);
-                                let _ = c.index_file(&path, &o).await;
+                                // Calculate relative path + normalize separators for backend
+                                let relative = path_to_send.strip_prefix(&root_for_async).unwrap_or(&path_to_send);
+                                let upload_name = relative.to_string_lossy().replace("\\", "/");
+
+                                println!("Change detected: {:?} (hash: {}) -> {}", path_to_send, &hash[..8], upload_name);
+                                let _ = c.index_file(&path_to_send, &upload_name, &o).await;
                             });
                         }
                     }

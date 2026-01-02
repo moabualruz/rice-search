@@ -28,16 +28,12 @@ impl ApiClient {
         }
     }
 
-    pub async fn index_file(&self, path: &Path, org_id: &str) -> Result<Value> {
+    pub async fn index_file(&self, path: &Path, upload_path: &str, org_id: &str) -> Result<Value> {
         // Read file content eagerly for simplicity/robustness (<10MB files usually)
         let content = tokio::fs::read(path).await.context("Failed to read file")?;
-        let filename = path
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("unknown")
-            .to_string();
-
-        let part = multipart::Part::bytes(content).file_name(filename);
+        
+        // Use provided upload_path (relative) as filename
+        let part = multipart::Part::bytes(content).file_name(upload_path.to_string());
         let form = multipart::Form::new()
             .part("file", part)
             .text("org_id", org_id.to_string());
