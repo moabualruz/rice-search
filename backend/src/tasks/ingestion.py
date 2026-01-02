@@ -13,8 +13,15 @@ from src.services.ingestion.chunker import DocumentChunker
 _dense_model = None
 def get_dense_model():
     global _dense_model
+    import torch
     if _dense_model is None:
-        _dense_model = SentenceTransformer(settings.EMBEDDING_MODEL)
+        device = "cuda" if torch.cuda.is_available() and settings.FORCE_GPU else "cpu"
+        # Accelerate uninstalled to avoid Meta Tensor issues.
+        _dense_model = SentenceTransformer(
+            settings.EMBEDDING_MODEL, 
+            device=device,
+            trust_remote_code=True
+        )
     return _dense_model
 
 _qdrant = None
@@ -26,11 +33,9 @@ def get_qdrant():
 
 _sparse_embedder = None
 def get_sparse_embedder():
-    global _sparse_embedder
-    if _sparse_embedder is None and settings.SPARSE_ENABLED:
-        from src.services.search.sparse_embedder import SparseEmbedder
-        _sparse_embedder = SparseEmbedder.get_instance()
-    return _sparse_embedder
+    # Sparse embedding code removed from client
+    return None
+
 
 @celery_app.task(bind=True)
 def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: str = "public"):

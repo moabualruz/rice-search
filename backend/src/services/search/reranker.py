@@ -64,7 +64,7 @@ class Reranker:
             logger.info(f"Loading reranker model: {self.model_name} on {device}")
             
             # Load model
-            model = CrossEncoder(self.model_name, device=device)
+            model = CrossEncoder(self.model_name, device=device, trust_remote_code=True)
             
             # Clear CPU memory if on GPU
             if device == "cuda":
@@ -83,8 +83,8 @@ class Reranker:
             logger.info("Reranker model loaded successfully")
         else:
             logger.error("Failed to load reranker model")
-            raise RuntimeError("Failed to load reranker model")
-    
+            # Don't raise here, stick to loaded=False so rerank() handles it
+            
     def rerank(
         self,
         query: str,
@@ -110,14 +110,15 @@ class Reranker:
         if not settings.RERANK_ENABLED:
             return results
         
-        # Lazy load model
-        self._load_model()
-        
-        if self.model is None:
-            logger.warning("Reranker model not available, returning original results")
-            return results
-        
         try:
+            # Lazy load model
+            self._load_model()
+            
+            if self.model is None:
+                logger.warning("Reranker model not available, returning original results")
+                return results
+        
+            # Prepare pairs for cross-encoder
             # Prepare pairs for cross-encoder
             pairs = []
             for result in results:

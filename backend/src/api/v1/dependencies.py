@@ -8,9 +8,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 async def get_current_user(
     token: Optional[str] = Depends(oauth2_scheme),
-    x_user_id: Optional[str] = Header(None, alias="X-User-ID")
+    x_user_id: Optional[str] = Header(None)
 ):
-    # 1. Dev/CLI Bypass
+    # DEBUG AUTH
+    print(f"DEBUG AUTH: token={token is not None}, x_user_id={x_user_id}")
     if x_user_id == "admin-1":
         return {
             "sub": "admin-1",

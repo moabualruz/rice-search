@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     EMBEDDING_DIM: int = 768  # Jina code embeddings dimension
 
     # Hybrid Search (Phase 9)
-    SPARSE_MODEL: str = "naver/splade-v3"
+    SPARSE_MODEL: str = "prithivida/Splade_PP_en_v1"
     SPARSE_ENABLED: bool = True
     RRF_K: int = 60
 

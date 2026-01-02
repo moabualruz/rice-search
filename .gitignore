@@ -55,3 +55,7 @@ backend/data/
 # Testing
 .coverage
 htmlcov/
+
+# Temporary files
+tmp/
+

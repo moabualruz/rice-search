@@ -1,5 +1,11 @@
 {
-  "/browse/page": "app/browse/page.js",
+  "/stores/page": "app/stores/page.js",
   "/page": "app/page.js",
-  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js"
+  "/stores/[id]/page": "app/stores/[id]/page.js",
+  "/api/auth/[...nextauth]/route": "app/api/auth/[...nextauth]/route.js",
+  "/admin/models/page": "app/admin/models/page.js",
+  "/admin/config/page": "app/admin/config/page.js",
+  "/admin/users/page": "app/admin/users/page.js",
+  "/admin/observability/page": "app/admin/observability/page.js",
+  "/admin/page": "app/admin/page.js"
 }

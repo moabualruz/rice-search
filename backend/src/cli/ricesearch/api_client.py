@@ -23,7 +23,10 @@ class APIClient:
     def _get_client(self) -> httpx.Client:
         """Get HTTP client."""
         config = get_config()
+        # DEBUG
+        print(f"DEBUG: user_id={config.user_id}")
         headers = {"X-User-ID": str(config.user_id)}
+        print(f"DEBUG: headers={headers}")
         return httpx.Client(base_url=self.base_url, timeout=self.timeout, headers=headers)
     
     def health_check(self) -> bool:
@@ -94,6 +97,10 @@ class APIClient:
                         "hybrid": hybrid
                     }
                 )
+                if resp.status_code != 200:
+                    print(f"Backend Error ({resp.status_code}): {resp.text}")
+                    return []
+                
                 data = resp.json()
                 return data.get("results", [])[:limit]
         except Exception as e:

@@ -16,7 +16,8 @@ class Indexer:
     def __init__(self, qdrant_client, dense_model, sparse_embedder=None):
         self.qdrant = qdrant_client
         self.model = dense_model
-        self.sparse_embedder = sparse_embedder
+        # User requested removal of client-side sparse embedder
+        self.sparse_embedder = None
         self.chunker = DocumentChunker()
         self.collection_name = "rice_chunks"
         
@@ -28,11 +29,9 @@ class Indexer:
             self.qdrant.create_collection(
                 collection_name=self.collection_name,
                 vectors_config={
-                    "default": VectorParams(size=384, distance=Distance.COSINE)
+                    "default": VectorParams(size=768, distance=Distance.COSINE)
                 },
-                sparse_vectors_config={
-                    "sparse": SparseVectorParams(index=SparseIndexParams(on_disk=False))
-                } if settings.SPARSE_ENABLED else None
+                # Sparse config removed as per user request (server-side managed)
             )
 
     def ingest_file(self, file_path: str, repo_name: str, org_id: str) -> Dict:
@@ -55,28 +54,18 @@ class Indexer:
         }
         
         chunks = self.chunker.chunk_text(text, base_metadata)
-        # (Simplified AST logic for now, add back if needed)
         
-        # 3. Embed
+        # 3. Embed (Dense Only)
         contents = [c["content"] for c in chunks]
         dense_embeddings = self.model.encode(contents)
         
-        sparse_embeddings = []
-        if self.sparse_embedder:
-             sparse_embeddings = self.sparse_embedder.embed_batch(contents)
-
         # 4. Upsert
         self.ensure_collection()
         points = []
         
         for i, chunk in enumerate(chunks):
             vectors = {"default": dense_embeddings[i].tolist()}
-            if sparse_embeddings:
-                sparse_vec = sparse_embeddings[i]
-                vectors["sparse"] = {
-                     "indices": sparse_vec.indices.tolist() if hasattr(sparse_vec.indices, 'tolist') else sparse_vec.indices,
-                     "values": sparse_vec.values.tolist() if hasattr(sparse_vec.values, 'tolist') else sparse_vec.values
-                }
+            # Sparse vectors removed
             
             points.append(PointStruct(
                 id=str(uuid.uuid4()),

@@ -72,7 +72,10 @@ def get_dense_model():
     
     # Return instance if loaded
     if status["loaded"]:
-        return manager._models["dense"]["instance"]
+        inst = manager._models["dense"]["instance"]
+        print(f"DEBUG DENSE: status=True, instance={inst}, type={type(inst)}")
+        return inst
+    print("DEBUG DENSE: Not Loaded")
     raise RuntimeError("Failed to load dense model")
 
 # Lazy load sparse embedder
@@ -80,11 +83,9 @@ _sparse_embedder = None
 
 def get_sparse_embedder():
     """Lazy load sparse embedder."""
-    global _sparse_embedder
-    if _sparse_embedder is None and settings.SPARSE_ENABLED:
-        from src.services.search.sparse_embedder import SparseEmbedder
-        _sparse_embedder = SparseEmbedder.get_instance()
-    return _sparse_embedder
+    # Sparse embedding code removed from client.
+    # Return None to trigger fallback to dense-only search.
+    return None
 
 
 class Retriever:
@@ -175,18 +176,23 @@ class Retriever:
         query_filter = Filter(must=filter_conditions)
         
         # 3. Search
+        # 3. Search
         try:
-            results = qdrant.search(
+            results = qdrant.query_points(
                 collection_name=COLLECTION_NAME,
-                query_vector=("default", vector),
+                query=vector,
+                using="default",
                 query_filter=query_filter,
                 limit=limit
             )
-        except Exception:
+        except Exception as e:
+            print(f"Dense Search Error: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
         # 4. Format results
-        return Retriever._format_results(results)
+        return Retriever._format_results(results.points)
 
     
     @staticmethod
