@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   # ---------------------------------------------------------------------------
   # INFRASTRUCTURE
@@ -58,8 +56,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
+      - HF_HOME=/root/.cache/huggingface
     volumes:
       - ../backend:/app
+      - ../data/hf_cache:/root/.cache/huggingface
     depends_on:
       - redis
       - qdrant
@@ -85,8 +85,10 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
+      - HF_HOME=/root/.cache/huggingface
     volumes:
       - ../backend:/app
+      - ../data/hf_cache:/root/.cache/huggingface
     depends_on:
       - redis
       - qdrant

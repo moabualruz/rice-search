@@ -15,16 +15,18 @@ impl Scanner {
     }
 
     pub async fn scan(&self, path: &Path) {
-        // Canonicalize root for consistent relative paths
-        let root = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        info!("Starting initial scan of: {:?}", root);
+        // Use the path as provided (relative) - WalkBuilder handles gitignore properly
+        info!("Starting initial scan of: {:?}", path);
 
-        let walker = WalkBuilder::new(&root)
+        let walker = WalkBuilder::new(path)
             .hidden(false) 
-            .ignore(true)
-            .git_ignore(true)
+            .ignore(true)        // Respect .ignore files
+            .git_ignore(true)    // Respect .gitignore
             .add_custom_ignore_filename(".riceignore")
-            .filter_entry(|entry| entry.file_name() != ".git")
+            .filter_entry(|entry| {
+                // Only filter .git explicitly, let gitignore handle the rest
+                entry.file_name() != ".git"
+            })
             .build();
 
         for result in walker {
@@ -32,7 +34,7 @@ impl Scanner {
                 Ok(entry) => {
                     let entry_path = entry.path();
                     if entry_path.is_file() {
-                        self.process_file(entry_path, &root).await;
+                        self.process_file(entry_path).await;
                     }
                 }
                 Err(err) => warn!("Error walking path: {}", err),
@@ -41,23 +43,28 @@ impl Scanner {
         info!("Scan complete.");
     }
 
-    async fn process_file(&self, path: &Path, root: &Path) {
-        let path_str = path.display().to_string();
-        debug!("Processing: {}", path_str);
+    async fn process_file(&self, path: &Path) {
+        // Get relative path for display
+        let rel_display = path.to_string_lossy().replace("\\", "/");
+        debug!("Processing: {}", rel_display);
 
-        // TODO: Hash check optimization could go here
+        // Only resolve to absolute when sending to server
+        let abs_path = std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         
-        // Calculate relative path for upload name
-        // If path is absolute and root is relative (e.g. "."), we might need canonicalization.
-        // Use path diff or just assume they are compatible if from WalkBuilder.
-        let relative = path.strip_prefix(root).unwrap_or(path);
-        let upload_name = relative.to_string_lossy().replace("\\", "/");
+        // Clean UNC prefix for server
+        let abs_str = abs_path.to_string_lossy();
+        let clean_path = if abs_str.starts_with("\\\\?\\") {
+            &abs_str[4..]
+        } else {
+            &abs_str
+        };
+        let upload_name = clean_path.replace("\\", "/");
 
-        println!("{} {}", "[INDEXING]".blue(), upload_name);
+        println!("{} {}", "[INDEXING]".blue(), rel_display);
 
-        match self.client.index_file(path, &upload_name, &self.org_id).await {
-            Ok(_) => println!("{} {}", "[OK]".green(), upload_name),
-            Err(e) => println!("{} {} ({})", "[ERROR]".red(), upload_name, e),
+        match self.client.index_file(&abs_path, &upload_name, &self.org_id).await {
+            Ok(_) => println!("{} {}", "[OK]".green(), rel_display),
+            Err(e) => println!("{} {} ({})", "[ERROR]".red(), rel_display, e),
         }
     }
 }

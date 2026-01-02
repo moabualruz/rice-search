@@ -20,41 +20,31 @@ pub async fn run(path: &str, org_id: Option<String>, full_index: bool) -> Result
 
     let oid = org_id.unwrap_or("public".to_string());
 
-    let scanner = Scanner::new(ApiClient::new(&config.backend_url), oid.clone()); // Clone for scanner
+    // Use the path as provided (relative like ".")
+    let root_path = Path::new(path);
+    
+    let scanner = Scanner::new(ApiClient::new(&config.backend_url), oid.clone());
 
     // Initial Scan
     if full_index {
-        scanner.scan(Path::new(path)).await;
+        scanner.scan(root_path).await;
     }
 
-    // Watcher Setup
-    let root = std::fs::canonicalize(path).unwrap_or_else(|_| Path::new(path).to_path_buf());
-    println!("Starting watcher on: {:?}", root);
-
-    // Build Ignore Matcher
-    // We want to respect .gitignore and .riceignore (if any)
-    let mut builder = ignore::gitignore::GitignoreBuilder::new(&root);
-    builder.add(root.join(".gitignore"));
-    builder.add(root.join(".riceignore"));
+    // Build Ignore Matcher from the root path (works with relative paths)
+    let mut builder = ignore::gitignore::GitignoreBuilder::new(root_path);
+    builder.add(root_path.join(".gitignore"));
+    builder.add(root_path.join(".riceignore"));
     let ignore_matcher = builder.build().unwrap();
+
+    println!("Starting watcher on: {}", path);
 
     let (tx, rx) = channel();
 
-    // Automatically select the best implementation for your platform.
     let mut watcher = RecommendedWatcher::new(tx, Config::default())?;
 
-    // Add a path to be watched. All files and directories at that path and
-    // below will be monitored for changes.
-    watcher.watch(&root, RecursiveMode::Recursive)?;
+    // Watch the path as provided
+    watcher.watch(root_path, RecursiveMode::Recursive)?;
 
-    // Processing Loop
-    // For a real CLI, we might want to use a debounce logic (notify-debouncer-mini)
-    // For MVP, raw events are okay, but we should handle "Notice: Write"
-
-    // Note: notify's receiver is blocking. We can spawn a thread or use specific async bridges.
-    // Here we just block the main thread as "watching" is the only task.
-
-    // To mix async upload with blocking watch, we can use a runtime handle.
     let rt = tokio::runtime::Handle::current();
 
     for res in rx {
@@ -62,43 +52,53 @@ pub async fn run(path: &str, org_id: Option<String>, full_index: bool) -> Result
             Ok(event) => {
                 match event.kind {
                     notify::EventKind::Create(_) | notify::EventKind::Modify(_) => {
-                        for raw_path in event.paths {
-                            if !raw_path.is_file() { continue; }
+                        for event_path in event.paths {
+                            if !event_path.is_file() { continue; }
 
-                            // Canonicalize to match builder expectation if needed, 
-                            // or just ensure we treat them consistently.
-                            // Notify usually returns absolute paths.
+                            // 1. Ignore .git explicitly
+                            if event_path.components().any(|c| c.as_os_str() == ".git") { continue; }
+
+                            // 2. Get relative path from the event path
+                            // Notify returns absolute paths, so we need to strip the current dir
+                            let cwd = std::env::current_dir().unwrap_or_default();
+                            let relative_path = event_path.strip_prefix(&cwd)
+                                .or_else(|_| event_path.strip_prefix(root_path))
+                                .unwrap_or(&event_path);
                             
-                            // 1. Ignore .git explicitly (always)
-                            if raw_path.components().any(|c| c.as_os_str() == ".git") { continue; }
-
-                            // 2. Check ignores
-                            // ignore crate expects path to be relative to root OR absolute if root was absolute
-                            match ignore_matcher.matched(&raw_path, false) {
+                            // Normalize to forward slashes for gitignore matching
+                            let rel_str = relative_path.to_string_lossy().replace("\\", "/");
+                            
+                            // 3. Check gitignore with relative path
+                            let matched = ignore_matcher.matched(&rel_str, false);
+                            
+                            match matched {
                                 ignore::Match::Ignore(_) => {
-                                    // println!("Ignored: {:?}", raw_path);
                                     continue; 
                                 },
                                 _ => {}
                             }
 
-                            // Offload to async
-                            let c = ApiClient::new(&config.backend_url); // Cheap clone if refactored, for now new
+                            // 4. Passed ignore check - send to server with ABSOLUTE path
+                            let c = ApiClient::new(&config.backend_url);
                             let o = oid.clone();
-                            let path_to_send = raw_path.clone(); // Clone for async block
-                            let root_for_async = root.clone();
+                            let abs_path = std::fs::canonicalize(&event_path)
+                                .unwrap_or_else(|_| event_path.clone());
 
                             rt.spawn(async move {
-                                // Calculate hash for audit/log
-                                let hash = crate::core::hashing::compute_file_hash(&path_to_send)
+                                let hash = crate::core::hashing::compute_file_hash(&abs_path)
                                     .unwrap_or_else(|_| "unknown".to_string());
-                                    
-                                // Calculate relative path + normalize separators for backend
-                                let relative = path_to_send.strip_prefix(&root_for_async).unwrap_or(&path_to_send);
-                                let upload_name = relative.to_string_lossy().replace("\\", "/");
+                                
+                                // Clean UNC prefix for server
+                                let path_str = abs_path.to_string_lossy();
+                                let clean_path = if path_str.starts_with("\\\\?\\") {
+                                    &path_str[4..]
+                                } else {
+                                    &path_str
+                                };
+                                let upload_name = clean_path.replace("\\", "/");
 
-                                println!("Change detected: {:?} (hash: {}) -> {}", path_to_send, &hash[..8], upload_name);
-                                let _ = c.index_file(&path_to_send, &upload_name, &o).await;
+                                println!("Indexing: {} (hash: {})", upload_name, &hash[..8]);
+                                let _ = c.index_file(&abs_path, &upload_name, &o).await;
                             });
                         }
                     }
