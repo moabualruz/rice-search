@@ -4,7 +4,7 @@ Handles document processing and Qdrant operations.
 """
 import uuid
 from typing import Dict, List, Optional
-from qdrant_client.models import PointStruct, VectorParams, SparseVectorParams, SparseIndexParams, Distance
+from qdrant_client.models import PointStruct, VectorParams, SparseVectorParams, SparseIndexParams, Distance, SparseVector
 
 import hashlib
 from src.core.config import settings
@@ -33,7 +33,7 @@ class Indexer:
             self.qdrant.create_collection(
                 collection_name=self.collection_name,
                 vectors_config={
-                    "default": VectorParams(size=768, distance=Distance.COSINE)
+                    "default": VectorParams(size=settings.EMBEDDING_DIM, distance=Distance.COSINE)
                 },
                 sparse_vectors_config={
                     "sparse": SparseVectorParams(
@@ -103,13 +103,18 @@ class Indexer:
             chunks = self.chunker.chunk_text(text, base_metadata)
         
         if not chunks:
+             print("Indexer: No chunks generated.")
              return {"status": "skipped", "message": "No chunks generated"}
+
+        print(f"Indexer: Generated {len(chunks)} chunks (AST={is_ast})")
 
         # 3. Embed
         contents = [c["content"] for c in chunks]
         
         # Dense
+        print("Indexer: Embedding dense...")
         dense_embeddings = self.model.encode(contents)
+        print("Indexer: Dense embedding done.")
         
         # Upsert
         self.ensure_collection()
@@ -123,7 +128,7 @@ class Indexer:
             try:
                 if self.sparse_embedder:
                     sp_vec = self.sparse_embedder.embed(chunk["content"])
-                    vectors["sparse"] = PointStruct.SparseVector(
+                    vectors["sparse"] = SparseVector(
                         indices=sp_vec.indices,
                         values=sp_vec.values
                     )
@@ -152,10 +157,12 @@ class Indexer:
                 }
             ))
             
+        print(f"Indexer: Upserting {len(points)} points to {self.collection_name}...")
         self.qdrant.upsert(
             collection_name=self.collection_name,
             points=points
         )
+        print("Indexer: Upsert complete.")
         
         return {"status": "success", "chunks_indexed": len(points), "mode": "ast" if is_ast else "fallback"}
 

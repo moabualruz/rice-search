@@ -100,6 +100,7 @@ class APIClient:
                 data = resp.json()
                 return data.get("results", [])[:limit]
         except Exception as e:
+            print(f"API Client Error: {e}")
             return []
 
 

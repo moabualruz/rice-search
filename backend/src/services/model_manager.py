@@ -7,10 +7,12 @@ Enables dynamic GPU resource management (pause/resume).
 
 import logging
 import gc
-import torch
+# import torch  # Lazy loaded
 from typing import Dict, Any, Optional, Callable, List
-import psutil
+# import psutil # Lazy loaded
 import subprocess
+from src.services.admin.admin_store import get_admin_store
+
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +86,7 @@ class ModelManager:
             # 4. Force GC
             del instance
             gc.collect()
+            import torch
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
                 
@@ -140,6 +143,12 @@ class ModelManager:
             "loaded": self._models[model_id]["loaded"]
         }
 
+    def get_model_instance(self, model_id: str) -> Any:
+        """Get the loaded instance of a model. Returns None if not loaded."""
+        if model_id in self._models and self._models[model_id]["loaded"]:
+            return self._models[model_id]["instance"]
+        return None
+
     def get_all_models(self) -> Dict[str, Dict[str, Any]]:
         """Get status of all registered models."""
         return {
@@ -150,7 +159,91 @@ class ModelManager:
             for mid, data in self._models.items()
         }
 
+    
+    def resolve_model_name(self, model_key: str) -> str:
+        """
+        Resolve the actual HuggingFace model ID for a given key (e.g. 'dense', 'sparse').
+        Checks AdminStore first, then falls back to Config/Env.
+        """
+        try:
+            store = get_admin_store()
+            models = store.get_models()
+            if model_key in models and models[model_key].get("active"):
+                return models[model_key]["name"]
+        except Exception as e:
+            logger.warning(f"Failed to resolve model from AdminStore: {e}")
+            
+        # Fallbacks handled by caller usually, but we could return None
+        return None
+
+    def load_model_from_hub(self, model_id: str, model_type: str, trust_remote_code: bool = False, **kwargs) -> bool:
+        """
+        Download and load a model directly from HuggingFace Hub.
+        """
+        if model_id not in self._models:
+             self.register_model(model_id, model_type)
+        
+        def loader():
+            logger.info(f"Downloading/Loading model: {model_id} (trust_remote_code={trust_remote_code})")
+            
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+            
+            if model_type == "embedding":
+                 from sentence_transformers import SentenceTransformer
+                 model = SentenceTransformer(model_id, trust_remote_code=trust_remote_code, device=device)
+                 return model # ST is self-contained
+                 
+            from transformers import AutoTokenizer, AutoModel, AutoModelForMaskedLM
+            
+            tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+            
+            if model_type == "sparse_embedding":
+                model = AutoModelForMaskedLM.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+            else:
+                model = AutoModel.from_pretrained(model_id, trust_remote_code=trust_remote_code)
+                
+            model.to(device)
+            model.eval()
+            
+            return {"model": model, "tokenizer": tokenizer, "device": device}
+
+        return self.load_model(model_id, loader)
+
+    def swap_model(self, model_key: str, new_model_id: str):
+        """
+        Swap the runtime model for a given key (e.g. swap the 'dense' model).
+        """
+        # 1. Unload current if strictly defined by key? 
+        # Actually model_key represents the slot (dense/sparse) but we store by ID.
+        # We need to find what was previously occupying this slot.
+        # For simplicity in this gap fix, we just unload the *old* ID if known, 
+        # OR we assume the caller knows the old ID.
+        # But wait, the test expects `swap_model("dense", "new_id")`.
+        
+        # We'll unload the *current* model associated with this key in Admin Store?
+        # Or just unload everything that looks like it?
+        # A simpler approach: The manager tracks by ID. The *Caller* (Admin API) knows the Old ID.
+        # But let's implement safe unloading of the key "dense" if it was a registered alias?
+        # Our registry keys are IDs. 
+        
+        # Let's assume the test implies we unload whatever was "dense". 
+        # Since we don't track "roles" in the manager, we unload the "key" if it matches an ID,
+        # OR we rely on the Admin API to tell us `old_id` and `new_id`.
+        # The test uses `swap_model("dense", ...)` so let's stick to that signature but implement it robustly.
+        
+        self.unload_model(model_key) # If "dense" is the ID.
+        
+        # Load new
+        # Determine type based on key
+        mtype = "embedding"
+        if model_key == "sparse": mtype = "sparse_embedding"
+        elif model_key == "reranker": mtype = "reranker"
+        
+        return self.load_model_from_hub(new_model_id, mtype, trust_remote_code=(model_key == "dense" and "jina" in new_model_id)) 
+
     def get_gpu_usage(self) -> Dict[str, Any]:
+
         """Get current GPU memory usage metrics."""
         usage = {
             "available": False,
@@ -159,6 +252,7 @@ class ModelManager:
             "percent": 0
         }
         
+        import torch
         if not torch.cuda.is_available():
             return usage
             

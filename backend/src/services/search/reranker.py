@@ -7,7 +7,7 @@ This improves search quality by re-scoring results with a more accurate model.
 
 import logging
 from typing import List, Dict, Any, Optional, Tuple
-from sentence_transformers import CrossEncoder
+# from sentence_transformers import CrossEncoder # Lazy
 
 from src.core.config import settings
 
@@ -27,7 +27,7 @@ class Reranker:
             model_name: HuggingFace model name for cross-encoder
         """
         self.model_name = model_name or settings.RERANK_MODEL
-        self.model: Optional[CrossEncoder] = None
+        self.model = None # type: ignore
         self._loaded = False
     
     @classmethod
@@ -50,7 +50,8 @@ class Reranker:
             import torch
             from src.core.device import get_device
             from src.services.admin.admin_store import get_admin_store
-            
+            from sentence_transformers import CrossEncoder
+
             # Check if GPU is enabled for reranker
             store = get_admin_store()
             models = store.get_models()

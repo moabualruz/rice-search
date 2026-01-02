@@ -56,6 +56,16 @@ backend/data/
 .coverage
 htmlcov/
 
+#data folder
+data/
+
+
 # Temporary files
 tmp/
+test_*.txt
+
+# Verification Scripts (Ad-hoc)
+backend/verify_*.py
+backend/debug_*.py
+backend/inspect_*.py
 

@@ -8,7 +8,7 @@ import sys
 
 # Ensure src is on path
 # Ensure src is on path
-sys.path.insert(0, '/app')
+sys.path.insert(0, os.getcwd())
 
 from src.worker.celery_app import app, worker_pool, worker_concurrency
 

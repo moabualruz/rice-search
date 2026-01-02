@@ -5,24 +5,10 @@ Delegates to Indexer service.
 from src.worker.celery_app import app as celery_app
 from src.db.qdrant import get_qdrant_client
 from src.core.config import settings
-from sentence_transformers import SentenceTransformer
 from src.services.ingestion.indexer import Indexer
 from src.services.ingestion.chunker import DocumentChunker
 
 # Lazy load models/clients
-_dense_model = None
-def get_dense_model():
-    global _dense_model
-    import torch
-    if _dense_model is None:
-        device = "cuda" if torch.cuda.is_available() and settings.FORCE_GPU else "cpu"
-        # Accelerate uninstalled to avoid Meta Tensor issues.
-        _dense_model = SentenceTransformer(
-            settings.EMBEDDING_MODEL, 
-            device=device,
-            trust_remote_code=True
-        )
-    return _dense_model
 
 _qdrant = None
 def get_qdrant():
@@ -45,10 +31,20 @@ def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: s
     """
     self.update_state(state='STARTED', meta={'step': 'Indexing'})
     
+    from src.services.model_manager import ModelManager
+    
+    # Ensure model is loaded (worker context)
+    mgr = ModelManager.get_instance()
+    model_id = settings.EMBEDDING_MODEL
+    # We use trust_remote_code=True generally for these models, or check config
+    trust_remote = "jina" in model_id # simple heuristic or use config
+    
+    # Load if not already
+    mgr.load_model_from_hub(model_id, "embedding", trust_remote_code=trust_remote)
+    
     indexer = Indexer(
         qdrant_client=get_qdrant(),
-        dense_model=get_dense_model(),
-        sparse_embedder=get_sparse_embedder()
+        dense_model=mgr.get_model_instance(model_id)
     )
     
     return indexer.ingest_file(file_path, repo_name, org_id)

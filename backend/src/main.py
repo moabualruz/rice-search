@@ -14,7 +14,7 @@ app = FastAPI(
 
 # Setup Telemetry (if Jaeger endpoint is provided)
 # Using http://jaeger:4317 inside docker network
-setup_telemetry(app, "rice-search-api", os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4317"))
+# setup_telemetry(app, "rice-search-api", os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://jaeger:4317"))
 
 from src.api.v1.endpoints import ingest, search, files, stores
 from src.api.v1.endpoints import metrics

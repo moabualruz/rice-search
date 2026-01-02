@@ -9,11 +9,12 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
 from dataclasses import dataclass
 
-try:
-    import tree_sitter_languages
-    TREE_SITTER_AVAILABLE = True
-except ImportError:
-    TREE_SITTER_AVAILABLE = False
+# try:
+#     import tree_sitter_languages
+#     TREE_SITTER_AVAILABLE = True
+# except ImportError:
+#     TREE_SITTER_AVAILABLE = False
+TREE_SITTER_AVAILABLE = None # Checked lazily
 
 from src.core.config import settings
 
@@ -73,11 +74,19 @@ class ASTParser:
     """
     
     def __init__(self):
-        self.enabled = TREE_SITTER_AVAILABLE and getattr(settings, 'AST_PARSING_ENABLED', True)
+        self.enabled = getattr(settings, 'AST_PARSING_ENABLED', True)
         self._parsers = {}
     
     def _get_parser(self, language: str):
         """Get or create parser for a language."""
+        global TREE_SITTER_AVAILABLE
+        if TREE_SITTER_AVAILABLE is None:
+            try:
+                import tree_sitter_languages
+                TREE_SITTER_AVAILABLE = True
+            except ImportError:
+                TREE_SITTER_AVAILABLE = False
+                
         if not TREE_SITTER_AVAILABLE:
             return None
         

@@ -3,11 +3,16 @@ from src.core.config import settings
 from src.services.admin.admin_store import get_admin_store
 
 # Read worker config from Redis
-store = get_admin_store()
-config = store.get_effective_config()
-
-worker_pool = config.get("worker_pool", "threads")
-worker_concurrency = config.get("worker_concurrency", 10)
+# Read worker config from Redis
+try:
+    store = get_admin_store()
+    config = store.get_effective_config()
+    worker_pool = config.get("worker_pool", "threads")
+    worker_concurrency = config.get("worker_concurrency", 10)
+except Exception:
+    # Fallback if Redis is down or unreachable during import
+    worker_pool = "threads"
+    worker_concurrency = 10
 
 # Create Celery app
 app = Celery(
@@ -32,3 +37,6 @@ app.autodiscover_tasks(['src.tasks'])
 @app.task
 def echo_task(message):
     return message
+
+# Import tasks to ensure registration
+import src.tasks.ingestion

@@ -5,7 +5,7 @@ Supports both dense-only and hybrid (dense + sparse) search using Qdrant.
 """
 
 from typing import List, Dict, Optional
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer # Lazy
 from qdrant_client.models import (
     Filter,
     FieldCondition,
@@ -24,7 +24,7 @@ from src.core.config import settings
 from src.services.model_manager import get_model_manager
 
 # Lazy load dense model via Manager
-qdrant = get_qdrant_client()
+# qdrant = get_qdrant_client()
 COLLECTION_NAME = "rice_chunks"
 
 def get_dense_model():
@@ -57,6 +57,9 @@ def get_dense_model():
         # Use FP16 for GPU to save memory
         model_kwargs = {"torch_dtype": torch.float16} if device == "cuda" else {}
         
+        model_kwargs = {"torch_dtype": torch.float16} if device == "cuda" else {}
+        
+        from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(
             settings.EMBEDDING_MODEL, 
             device=device,
@@ -172,7 +175,8 @@ class Retriever:
         # 3. Search
         # 3. Search
         try:
-            results = qdrant.query_points(
+            qclient = get_qdrant_client()
+            results = qclient.query_points(
                 collection_name=COLLECTION_NAME,
                 query=vector,
                 using="default",
@@ -237,7 +241,8 @@ class Retriever:
         # 4. Execute hybrid search with RRF fusion
         try:
             # Qdrant Query API with prefetch for hybrid search
-            results = qdrant.query_points(
+            qclient = get_qdrant_client()
+            results = qclient.query_points(
                 collection_name=COLLECTION_NAME,
                 prefetch=[
                     # Dense prefetch

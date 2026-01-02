@@ -37,9 +37,11 @@ async def upload_file(
         # For Phase 2 iron core, let's assume shared volume for simplicity
         # or just pass content if small. 
         
-        # FIX: We will save to 'backend/tmp' which is mounted in both at /app/tmp
-        shared_path = f"/app/tmp/{file_id}{ext}"
-        os.makedirs("/app/tmp", exist_ok=True)
+        # FIX: Ensure path is accessible by both API and Worker
+        # Use simple local tmp relative to valid CWD or /tmp fallback
+        base_tmp = os.getenv("SHARED_TMP_DIR", os.path.join(os.getcwd(), "tmp"))
+        os.makedirs(base_tmp, exist_ok=True)
+        shared_path = os.path.join(base_tmp, f"{file_id}{ext}")
         # Re-save to shared path since /tmp might not be shared
         with open(shared_path, "wb") as buffer:
              file.file.seek(0)

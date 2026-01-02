@@ -1,8 +1,7 @@
-
 import logging
-import torch
+# import torch # Lazy
 from typing import Dict, Any, List, Optional
-from transformers import AutoModelForMaskedLM, AutoTokenizer
+# from transformers import AutoModelForMaskedLM, AutoTokenizer # Lazy
 from collections import namedtuple
 
 from src.core.config import settings
@@ -45,6 +44,9 @@ class SparseEmbedder:
             # Determine device (CPU preferred for sparse usually, unless batch)
             # But prompt says "GPU support via Docker".
             # Check availability
+            import torch
+            from transformers import AutoTokenizer, AutoModelForMaskedLM
+            
             device = "cuda" if torch.cuda.is_available() and settings.FORCE_GPU else "cpu"
             
             tokenizer = AutoTokenizer.from_pretrained(self.model_name)
@@ -73,6 +75,7 @@ class SparseEmbedder:
         Returns object with .indices (List[int]) and .values (List[float]).
         """
         self._load_model()
+        import torch
         
         with torch.no_grad():
             # tokenize
