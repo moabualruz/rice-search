@@ -71,8 +71,8 @@ backend/verify_*.py
 backend/debug_*.py
 backend/inspect_*.py
 
-# # Python cache
-# __pycache__/
+# Python cache
+__pycache__/
 
-# # Next.js cache
-# .next/
+# Next.js cache
+.next/
