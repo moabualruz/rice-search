@@ -78,14 +78,8 @@ def get_dense_model():
     print("DEBUG DENSE: Not Loaded")
     raise RuntimeError("Failed to load dense model")
 
-# Lazy load sparse embedder
-_sparse_embedder = None
+from src.services.search.sparse import get_sparse_embedder
 
-def get_sparse_embedder():
-    """Lazy load sparse embedder."""
-    # Sparse embedding code removed from client.
-    # Return None to trigger fallback to dense-only search.
-    return None
 
 
 class Retriever:

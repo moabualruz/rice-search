@@ -19,11 +19,11 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
     # Embedding Model (V3 Spec: Code-optimized)
-    EMBEDDING_MODEL: str = "jinaai/jina-embeddings-v2-base-code"
+    EMBEDDING_MODEL: str = "jinaai/jina-code-embeddings-1.5b"
     EMBEDDING_DIM: int = 768  # Jina code embeddings dimension
 
     # Hybrid Search (Phase 9)
-    SPARSE_MODEL: str = "prithivida/Splade_PP_en_v1"
+    SPARSE_MODEL: str = "naver/splade-cocondenser-ensembledistil"
     SPARSE_ENABLED: bool = True
     RRF_K: int = 60
 
