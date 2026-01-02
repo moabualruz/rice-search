@@ -164,7 +164,7 @@ async def list_models():
     """List all models (persisted to Redis)."""
     store = get_admin_store()
     models = store.get_models()
-    protected = get_protected_models()
+    protected_ids = get_protected_models()
     
     # Enrich with protected and loaded status
     from src.services.model_manager import get_model_manager
@@ -173,10 +173,12 @@ async def list_models():
     result = []
     for m in models.values():
         m_copy = m.copy()
-        m_copy["protected"] = m["id"] in protected
+        # Use model.protected if set, otherwise check against protected list
+        m_copy["protected"] = m.get("protected", False) or m["id"] in protected_ids
         
-        # Get runtime status
-        status = manager.get_model_status(m["id"])
+        # Get runtime status using model name (not id/slug)
+        model_name = m.get("name", m["id"])
+        status = manager.get_model_status(model_name)
         m_copy["loaded"] = status.get("loaded", False)
         
         result.append(m_copy)

@@ -149,12 +149,7 @@ class ModelManager:
              
         if self._models[model_id]["loaded"]:
             # Refresh Redis just in case
-            try:
-                from src.services.admin.admin_store import get_admin_store
-                store = get_admin_store()
-                if store.redis:
-                    store.redis.sadd(f"model_status:{model_id}:instances", self.manager_id)
-            except: pass
+            self._sync_model_status_to_redis(model_id)
             return True
             
         logger.info(f"Loading model: {model_id}")
@@ -165,19 +160,29 @@ class ModelManager:
             self._models[model_id]["last_accessed"] = time.time()
             
             # Sync with Redis
-            try:
-                from src.services.admin.admin_store import get_admin_store
-                store = get_admin_store()
-                if store.redis:
-                    # Add THIS manager to the set of holders
-                    store.redis.sadd(f"model_status:{model_id}:instances", self.manager_id)
-            except Exception as e:
-                logger.warning(f"Failed to sync model status to Redis: {e}")
+            self._sync_model_status_to_redis(model_id)
                 
+            logger.info(f"Model loaded successfully: {model_id}")
             return True
         except Exception as e:
             logger.error(f"Failed to load model {model_id}: {e}")
             return False
+    
+    def _sync_model_status_to_redis(self, model_id: str):
+        """Sync model loaded status to Redis for distributed tracking."""
+        try:
+            from src.services.admin.admin_store import get_admin_store
+            store = get_admin_store()
+            if store.redis:
+                # Use a sanitized key (replace / with -)
+                safe_key = model_id.replace("/", "-")
+                redis_key = f"model_status:{safe_key}:instances"
+                store.redis.sadd(redis_key, self.manager_id)
+                # Set expiry to detect stale managers (5 min)
+                store.redis.expire(redis_key, 300)
+                logger.debug(f"Synced model status to Redis: {redis_key} <- {self.manager_id}")
+        except Exception as e:
+            logger.warning(f"Failed to sync model status to Redis for {model_id}: {e}")
 
     def get_model_status(self, model_id: str) -> Dict[str, Any]:
         """Get status of a specific model."""

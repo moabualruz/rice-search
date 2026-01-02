@@ -89,18 +89,24 @@ class QueryAnalyzer:
             return None
             
         from src.services.model_manager import get_model_manager
+        from src.services.admin.admin_store import get_admin_store
         manager = get_model_manager()
+        
+        # Get active classification model from admin store
+        store = get_admin_store()
+        model_name = store.get_active_model_for_type("classification") or settings.QUERY_MODEL
         
         def loader():
             from transformers import AutoTokenizer, AutoModel
-            logger.info(f"Loading query model: {settings.QUERY_MODEL}")
-            tokenizer = AutoTokenizer.from_pretrained(settings.QUERY_MODEL)
-            model = AutoModel.from_pretrained(settings.QUERY_MODEL)
+            logger.info(f"Loading query model: {model_name}")
+            tokenizer = AutoTokenizer.from_pretrained(model_name)
+            model = AutoModel.from_pretrained(model_name)
             # Query model usually small, keep on CPU or auto
             return {"model": model, "tokenizer": tokenizer}
             
-        manager.load_model("query_analyzer", loader)
-        return manager.get_model_instance("query_analyzer")
+        # Use actual model name as ID
+        manager.load_model(model_name, loader)
+        return manager.get_model_instance(model_name)
     
     def analyze(self, query: str) -> QueryAnalysis:
         """

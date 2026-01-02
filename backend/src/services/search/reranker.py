@@ -26,7 +26,13 @@ class Reranker:
         Args:
             model_name: HuggingFace model name for cross-encoder
         """
-        self.model_name = model_name or settings.RERANK_MODEL
+        if model_name:
+            self.model_name = model_name
+        else:
+            # Get active reranker model from admin store
+            from src.services.admin.admin_store import get_admin_store
+            store = get_admin_store()
+            self.model_name = store.get_active_model_for_type("reranker") or settings.RERANK_MODEL
     
     @classmethod
     def get_instance(cls) -> "Reranker":
@@ -75,9 +81,9 @@ class Reranker:
             
             return model
         
-        # Ensure loaded using Manager
-        manager.load_model("reranker", loader)
-        return manager.get_model_instance("reranker")
+        # Ensure loaded using Manager - use actual model name as ID
+        manager.load_model(self.model_name, loader)
+        return manager.get_model_instance(self.model_name)
             
     def rerank(
         self,

@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 class AdminStore:
-    """Redis-backed storage for admin state."""
+    """Redis-backed storage for admin state with file persistence."""
     
     # Redis key prefixes
     MODELS_KEY = "rice:admin:models"
@@ -27,9 +27,57 @@ class AdminStore:
     AUDIT_KEY = "rice:admin:audit"
     METRICS_KEY = "rice:admin:metrics"
     
+    # File persistence directory
+    PERSIST_DIR = "data/admin"
+    
+    # Mapping of Redis keys to file names
+    KEY_TO_FILE = {
+        "rice:admin:models": "models.json",
+        "rice:admin:config": "config.json", 
+        "rice:admin:users": "users.json",
+        "rice:admin:stores": "stores.json",
+    }
+    
     def __init__(self):
         self._redis: Optional[redis.Redis] = None
         self._initialized = False
+        self._ensure_persist_dir()
+    
+    def _ensure_persist_dir(self):
+        """Ensure persistence directory exists."""
+        import os
+        os.makedirs(self.PERSIST_DIR, exist_ok=True)
+    
+    def _persist_to_file(self, key: str, data: Any):
+        """Persist data to file."""
+        import os
+        if key not in self.KEY_TO_FILE:
+            return
+        
+        filepath = os.path.join(self.PERSIST_DIR, self.KEY_TO_FILE[key])
+        try:
+            with open(filepath, 'w') as f:
+                json.dump(data, f, indent=2, default=str)
+            logger.debug(f"Persisted {key} to {filepath}")
+        except Exception as e:
+            logger.warning(f"Failed to persist {key} to file: {e}")
+    
+    def _load_from_file(self, key: str) -> Optional[Any]:
+        """Load data from file if exists."""
+        import os
+        if key not in self.KEY_TO_FILE:
+            return None
+        
+        filepath = os.path.join(self.PERSIST_DIR, self.KEY_TO_FILE[key])
+        try:
+            if os.path.exists(filepath):
+                with open(filepath, 'r') as f:
+                    data = json.load(f)
+                logger.debug(f"Loaded {key} from {filepath}")
+                return data
+        except Exception as e:
+            logger.warning(f"Failed to load {key} from file: {e}")
+        return None
     
     @property
     def redis(self) -> redis.Redis:
@@ -39,88 +87,113 @@ class AdminStore:
         return self._redis
     
     def _ensure_defaults(self):
-        """Ensure default data exists on first access."""
+        """Ensure default data exists on first access. Load from file first, then Redis, then defaults."""
         if self._initialized:
             return
         
         try:
-            # Initialize models if not exist
+            def slugify(name: str) -> str:
+                return name.replace("/", "-").lower()
+            
+            # Initialize models if not exist in Redis
             if not self.redis.exists(self.MODELS_KEY):
-                # Helper to slugify
-                def slugify(name: str) -> str:
-                    return name.replace("/", "-").lower()
-
-                default_models = {
-                    slugify(settings.EMBEDDING_MODEL): {
-                        "id": slugify(settings.EMBEDDING_MODEL),
-                        "name": settings.EMBEDDING_MODEL,
-                        "type": "embedding",
-                        "active": True,
-                        "gpu_enabled": True
-                    },
-                    slugify(settings.SPARSE_MODEL): {
-                        "id": slugify(settings.SPARSE_MODEL),
-                        "name": settings.SPARSE_MODEL,
-                        "type": "sparse_embedding",
-                        "active": settings.SPARSE_ENABLED,
-                        "gpu_enabled": True
-                    },
-                    slugify(settings.RERANK_MODEL): {
-                        "id": slugify(settings.RERANK_MODEL),
-                        "name": settings.RERANK_MODEL,
-                        "type": "reranker",
-                        "active": settings.RERANK_ENABLED,
-                        "gpu_enabled": True
-                    },
-                    slugify(settings.QUERY_UNDERSTANDING_MODEL): {
-                        "id": slugify(settings.QUERY_UNDERSTANDING_MODEL),
-                        "name": settings.QUERY_UNDERSTANDING_MODEL,
-                        "type": "classification",
-                        "active": getattr(settings, "QUERY_ANALYSIS_ENABLED", True),
-                        "gpu_enabled": True
+                # Try loading from file first
+                file_models = self._load_from_file(self.MODELS_KEY)
+                if file_models:
+                    self.redis.set(self.MODELS_KEY, json.dumps(file_models))
+                else:
+                    # Use defaults
+                    default_models = {
+                        slugify(settings.EMBEDDING_MODEL): {
+                            "id": slugify(settings.EMBEDDING_MODEL),
+                            "name": settings.EMBEDDING_MODEL,
+                            "type": "embedding",
+                            "active": True,
+                            "gpu_enabled": True,
+                            "protected": True
+                        },
+                        slugify(settings.SPARSE_MODEL): {
+                            "id": slugify(settings.SPARSE_MODEL),
+                            "name": settings.SPARSE_MODEL,
+                            "type": "sparse_embedding",
+                            "active": settings.SPARSE_ENABLED,
+                            "gpu_enabled": True,
+                            "protected": True
+                        },
+                        slugify(settings.RERANK_MODEL): {
+                            "id": slugify(settings.RERANK_MODEL),
+                            "name": settings.RERANK_MODEL,
+                            "type": "reranker",
+                            "active": settings.RERANK_ENABLED,
+                            "gpu_enabled": True,
+                            "protected": True
+                        },
+                        slugify(settings.QUERY_UNDERSTANDING_MODEL): {
+                            "id": slugify(settings.QUERY_UNDERSTANDING_MODEL),
+                            "name": settings.QUERY_UNDERSTANDING_MODEL,
+                            "type": "classification",
+                            "active": getattr(settings, "QUERY_ANALYSIS_ENABLED", True),
+                            "gpu_enabled": True,
+                            "protected": True
+                        }
                     }
-                }
-                self.redis.set(self.MODELS_KEY, json.dumps(default_models))
+                    self.redis.set(self.MODELS_KEY, json.dumps(default_models))
+                    self._persist_to_file(self.MODELS_KEY, default_models)
             
             # Initialize config if not exist
             if not self.redis.exists(self.CONFIG_KEY):
-                default_config = {
-                    "sparse_enabled": settings.SPARSE_ENABLED,
-                    "rrf_k": settings.RRF_K,
-                    "ast_parsing_enabled": settings.AST_PARSING_ENABLED,
-                    "query_analysis_enabled": settings.QUERY_ANALYSIS_ENABLED,
-                    "mcp_enabled": settings.MCP_ENABLED, # Added explicit default
-                    "worker_pool": "threads",
-                    "worker_concurrency": 10
-                }
-                self.redis.set(self.CONFIG_KEY, json.dumps(default_config))
+                file_config = self._load_from_file(self.CONFIG_KEY)
+                if file_config:
+                    self.redis.set(self.CONFIG_KEY, json.dumps(file_config))
+                else:
+                    default_config = {
+                        "sparse_enabled": settings.SPARSE_ENABLED,
+                        "rrf_k": settings.RRF_K,
+                        "ast_parsing_enabled": settings.AST_PARSING_ENABLED,
+                        "query_analysis_enabled": settings.QUERY_ANALYSIS_ENABLED,
+                        "mcp_enabled": settings.MCP_ENABLED,
+                        "worker_pool": "threads",
+                        "worker_concurrency": 10
+                    }
+                    self.redis.set(self.CONFIG_KEY, json.dumps(default_config))
+                    self._persist_to_file(self.CONFIG_KEY, default_config)
             
             # Initialize users if not exist
             if not self.redis.exists(self.USERS_KEY):
-                default_users = {
-                    "admin-1": {
-                        "id": "admin-1",
-                        "email": "admin@rice.local",
-                        "role": "admin",
-                        "org_id": "default",
-                        "active": True,
-                        "created_at": datetime.now().isoformat()
+                file_users = self._load_from_file(self.USERS_KEY)
+                if file_users:
+                    self.redis.set(self.USERS_KEY, json.dumps(file_users))
+                else:
+                    default_users = {
+                        "admin-1": {
+                            "id": "admin-1",
+                            "email": "admin@rice.local",
+                            "role": "admin",
+                            "org_id": "default",
+                            "active": True,
+                            "created_at": datetime.now().isoformat()
+                        }
                     }
-                }
-                self.redis.set(self.USERS_KEY, json.dumps(default_users))
+                    self.redis.set(self.USERS_KEY, json.dumps(default_users))
+                    self._persist_to_file(self.USERS_KEY, default_users)
             
             # Initialize stores if not exist
             if not self.redis.exists(self.STORES_KEY):
-                default_stores = {
-                    "public": {
-                        "id": "public",
-                        "name": "Public Index",
-                        "type": "production",
-                        "description": "Default public index",
-                        "created_at": datetime.now().isoformat()
+                file_stores = self._load_from_file(self.STORES_KEY)
+                if file_stores:
+                    self.redis.set(self.STORES_KEY, json.dumps(file_stores))
+                else:
+                    default_stores = {
+                        "public": {
+                            "id": "public",
+                            "name": "Public Index",
+                            "type": "production",
+                            "description": "Default public index",
+                            "created_at": datetime.now().isoformat()
+                        }
                     }
-                }
-                self.redis.set(self.STORES_KEY, json.dumps(default_stores))
+                    self.redis.set(self.STORES_KEY, json.dumps(default_stores))
+                    self._persist_to_file(self.STORES_KEY, default_stores)
             
             self._initialized = True
         except Exception as e:
@@ -152,12 +225,37 @@ class AdminStore:
             logger.error(f"Failed to get models: {e}")
             return {}
     
+    def get_active_model_for_type(self, model_type: str) -> Optional[str]:
+        """
+        Get the active model name for a specific type.
+        
+        Args:
+            model_type: One of 'embedding', 'sparse_embedding', 'reranker', 'classification'
+            
+        Returns:
+            The model name (e.g., 'jinaai/jina-code-embeddings-1.5b') or None if not found
+        """
+        models = self.get_models()
+        for model in models.values():
+            if model.get("type") == model_type and model.get("active"):
+                return model.get("name")
+        
+        # Fallback to settings
+        type_to_setting = {
+            "embedding": settings.EMBEDDING_MODEL,
+            "sparse_embedding": settings.SPARSE_MODEL,
+            "reranker": settings.RERANK_MODEL,
+            "classification": settings.QUERY_UNDERSTANDING_MODEL
+        }
+        return type_to_setting.get(model_type)
+    
     def set_model(self, model_id: str, model: dict) -> bool:
-        """Set a model."""
+        """Set a model and persist to file."""
         try:
             models = self.get_models()
             models[model_id] = model
             self.redis.set(self.MODELS_KEY, json.dumps(models))
+            self._persist_to_file(self.MODELS_KEY, models)
             self.log_audit("model_updated", f"Model {model_id} updated")
             return True
         except Exception as e:
@@ -165,12 +263,13 @@ class AdminStore:
             return False
     
     def delete_model(self, model_id: str) -> bool:
-        """Delete a model."""
+        """Delete a model and persist to file."""
         try:
             models = self.get_models()
             if model_id in models:
                 del models[model_id]
                 self.redis.set(self.MODELS_KEY, json.dumps(models))
+                self._persist_to_file(self.MODELS_KEY, models)
                 self.log_audit("model_deleted", f"Model {model_id} deleted")
                 return True
             return False
@@ -199,11 +298,12 @@ class AdminStore:
             return {}
     
     def set_config(self, key: str, value: Any) -> bool:
-        """Set a config value."""
+        """Set a config value and persist to file."""
         try:
             config = self.get_config()
             config[key] = value
             self.redis.set(self.CONFIG_KEY, json.dumps(config))
+            self._persist_to_file(self.CONFIG_KEY, config)
             self.log_audit("config_updated", f"Config {key}={value}")
             return True
         except Exception as e:
@@ -299,11 +399,12 @@ class AdminStore:
             return {}
     
     def set_user(self, user_id: str, user: dict) -> bool:
-        """Set a user."""
+        """Set a user and persist to file."""
         try:
             users = self.get_users()
             users[user_id] = user
             self.redis.set(self.USERS_KEY, json.dumps(users))
+            self._persist_to_file(self.USERS_KEY, users)
             self.log_audit("user_updated", f"User {user_id} updated")
             return True
         except Exception as e:
@@ -311,12 +412,13 @@ class AdminStore:
             return False
     
     def delete_user(self, user_id: str) -> bool:
-        """Delete a user."""
+        """Delete a user and persist to file."""
         try:
             users = self.get_users()
             if user_id in users:
                 del users[user_id]
                 self.redis.set(self.USERS_KEY, json.dumps(users))
+                self._persist_to_file(self.USERS_KEY, users)
                 self.log_audit("user_deleted", f"User {user_id} deleted")
                 return True
             return False
@@ -345,11 +447,12 @@ class AdminStore:
             return {}
 
     def set_store(self, store_id: str, store: dict) -> bool:
-        """Set a store."""
+        """Set a store and persist to file."""
         try:
             stores = self.get_stores()
             stores[store_id] = store
             self.redis.set(self.STORES_KEY, json.dumps(stores))
+            self._persist_to_file(self.STORES_KEY, stores)
             self.log_audit("store_updated", f"Store {store_id} updated")
             return True
         except Exception as e:
@@ -357,12 +460,13 @@ class AdminStore:
             return False
 
     def delete_store(self, store_id: str) -> bool:
-        """Delete a store."""
+        """Delete a store and persist to file."""
         try:
             stores = self.get_stores()
             if store_id in stores:
                 del stores[store_id]
                 self.redis.set(self.STORES_KEY, json.dumps(stores))
+                self._persist_to_file(self.STORES_KEY, stores)
                 self.log_audit("store_deleted", f"Store {store_id} deleted")
                 return True
             return False

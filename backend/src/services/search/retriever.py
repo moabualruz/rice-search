@@ -31,19 +31,23 @@ def get_dense_model():
     """Get or load dense model via ModelManager."""
     manager = get_model_manager()
     
+    # Get active embedding model from admin store
+    from src.services.admin.admin_store import get_admin_store
+    store = get_admin_store()
+    model_name = store.get_active_model_for_type("embedding") or settings.EMBEDDING_MODEL
+    
     def loader():
         import gc
         import torch
         import logging
         from src.core.device import get_device
-        from src.services.admin.admin_store import get_admin_store
         
         logger = logging.getLogger(__name__)
         
-        # Check if GPU is enabled for this model
-        store = get_admin_store()
+        # Check if GPU is enabled for this model (lookup by model name slug)
         models = store.get_models()
-        gpu_enabled = models.get("dense", {}).get("gpu_enabled", True)
+        model_slug = model_name.replace("/", "-").lower()
+        gpu_enabled = models.get(model_slug, {}).get("gpu_enabled", True)
         
         if gpu_enabled and torch.cuda.is_available():
             device = "cuda"
@@ -52,17 +56,13 @@ def get_dense_model():
             
         logger.info(f"Loading dense model on {device}")
         
-        # Load model directly on target device (Zero Copy)
-        # Load model directly on target device (Zero Copy)
         # Use FP16 for GPU to save memory
-        model_kwargs = {"torch_dtype": torch.float16} if device == "cuda" else {}
-        
         model_kwargs = {"torch_dtype": torch.float16} if device == "cuda" else {}
         
         # Load model on CPU first to avoid meta-tensor issues
         from sentence_transformers import SentenceTransformer
         model = SentenceTransformer(
-            settings.EMBEDDING_MODEL, 
+            model_name, 
             device="cpu", # Force CPU load
             trust_remote_code=True,
             model_kwargs=model_kwargs
@@ -74,13 +74,13 @@ def get_dense_model():
         
         return model
     
-    # Register/Load
-    manager.load_model("dense", loader)
-    status = manager.get_model_status("dense")
+    # Register/Load using actual model ID
+    manager.load_model(model_name, loader)
+    status = manager.get_model_status(model_name)
     
     # Return instance if loaded
     if status["loaded"]:
-        inst = manager._models["dense"]["instance"]
+        inst = manager._models[model_name]["instance"]
         print(f"DEBUG DENSE: status=True, instance={inst}, type={type(inst)}")
         return inst
     print("DEBUG DENSE: Not Loaded")

@@ -19,8 +19,13 @@ class SparseEmbedder:
     _instance: Optional["SparseEmbedder"] = None
     
     def __init__(self, model_name: str = None):
-        self.model_name = model_name or settings.SPARSE_MODEL
-        # No persistent checking
+        if model_name:
+            self.model_name = model_name
+        else:
+            # Get active sparse model from admin store
+            from src.services.admin.admin_store import get_admin_store
+            store = get_admin_store()
+            self.model_name = store.get_active_model_for_type("sparse_embedding") or settings.SPARSE_MODEL
         
     @classmethod
     def get_instance(cls) -> "SparseEmbedder":
@@ -49,8 +54,9 @@ class SparseEmbedder:
             
             return {"model": model, "tokenizer": tokenizer, "device": device}
             
-        manager.load_model("sparse", loader)
-        return manager.get_model_instance("sparse") # Returns the dict
+        # Use actual model name as ID
+        manager.load_model(self.model_name, loader)
+        return manager.get_model_instance(self.model_name) # Returns the dict
 
     def embed(self, text: str) -> SparseEmbedding:
         """
