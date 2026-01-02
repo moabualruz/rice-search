@@ -708,7 +708,8 @@ async def get_metrics():
     try:
         import torch
         if torch.cuda.is_available():
-            service_gpu_mb = int(torch.cuda.memory_allocated() / 1024 / 1024)
+            # memory_reserved is more accurate for "active process consumption" than memory_allocated
+            service_gpu_mb = int(torch.cuda.memory_reserved() / 1024 / 1024)
     except:
         pass
     
