@@ -68,8 +68,9 @@ pub async fn run(path: &str, org_id: Option<String>, full_index: bool) -> Result
                             // Normalize to forward slashes for gitignore matching
                             let rel_str = relative_path.to_string_lossy().replace("\\", "/");
                             
-                            // 3. Check gitignore with relative path
-                            let matched = ignore_matcher.matched(&rel_str, false);
+                            // 3. Check gitignore - also check parent directories
+                            // For path like "backend/tmp/file.txt", check if "backend/tmp" is ignored
+                            let matched = ignore_matcher.matched_path_or_any_parents(&rel_str, false);
                             
                             match matched {
                                 ignore::Match::Ignore(_) => {
