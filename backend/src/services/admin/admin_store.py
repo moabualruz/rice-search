@@ -182,9 +182,18 @@ class AdminStore:
     
     def get_config(self) -> Dict[str, Any]:
         """Get config overrides."""
+        self._ensure_defaults()
         try:
             data = self.redis.get(self.CONFIG_KEY)
-            return json.loads(data) if data else {}
+            config = json.loads(data) if data else {}
+            
+            if not config:
+                 self._initialized = False
+                 self._ensure_defaults()
+                 data = self.redis.get(self.CONFIG_KEY)
+                 config = json.loads(data) if data else {}
+                 
+            return config
         except Exception as e:
             logger.error(f"Failed to get config: {e}")
             return {}
@@ -276,7 +285,15 @@ class AdminStore:
         self._ensure_defaults()
         try:
             data = self.redis.get(self.USERS_KEY)
-            return json.loads(data) if data else {}
+            users = json.loads(data) if data else {}
+            
+            if not users:
+                 self._initialized = False
+                 self._ensure_defaults()
+                 data = self.redis.get(self.USERS_KEY)
+                 users = json.loads(data) if data else {}
+
+            return users
         except Exception as e:
             logger.error(f"Failed to get users: {e}")
             return {}
@@ -314,7 +331,15 @@ class AdminStore:
         self._ensure_defaults()
         try:
             data = self.redis.get(self.STORES_KEY)
-            return json.loads(data) if data else {}
+            stores = json.loads(data) if data else {}
+            
+            if not stores:
+                 self._initialized = False
+                 self._ensure_defaults()
+                 data = self.redis.get(self.STORES_KEY)
+                 stores = json.loads(data) if data else {}
+
+            return stores
         except Exception as e:
             logger.error(f"Failed to get stores: {e}")
             return {}
