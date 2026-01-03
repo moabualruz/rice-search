@@ -37,13 +37,41 @@ services:
     networks:
       - rice-net
 
-
+  # ---------------------------------------------------------------------------
+  # XINFERENCE - Unified Model Inference (LLM, Embeddings, Rerank)
+  # Single service replaces TEI + Triton + vLLM
+  # ---------------------------------------------------------------------------
+  xinference:
+    image: xprobe/xinference:latest
+    command: xinference-local --host 0.0.0.0 --port 9997
+    ports:
+      - "9997:9997"  # REST API + WebUI
+    volumes:
+      - ../data/xinference:/root/.xinference
+      - ../data/hf_cache:/root/.cache/huggingface
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_HOME=/root/.cache/huggingface
+      - XINFERENCE_HOME=/root/.xinference
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9997/v1/models"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    restart: unless-stopped
+    networks:
+      - rice-net
 
   # ---------------------------------------------------------------------------
-  # PYTHON MONOLITH (API & WORKER)
+  # PYTHON BACKEND (API & WORKER)
   # ---------------------------------------------------------------------------
-  # In production, these run from the same image.
-  # In dev, we mount volume for hot reload.
 
   backend-api:
     build:
@@ -56,25 +84,17 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - HF_HOME=/root/.cache/huggingface
+      - XINFERENCE_URL=http://xinference:9997
+      - SHARED_TMP_DIR=/shared/ingest
     volumes:
       - ../backend:/app
-      - ../data/hf_cache:/root/.cache/huggingface
+      - ingest-shared:/shared/ingest
     depends_on:
       - redis
       - qdrant
-    links:
-      - qdrant
-      - redis
+      - xinference
     networks:
       - rice-net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
   backend-worker:
     build:
@@ -85,43 +105,15 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - HF_HOME=/root/.cache/huggingface
+      - XINFERENCE_URL=http://xinference:9997
+      - SHARED_TMP_DIR=/shared/ingest
     volumes:
       - ../backend:/app
-      - ../data/hf_cache:/root/.cache/huggingface
+      - ingest-shared:/shared/ingest
     depends_on:
       - redis
       - qdrant
-    links:
-      - qdrant
-      - redis
-    networks:
-      - rice-net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-
-  tests-e2e:
-    profiles: ["test"]
-    build:
-      context: ../backend
-      dockerfile: Dockerfile.e2e
-    working_dir: /app
-    volumes:
-      - ../backend:/app
-    environment:
-      - FRONTEND_URL=http://frontend:3000
-      - REDIS_URL=redis://redis:6379/0
-      - QDRANT_URL=http://qdrant:6333
-    # Run tests using cached dependencies (disable coverage for E2E)
-    command: pytest --no-cov tests/e2e
-    depends_on:
-      - frontend
-      - backend-api
+      - xinference
     networks:
       - rice-net
 
@@ -145,9 +137,31 @@ services:
     networks:
       - rice-net
 
+  # ---------------------------------------------------------------------------
+  # TESTS (Optional)
+  # ---------------------------------------------------------------------------
+  tests-e2e:
+    profiles: ["test"]
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.e2e
+    working_dir: /app
+    volumes:
+      - ../backend:/app
+    environment:
+      - FRONTEND_URL=http://frontend:3000
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+    command: pytest --no-cov tests/e2e
+    depends_on:
+      - frontend
+      - backend-api
+    networks:
+      - rice-net
+
 networks:
   rice-net:
     driver: bridge
 
-
-
+volumes:
+  ingest-shared:

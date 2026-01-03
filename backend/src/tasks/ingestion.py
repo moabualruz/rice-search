@@ -24,30 +24,26 @@ def get_sparse_embedder():
 
 
 @celery_app.task(bind=True)
-def ingest_file_task(self, file_path: str, repo_name: str = "default", org_id: str = "public"):
+def ingest_file_task(self, file_path: str, original_path: str = None, repo_name: str = "default", org_id: str = "public"):
     """
     Full pipeline: Parse -> Chunk -> Embed -> Upsert.
     Delegates to Indexer.
+    
+    Args:
+        file_path: Actual path to file (temp location in container)
+        original_path: Original client-side path for metadata storage
+        repo_name: Repository name
+        org_id: Organization ID
     """
     self.update_state(state='STARTED', meta={'step': 'Indexing'})
     
-    from src.services.model_manager import ModelManager
+    # Use original_path if provided, otherwise fall back to file_path
+    display_path = original_path or file_path
     
-    # Ensure model is loaded (worker context)
-    mgr = ModelManager.get_instance()
-    model_id = settings.EMBEDDING_MODEL
-    # We use trust_remote_code=True generally for these models, or check config
-    trust_remote = "jina" in model_id # simple heuristic or use config
+    # Indexer now uses Xinference internally - no model needed here
+    indexer = Indexer(qdrant_client=get_qdrant())
     
-    # Load if not already
-    mgr.load_model_from_hub(model_id, "embedding", trust_remote_code=trust_remote)
-    
-    indexer = Indexer(
-        qdrant_client=get_qdrant(),
-        dense_model=mgr.get_model_instance(model_id)
-    )
-    
-    return indexer.ingest_file(file_path, repo_name, org_id)
+    return indexer.ingest_file(file_path, display_path, repo_name, org_id)
 
 @celery_app.task(bind=True, name="src.tasks.ingestion.rebuild_index_task")
 def rebuild_index_task(self):

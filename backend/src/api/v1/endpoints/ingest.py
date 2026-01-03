@@ -1,8 +1,8 @@
 import shutil
 import os
 import uuid
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
-from typing import Dict
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
+from typing import Dict, Optional
 from src.tasks.ingestion import ingest_file_task
 from src.api.v1.dependencies import verify_admin
 
@@ -14,46 +14,42 @@ os.makedirs(TEMP_DIR, exist_ok=True)
 @router.post("/file", status_code=202)
 async def upload_file(
     file: UploadFile = File(...),
+    org_id: Optional[str] = Form("public"),
     admin: dict = Depends(verify_admin)
 ) -> Dict:
     """
     Upload a file to ingest into the Vector DB.
     """
     try:
-        # Create unique temp path
+        # Original path from client (sent as filename in multipart)
+        original_path = file.filename or "unknown"
+        
+        # Create unique temp path for processing
         file_id = str(uuid.uuid4())
-        ext = os.path.splitext(file.filename)[1]
-        save_path = os.path.join(TEMP_DIR, f"{file_id}{ext}")
+        ext = os.path.splitext(original_path)[1]
         
-        # Save to disk (In prod, upload to MinIO here)
-        with open(save_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        # Dispatch Celery Task
-        # Note: Worker needs access to this path. 
-        # In Docker Compose, backend-api and backend-worker mount the same volume.
-        # But /tmp is usually ephemeral. For specific implementation here, 
-        # we should use a shared volume or MinIO.
-        # For Phase 2 iron core, let's assume shared volume for simplicity
-        # or just pass content if small. 
-        
-        # FIX: Ensure path is accessible by both API and Worker
-        # Use simple local tmp relative to valid CWD or /tmp fallback
-        base_tmp = os.getenv("SHARED_TMP_DIR", os.path.join(os.getcwd(), "tmp"))
+        # Use shared temp dir accessible by both API and Worker
+        base_tmp = os.getenv("SHARED_TMP_DIR", "/tmp/ingest")
         os.makedirs(base_tmp, exist_ok=True)
-        shared_path = os.path.join(base_tmp, f"{file_id}{ext}")
-        # Re-save to shared path since /tmp might not be shared
-        with open(shared_path, "wb") as buffer:
-             file.file.seek(0)
-             shutil.copyfileobj(file.file, buffer)
-
-        # Extract org_id from authenticated user (injected by verify_admin -> get_current_user)
-        # Default to 'public' if somehow missing (though dependency ensures it)
-        org_id = admin.get("org_id", "public")
-
-        task = ingest_file_task.delay(shared_path, repo_name="upload", org_id=org_id)
+        temp_path = os.path.join(base_tmp, f"{file_id}{ext}")
         
-        return {"status": "queued", "task_id": str(task.id), "file": file.filename}
+        # Save file to temp location
+        with open(temp_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        # Get org_id from form or authenticated user
+        effective_org_id = org_id or admin.get("org_id", "public")
+
+        # Dispatch Celery Task with ORIGINAL path for metadata
+        task = ingest_file_task.delay(
+            temp_path,           # actual file location for reading
+            original_path,       # original client path for metadata
+            repo_name="default",
+            org_id=effective_org_id
+        )
+        
+        return {"status": "queued", "task_id": str(task.id), "file": original_path}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+

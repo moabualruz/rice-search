@@ -38,7 +38,9 @@ dependencies = [
     "pathspec>=0.11.0",
     "tree-sitter>=0.21.0",
     "tree-sitter-languages>=1.10.0",
-    "psutil>=5.9.0"
+    "psutil>=5.9.0",
+    "grpcio>=1.60.0",
+    "tritonclient[grpc]>=2.42.0",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,7 @@
 """
 Indexing Service.
 Handles document processing and Qdrant operations.
+All model inference via Xinference.
 """
 import uuid
 from typing import Dict, List, Optional
@@ -11,17 +12,15 @@ from src.core.config import settings
 from src.services.ingestion.parser import DocumentParser
 from src.services.ingestion.chunker import DocumentChunker
 from src.services.ingestion.ast_parser import get_ast_parser
-from src.services.search.sparse import get_sparse_embedder
-
+from src.services.search.sparse import sparse_embed
+from src.services.search.retriever import embed_texts
 
 
 class Indexer:
     """Core indexing logic, decoupled from Celery."""
     
-    def __init__(self, qdrant_client, dense_model, sparse_embedder=None):
+    def __init__(self, qdrant_client):
         self.qdrant = qdrant_client
-        self.model = dense_model
-        self.sparse_embedder = sparse_embedder or get_sparse_embedder()
         self.chunker = DocumentChunker()
         self.collection_name = "rice_chunks"
         
@@ -44,8 +43,13 @@ class Indexer:
                 }
             )
 
-    def ingest_file(self, file_path: str, repo_name: str, org_id: str) -> Dict:
-        """Ingest a single file."""
+    def ingest_file(self, file_path: str, display_path: str, repo_name: str, org_id: str) -> Dict:
+        """Ingest a single file.
+        
+        Args:
+            file_path: Actual path to read file from
+            display_path: Client-side path for metadata storage
+        """
         import pathlib
         
         path_obj = pathlib.Path(file_path)
@@ -63,7 +67,7 @@ class Indexer:
                     chunks.append({
                         "content": c.content,
                         "metadata": {
-                            "file_path": file_path,
+                            "file_path": display_path,
                             "repo_name": repo_name,
                             "org_id": org_id,
                             "doc_id": str(uuid.uuid4()), # Doc ID can be random or hashed
@@ -90,7 +94,7 @@ class Indexer:
                 return {"status": "skipped", "message": "Empty file"}
 
             base_metadata = {
-                "file_path": file_path,
+                "file_path": display_path,
                 "repo_name": repo_name,
                 "org_id": org_id,
                 "doc_id": str(uuid.uuid4()),
@@ -111,9 +115,9 @@ class Indexer:
         # 3. Embed
         contents = [c["content"] for c in chunks]
         
-        # Dense
-        print("Indexer: Embedding dense...")
-        dense_embeddings = self.model.encode(contents)
+        # Dense embeddings via Xinference
+        print("Indexer: Embedding dense via Xinference...")
+        dense_embeddings = embed_texts(contents)
         print("Indexer: Dense embedding done.")
         
         # Upsert
@@ -121,22 +125,18 @@ class Indexer:
         points = []
         
         for i, chunk in enumerate(chunks):
-            # Dense
-            vectors = {"default": dense_embeddings[i].tolist()}
+            # Dense (already list format from Xinference)
+            vectors = {"default": dense_embeddings[i]}
             
             # Sparse
             try:
-                if self.sparse_embedder:
-                    sp_vec = self.sparse_embedder.embed(chunk["content"])
-                    vectors["sparse"] = SparseVector(
-                        indices=sp_vec.indices,
-                        values=sp_vec.values
-                    )
+                sp_vec = sparse_embed(chunk["content"])
+                vectors["sparse"] = SparseVector(
+                    indices=sp_vec.indices,
+                    values=sp_vec.values
+                )
             except Exception as e:
-                # Log error but proceed? Or fail? STRICT TDD implies fail if requirement.
-                # But typically we log warning for partial failure in batch.
-                print(f"Sparse embedding failed: {e}") 
-                pass
+                print(f"Sparse embedding failed: {e}")
 
             # Deterministic ID generation
             # Hash: file_path + content + chunk_index

@@ -551,6 +551,101 @@ async def toggle_mcp():
     }
 
 
+# ============== Inference Server Endpoints ==============
+
+@router.get("/inference/status")
+async def get_inference_status():
+    """
+    Get health status of all inference servers (TEI, Triton, vLLM).
+    Used by Admin UI to display model serving infrastructure status.
+    """
+    status = {
+        "use_inference_servers": settings.USE_INFERENCE_SERVERS,
+        "servers": {}
+    }
+    
+    # TEI Embeddings
+    try:
+        from src.services.inference import get_tei_embed_client
+        client = get_tei_embed_client()
+        healthy = client.health_check()
+        status["servers"]["tei_embeddings"] = {
+            "url": settings.TEI_EMBED_REST_URL,
+            "status": "healthy" if healthy else "down",
+            "model_type": "dense_embedding"
+        }
+    except Exception as e:
+        status["servers"]["tei_embeddings"] = {
+            "url": settings.TEI_EMBED_REST_URL,
+            "status": "error",
+            "error": str(e)
+        }
+    
+    # TEI Reranker
+    try:
+        from src.services.inference import get_tei_rerank_client
+        client = get_tei_rerank_client()
+        healthy = client.health_check()
+        status["servers"]["tei_reranker"] = {
+            "url": settings.TEI_RERANK_REST_URL,
+            "status": "healthy" if healthy else "down",
+            "model_type": "reranker"
+        }
+    except Exception as e:
+        status["servers"]["tei_reranker"] = {
+            "url": settings.TEI_RERANK_REST_URL,
+            "status": "error",
+            "error": str(e)
+        }
+    
+    # Triton (SPLADE)
+    try:
+        from src.services.inference import get_triton_client
+        client = get_triton_client()
+        healthy = client.health_check()
+        status["servers"]["triton_splade"] = {
+            "url": f"grpc://{settings.TRITON_URL}",
+            "status": "healthy" if healthy else "down",
+            "model_type": "sparse_embedding"
+        }
+    except Exception as e:
+        status["servers"]["triton_splade"] = {
+            "url": f"grpc://{settings.TRITON_URL}",
+            "status": "error",
+            "error": str(e)
+        }
+    
+    # vLLM (RAG Chat)
+    try:
+        from src.services.inference import get_vllm_client
+        client = get_vllm_client()
+        healthy = client.health_check()
+        model_info = client.get_model_info() if healthy else None
+        status["servers"]["vllm"] = {
+            "url": settings.VLLM_URL,
+            "status": "healthy" if healthy else "down",
+            "model_type": "llm",
+            "model": model_info.get("data", [{}])[0].get("id") if model_info else None
+        }
+    except Exception as e:
+        status["servers"]["vllm"] = {
+            "url": settings.VLLM_URL,
+            "status": "error",
+            "error": str(e)
+        }
+    
+    # Overall status
+    statuses = [s.get("status") for s in status["servers"].values()]
+    if all(s == "healthy" for s in statuses):
+        status["overall"] = "healthy"
+    elif any(s == "healthy" for s in statuses):
+        status["overall"] = "partial"
+    else:
+        status["overall"] = "down"
+    
+    return status
+
+
 # ============== System Endpoints ==============
 
 # Helper for consistent health checks

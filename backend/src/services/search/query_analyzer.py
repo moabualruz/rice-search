@@ -1,17 +1,16 @@
 """
-Query Analyzer Service (REQ-SRCH-01).
+Query Analyzer Service - vLLM-based.
 
-Analyzes search queries to determine intent and extract scope filters.
-Uses CodeBERT for code-aware query understanding.
+ALL query classification is delegated to vLLM (CodeLlama).
+Uses pattern matching for fast analysis, with vLLM for complex queries.
+No in-process model loading - backend only orchestrates service calls.
 """
 
 import logging
 import re
-from typing import Dict, Any, Optional, List, Tuple
+from typing import Dict, Any, Optional, List
 from dataclasses import dataclass
 from enum import Enum
-
-from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -38,215 +37,144 @@ class QueryAnalysis:
     filters: Dict[str, Any]
 
 
-class QueryAnalyzer:
+# Pattern-based hints (fast path)
+INTENT_PATTERNS = {
+    QueryIntent.LOOKUP: [
+        r"\bwhere\s+is\b", r"\bfind\b", r"\bget\b", r"\bwhat\s+is\b",
+        r"\bdefinition\s+of\b", r"\bfunction\b.*\bnamed\b"
+    ],
+    QueryIntent.EXPLANATION: [
+        r"\bhow\s+does\b", r"\bwhy\b", r"\bexplain\b", r"\bunderstand\b",
+        r"\bwhat\s+does\b.*\bdo\b"
+    ],
+    QueryIntent.NAVIGATION: [
+        r"\bwhere\b.*\bdefined\b", r"\bimport\b", r"\bfile\b.*\bcontains\b",
+        r"\bin\s+which\b"
+    ],
+    QueryIntent.EXAMPLE: [
+        r"\bexample\b", r"\bhow\s+to\b", r"\busage\b", r"\buse\b.*\bto\b"
+    ],
+    QueryIntent.DEBUG: [
+        r"\berror\b", r"\bbug\b", r"\bfail\b", r"\bcrash\b", r"\bexception\b",
+        r"\bfix\b", r"\bdebug\b"
+    ]
+}
+
+LANGUAGE_KEYWORDS = {
+    "py": ["python", "py", ".py", "def ", "import ", "class "],
+    "js": ["javascript", "js", ".js", "function ", "const ", "let ", "=>"],
+    "ts": ["typescript", "ts", ".ts", "interface ", "type "],
+    "go": ["golang", "go", ".go", "func ", "package "],
+    "rs": ["rust", "rs", ".rs", "fn ", "impl ", "mod "],
+    "java": ["java", ".java", "class ", "public ", "private "],
+}
+
+
+def analyze_query(query: str, use_llm: bool = False) -> QueryAnalysis:
     """
-    Analyzes search queries to extract intent and scope.
+    Analyze a search query to extract intent and hints.
     
-    Uses pattern matching for fast analysis, with optional
-    CodeBERT-based deep analysis for complex queries.
+    Args:
+        query: The search query
+        use_llm: If True, use vLLM for complex classification
+        
+    Returns:
+        QueryAnalysis with extracted information
     """
+    query_lower = query.lower()
     
-    _instance: Optional["QueryAnalyzer"] = None
+    # 1. Pattern-based intent detection (fast path)
+    intent = QueryIntent.LOOKUP  # Default
+    confidence = 0.5
     
-    # Intent keywords
-    LOOKUP_KEYWORDS = ["find", "where", "locate", "get", "show", "search"]
-    EXPLANATION_KEYWORDS = ["how", "why", "explain", "what does", "understand"]
-    NAVIGATION_KEYWORDS = ["definition", "defined", "declaration", "import", "from"]
-    EXAMPLE_KEYWORDS = ["example", "usage", "sample", "demo", "how to use"]
-    DEBUG_KEYWORDS = ["error", "bug", "fix", "exception", "crash", "fail"]
-    
-    # Language patterns
-    LANGUAGE_PATTERNS = {
-        r"\.py\b|python|def |class ": "python",
-        r"\.js\b|javascript|function |const |=>": "javascript",
-        r"\.ts\b|typescript|interface |type ": "typescript",
-        r"\.go\b|golang|func |package ": "go",
-        r"\.rs\b|rust|fn |impl |struct ": "rust",
-        r"\.java\b|java|public class": "java",
-        r"\.cpp\b|\.c\b|c\+\+|#include": "cpp",
-    }
-    
-    # Path pattern
-    PATH_PATTERN = re.compile(r'(?:in|from|at)\s+["\']?([^\s"\']+(?:/[^\s"\']+)+)["\']?', re.IGNORECASE)
-    
-    # Symbol pattern (function/class names)
-    SYMBOL_PATTERN = re.compile(r'\b([A-Z][a-zA-Z0-9]*|[a-z_][a-z0-9_]*(?:_[a-z0-9_]+)+)\b')
-    
-    def __init__(self):
-        # Stateless
-        pass
-    
-    @classmethod
-    def get_instance(cls) -> "QueryAnalyzer":
-        """Get singleton instance."""
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-    
-    def _get_model(self):
-        """Get model tuple (model, tokenizer) from manager."""
-        if not settings.QUERY_ANALYSIS_ENABLED:
-            return None
-            
-        from src.services.model_manager import get_model_manager
-        from src.services.admin.admin_store import get_admin_store
-        manager = get_model_manager()
-        
-        # Get active classification model from admin store
-        store = get_admin_store()
-        model_name = store.get_active_model_for_type("classification") or settings.QUERY_MODEL
-        
-        def loader():
-            from transformers import AutoTokenizer, AutoModel
-            logger.info(f"Loading query model: {model_name}")
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            model = AutoModel.from_pretrained(model_name)
-            # Query model usually small, keep on CPU or auto
-            return {"model": model, "tokenizer": tokenizer}
-            
-        # Use actual model name as ID
-        manager.load_model(model_name, loader)
-        return manager.get_model_instance(model_name)
-    
-    def analyze(self, query: str) -> QueryAnalysis:
-        """
-        Analyze a search query.
-        
-        Args:
-            query: Raw search query
-            
-        Returns:
-            QueryAnalysis with intent, filters, and processed query
-        """
-        if not query or not query.strip():
-            return QueryAnalysis(
-                original_query=query,
-                processed_query=query,
-                intent=QueryIntent.LOOKUP,
-                confidence=0.5,
-                language_hints=[],
-                path_hints=[],
-                symbol_hints=[],
-                filters={}
-            )
-        
-        query = query.strip()
-        query_lower = query.lower()
-        
-        # 1. Detect intent
-        intent, confidence = self._detect_intent(query_lower)
-        
-        # 2. Extract language hints
-        language_hints = self._extract_languages(query_lower)
-        
-        # 3. Extract path hints
-        path_hints = self._extract_paths(query)
-        
-        # 4. Extract symbol hints
-        symbol_hints = self._extract_symbols(query)
-        
-        # 5. Build filters
-        filters = {}
-        if language_hints:
-            filters["language"] = language_hints[0] if len(language_hints) == 1 else language_hints
-        if path_hints:
-            filters["path_prefix"] = path_hints[0]
-        
-        # 6. Process query (remove filter syntax)
-        processed_query = self._clean_query(query)
-        
-        return QueryAnalysis(
-            original_query=query,
-            processed_query=processed_query,
-            intent=intent,
-            confidence=confidence,
-            language_hints=language_hints,
-            path_hints=path_hints,
-            symbol_hints=symbol_hints,
-            filters=filters
-        )
-    
-    def _detect_intent(self, query_lower: str) -> Tuple[QueryIntent, float]:
-        """Detect query intent from keywords."""
-        scores = {
-            QueryIntent.LOOKUP: 0.0,
-            QueryIntent.EXPLANATION: 0.0,
-            QueryIntent.NAVIGATION: 0.0,
-            QueryIntent.EXAMPLE: 0.0,
-            QueryIntent.DEBUG: 0.0,
-        }
-        
-        for kw in self.LOOKUP_KEYWORDS:
-            if kw in query_lower:
-                scores[QueryIntent.LOOKUP] += 1
-        
-        for kw in self.EXPLANATION_KEYWORDS:
-            if kw in query_lower:
-                scores[QueryIntent.EXPLANATION] += 1.5
-        
-        for kw in self.NAVIGATION_KEYWORDS:
-            if kw in query_lower:
-                scores[QueryIntent.NAVIGATION] += 1.2
-        
-        for kw in self.EXAMPLE_KEYWORDS:
-            if kw in query_lower:
-                scores[QueryIntent.EXAMPLE] += 1.3
-        
-        for kw in self.DEBUG_KEYWORDS:
-            if kw in query_lower:
-                scores[QueryIntent.DEBUG] += 1.4
-        
-        # Default to LOOKUP if no strong signal
-        max_intent = max(scores, key=scores.get)
-        max_score = scores[max_intent]
-        
-        if max_score == 0:
-            return QueryIntent.LOOKUP, 0.5
-        
-        # Normalize confidence
-        confidence = min(0.95, 0.5 + (max_score * 0.15))
-        return max_intent, confidence
-    
-    def _extract_languages(self, query_lower: str) -> List[str]:
-        """Extract programming language hints from query."""
-        languages = []
-        for pattern, lang in self.LANGUAGE_PATTERNS.items():
+    for intent_type, patterns in INTENT_PATTERNS.items():
+        for pattern in patterns:
             if re.search(pattern, query_lower):
-                if lang not in languages:
-                    languages.append(lang)
-        return languages
+                intent = intent_type
+                confidence = 0.8
+                break
+        if confidence > 0.5:
+            break
     
-    def _extract_paths(self, query: str) -> List[str]:
-        """Extract file/directory path hints from query."""
-        matches = self.PATH_PATTERN.findall(query)
-        return list(set(matches))
+    # 2. Language hints
+    language_hints = []
+    for lang, keywords in LANGUAGE_KEYWORDS.items():
+        for kw in keywords:
+            if kw in query_lower:
+                language_hints.append(lang)
+                break
     
-    def _extract_symbols(self, query: str) -> List[str]:
-        """Extract potential function/class name hints."""
-        # Filter out common words
-        stopwords = {"the", "and", "for", "with", "from", "this", "that", "how", "what", "where", "find"}
-        matches = self.SYMBOL_PATTERN.findall(query)
-        symbols = [m for m in matches if m.lower() not in stopwords and len(m) > 2]
-        return list(set(symbols))[:5]  # Limit to 5
+    # 3. Path hints (quoted paths or file extensions)
+    path_hints = re.findall(r'["\']([^"\']+\.[a-z]+)["\']', query)
+    path_hints.extend(re.findall(r'\b(\w+\.[a-z]{2,4})\b', query))
     
-    def _clean_query(self, query: str) -> str:
-        """Remove filter syntax from query, keep semantic content."""
-        # Remove path specifications
-        cleaned = self.PATH_PATTERN.sub("", query)
-        # Remove "in python", "in javascript" etc
-        cleaned = re.sub(r'\bin\s+(python|javascript|typescript|go|rust|java|cpp?)\b', '', cleaned, flags=re.IGNORECASE)
-        # Clean up whitespace
-        cleaned = re.sub(r'\s+', ' ', cleaned).strip()
-        return cleaned if cleaned else query
+    # 4. Symbol hints (camelCase, snake_case, PascalCase)
+    symbol_hints = re.findall(r'\b([a-z]+[A-Z][a-zA-Z]*|[a-z]+_[a-z_]+)\b', query)
+    symbol_hints.extend(re.findall(r'\b([A-Z][a-zA-Z]+)\b', query))
+    
+    # 5. Optional: Use vLLM for complex classification
+    if use_llm and confidence < 0.7:
+        try:
+            llm_intent = classify_with_llm(query)
+            if llm_intent:
+                intent = llm_intent
+                confidence = 0.9
+        except Exception as e:
+            logger.warning(f"vLLM classification failed: {e}")
+    
+    # Build filters from hints
+    filters = {}
+    if language_hints:
+        filters["language"] = language_hints
+    if path_hints:
+        filters["path_pattern"] = path_hints[0] if len(path_hints) == 1 else path_hints
+    
+    return QueryAnalysis(
+        original_query=query,
+        processed_query=query,  # Could be cleaned/expanded
+        intent=intent,
+        confidence=confidence,
+        language_hints=language_hints,
+        path_hints=path_hints,
+        symbol_hints=symbol_hints,
+        filters=filters
+    )
 
 
-# Module-level convenience functions
+def classify_with_llm(query: str) -> Optional[QueryIntent]:
+    """
+    Classify query intent using vLLM (CodeLlama).
+    
+    Uses vLLM's chat API with a classification prompt.
+    
+    Raises:
+        RuntimeError: If vLLM service is unavailable
+    """
+    from src.services.inference import get_vllm_client
+    
+    categories = [intent.value for intent in QueryIntent]
+    
+    try:
+        client = get_vllm_client()
+        result = client.classify_query(query, categories)
+        
+        # Parse result
+        result_lower = result.lower().strip()
+        for intent in QueryIntent:
+            if intent.value in result_lower:
+                return intent
+        
+        return None
+    except Exception as e:
+        logger.error(f"vLLM classification failed: {e}")
+        raise RuntimeError(f"Query classification service unavailable: {e}")
 
-def analyze_query(query: str) -> QueryAnalysis:
-    """Analyze a query using the default analyzer."""
-    return QueryAnalyzer.get_instance().analyze(query)
+
+# For backwards compatibility
+def get_query_analyzer():
+    """Get query analyzer (pattern-based, no model loading)."""
+    return analyze_query
 
 
-def get_query_analyzer() -> QueryAnalyzer:
-    """Get global query analyzer instance."""
-    return QueryAnalyzer.get_instance()
+# Removed: QueryAnalyzer class with in-process model loading
+# Removed: _get_model() - all LLM inference via vLLM

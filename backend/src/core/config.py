@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
 
     # Embedding Model (V3 Spec: Code-optimized)
-    EMBEDDING_MODEL: str = "jinaai/jina-code-embeddings-1.5b"
-    EMBEDDING_DIM: int = 768  # Jina code embeddings dimension
+    EMBEDDING_MODEL: str = "jina-embeddings-v3"  # Multilingual, code-aware embedding model
+    EMBEDDING_DIM: int = 1024  # Jina v3 embedding dimension
 
     # Hybrid Search (Phase 9)
     SPARSE_MODEL: str = "naver/splade-cocondenser-ensembledistil"
@@ -41,6 +41,7 @@ class Settings(BaseSettings):
 
     # Reranking (REQ-SRCH-03 - V3 Spec)
     RERANK_ENABLED: bool = True
+    RERANK_MODE: str = "llm"  # "tei" = dedicated TEI reranker, "llm" = use vLLM for reranking
     RERANK_MODEL: str = "jinaai/jina-reranker-v2-base-multilingual"
     QUERY_UNDERSTANDING_MODEL: str = "microsoft/codebert-base"
     RERANK_TOP_K: int = 10
@@ -51,10 +52,16 @@ class Settings(BaseSettings):
 
     # Hardware Acceleration
     FORCE_GPU: bool = True  # Force GPU usage for all models/services if available
-    
     # System Optimization (Phase 5)
     MODEL_TTL_SECONDS: int = 300  # Unload unused models after 5 minutes
     MODEL_AUTO_UNLOAD: bool = True
+    
+    # Xinference - Unified Model Inference Server
+    # Single service for embeddings, reranking, and LLM chat
+    XINFERENCE_URL: str = "http://localhost:9997"
+    
+    # Model names for Xinference (loaded dynamically via API)
+    LLM_MODEL: str = "codellama"  # For RAG chat and query classification
 
     class Config:
         env_file = ".env"

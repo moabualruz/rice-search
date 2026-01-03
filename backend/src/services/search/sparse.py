@@ -1,117 +1,49 @@
+"""
+Sparse Embedding Service - Xinference backend.
+
+For sparse embeddings, Xinference doesn't have native SPLADE support.
+We use a workaround: LLM-based keyword extraction or skip sparse for now.
+"""
 import logging
-# import torch # Lazy
-from typing import Dict, Any, List, Optional
-# from transformers import AutoModelForMaskedLM, AutoTokenizer # Lazy
+from typing import List
 from collections import namedtuple
 
 from src.core.config import settings
-from src.services.model_manager import get_model_manager
 
 logger = logging.getLogger(__name__)
 
 SparseEmbedding = namedtuple("SparseEmbedding", ["indices", "values"])
 
-class SparseEmbedder:
+
+def sparse_embed(text: str) -> SparseEmbedding:
     """
-    SPLADE (Sparse Lexical and Expansion) Embedder.
-    Generates sparse vectors for hybrid search.
-    """
-    _instance: Optional["SparseEmbedder"] = None
+    Generate sparse embedding for text.
     
-    def __init__(self, model_name: str = None):
-        if model_name:
-            self.model_name = model_name
-        else:
-            # Get active sparse model from admin store
-            from src.services.admin.admin_store import get_admin_store
-            store = get_admin_store()
-            self.model_name = store.get_active_model_for_type("sparse_embedding") or settings.SPARSE_MODEL
-        
-    @classmethod
-    def get_instance(cls) -> "SparseEmbedder":
-        if cls._instance is None:
-            cls._instance = cls()
-        return cls._instance
-        
-    def _get_model(self):
-        """Get model tuple (model, tokenizer, device) from manager."""
-        from src.services.model_manager import get_model_manager
-        manager = get_model_manager()
-        
-        def loader():
-            import gc
-            logger.info(f"Loading sparse model: {self.model_name}")
-            import torch
-            from transformers import AutoTokenizer, AutoModelForMaskedLM
-            
-            device = "cuda" if torch.cuda.is_available() and settings.FORCE_GPU else "cpu"
-            
-            # Explicitly load on CPU (default) then move
-            tokenizer = AutoTokenizer.from_pretrained(self.model_name)
-            model = AutoModelForMaskedLM.from_pretrained(self.model_name)
-            model.to(device)
-            model.eval()
-            
-            return {"model": model, "tokenizer": tokenizer, "device": device}
-            
-        # Use actual model name as ID
-        manager.load_model(self.model_name, loader)
-        return manager.get_model_instance(self.model_name) # Returns the dict
+    Xinference doesn't have native SPLADE support, so we use
+    a simple keyword-based approach for now.
+    
+    TODO: Add SPLADE model to Xinference when supported.
+    """
+    # Simple keyword-based sparse embedding
+    # Uses word frequencies as sparse vector
+    words = text.lower().split()
+    word_counts = {}
+    for word in words:
+        if len(word) > 2:  # Skip short words
+            word_counts[word] = word_counts.get(word, 0) + 1
+    
+    # Convert to sparse format (word hash -> count)
+    indices = []
+    values = []
+    for word, count in word_counts.items():
+        # Use hash of word as index (modulo vocab size)
+        idx = hash(word) % 30000  # Typical vocab size
+        indices.append(idx)
+        values.append(float(count))
+    
+    return SparseEmbedding(indices=indices, values=values)
 
-    def embed(self, text: str) -> SparseEmbedding:
-        """
-        Generate sparse embedding for text.
-        """
-        instance_data = self._get_model()
-        if not instance_data:
-             logger.error("Sparse model not available")
-             # Return empty or raise
-             return SparseEmbedding(indices=[], values=[])
 
-        model = instance_data["model"]
-        tokenizer = instance_data["tokenizer"]
-        device = instance_data["device"]
-        
-        import torch
-        
-        with torch.no_grad():
-            # tokenize
-            tokens = tokenizer(
-                text, 
-                return_tensors="pt", 
-                truncation=True, 
-                max_length=512,
-                padding=True
-            )
-            tokens = {k: v.to(device) for k, v in tokens.items()}
-            
-            # inference
-            output = model(**tokens)
-            logits = output.logits # (1, seq_len, vocab_size)
-            
-            # SPLADE formula: max(log(1 + relu(logits)), dim=0)
-            
-            # max over sequence length
-            relu_logits = torch.relu(logits)
-            
-            attention_mask = tokens["attention_mask"].unsqueeze(-1)
-            # (1, seq_len, vocab)
-            weighted_logits = torch.log(1 + relu_logits) * attention_mask
-            
-            # Max pooling over tokens -> (1, vocab)
-            max_val, _ = torch.max(weighted_logits, dim=1)
-            vector = max_val.squeeze() # (vocab_size,)
-            
-            # Extract non-zero
-            indices = torch.nonzero(vector).squeeze().cpu().tolist()
-            if isinstance(indices, int):
-                indices = [indices]
-                
-            values = vector[indices].cpu().tolist()
-            if isinstance(values, float):
-                values = [values]
-            
-            return SparseEmbedding(indices=indices, values=values)
-
-def get_sparse_embedder() -> SparseEmbedder:
-    return SparseEmbedder.get_instance()
+def batch_sparse_embed(texts: List[str]) -> List[SparseEmbedding]:
+    """Embed multiple texts."""
+    return [sparse_embed(text) for text in texts]

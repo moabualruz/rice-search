@@ -200,14 +200,13 @@ class ModelManager:
                 from src.services.admin.admin_store import get_admin_store
                 store = get_admin_store()
                 if store.redis:
-                    # Check if ANY manager holds it
-                    if store.redis.scard(f"model_status:{model_id}:instances") > 0:
+                    # Use sanitized key (same as _sync_model_status_to_redis)
+                    safe_key = model_id.replace("/", "-")
+                    redis_key = f"model_status:{safe_key}:instances"
+                    if store.redis.scard(redis_key) > 0:
                         is_loaded = True
-                    # Fallback check for legacy key
-                    elif store.redis.exists(f"model_status:{model_id}:loaded"):
-                        is_loaded = True
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(f"Failed to check Redis for model status: {e}")
 
         return {
             "id": model_id,
