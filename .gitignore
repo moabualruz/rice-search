@@ -62,6 +62,7 @@ data/
 tmp/
 test_*.txt
 *_logs.txt
+*_logs*.txt
 *_logs_*.txt
 *_log.txt
 *_log_*.txt

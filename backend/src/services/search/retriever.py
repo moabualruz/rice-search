@@ -1,8 +1,8 @@
 """
-Retriever service - Xinference backend.
+Retriever service - BentoML backend.
 
 Supports dense-only and hybrid (dense + sparse) search using Qdrant.
-All model inference via Xinference unified API.
+All model inference via BentoML unified API.
 """
 
 from typing import List, Dict, Optional
@@ -26,7 +26,7 @@ COLLECTION_NAME = "rice_chunks"
 
 def embed_texts(texts: List[str]) -> List[List[float]]:
     """
-    Embed texts using Xinference.
+    Embed texts using BentoML.
     
     Args:
         texts: List of texts to embed
@@ -35,11 +35,11 @@ def embed_texts(texts: List[str]) -> List[List[float]]:
         List of embedding vectors
         
     Raises:
-        RuntimeError: If Xinference is unavailable
+        RuntimeError: If BentoML is unavailable
     """
-    from src.services.inference import get_xinference_client
+    from src.services.inference import get_bentoml_client
     
-    client = get_xinference_client()
+    client = get_bentoml_client()
     return client.embed(texts)
 
 

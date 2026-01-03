@@ -56,12 +56,12 @@ class Settings(BaseSettings):
     MODEL_TTL_SECONDS: int = 300  # Unload unused models after 5 minutes
     MODEL_AUTO_UNLOAD: bool = True
     
-    # Xinference - Unified Model Inference Server
+    # BentoML - Unified Model Inference Server
     # Single service for embeddings, reranking, and LLM chat
-    XINFERENCE_URL: str = "http://localhost:9997"
+    BENTOML_URL: str = "http://localhost:3001"
     
-    # Model names for Xinference (loaded dynamically via API)
-    LLM_MODEL: str = "codellama"  # For RAG chat and query classification
+    # Model names (configured in BentoML service)
+    LLM_MODEL: str = "codellama/CodeLlama-7b-Instruct-hf"  # For RAG chat
 
     class Config:
         env_file = ".env"

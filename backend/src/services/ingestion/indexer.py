@@ -1,7 +1,7 @@
 """
 Indexing Service.
 Handles document processing and Qdrant operations.
-All model inference via Xinference.
+All model inference via BentoML.
 """
 import uuid
 from typing import Dict, List, Optional
@@ -115,8 +115,8 @@ class Indexer:
         # 3. Embed
         contents = [c["content"] for c in chunks]
         
-        # Dense embeddings via Xinference
-        print("Indexer: Embedding dense via Xinference...")
+        # Dense embeddings via BentoML
+        print("Indexer: Embedding dense via BentoML...")
         dense_embeddings = embed_texts(contents)
         print("Indexer: Dense embedding done.")
         
@@ -125,7 +125,7 @@ class Indexer:
         points = []
         
         for i, chunk in enumerate(chunks):
-            # Dense (already list format from Xinference)
+            # Dense (already list format from BentoML)
             vectors = {"default": dense_embeddings[i]}
             
             # Sparse

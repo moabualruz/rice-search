@@ -38,21 +38,23 @@ services:
       - rice-net
 
   # ---------------------------------------------------------------------------
-  # XINFERENCE - Unified Model Inference (LLM, Embeddings, Rerank)
-  # Single service replaces TEI + Triton + vLLM
+  # BENTOML - Unified Model Inference (LLM, Embeddings, Rerank)
+  # Single service with vLLM, Sentence Transformers, Cross-Encoder
   # ---------------------------------------------------------------------------
-  xinference:
-    image: xprobe/xinference:latest
-    command: xinference-local --host 0.0.0.0 --port 9997
+  bentoml:
+    build:
+      context: ./bentoml
+      dockerfile: Dockerfile
     ports:
-      - "9997:9997"  # REST API + WebUI
+      - "3001:3001"  # BentoML API
     volumes:
-      - ../data/xinference:/root/.xinference
       - ../data/hf_cache:/root/.cache/huggingface
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - HF_HOME=/root/.cache/huggingface
-      - XINFERENCE_HOME=/root/.xinference
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
+      - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-base}
+      - LLM_MODEL=${LLM_MODEL:-codellama/CodeLlama-7b-Instruct-hf}
     deploy:
       resources:
         reservations:
@@ -61,10 +63,11 @@ services:
               count: 1
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9997/v1/models"]
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 120s
     restart: unless-stopped
     networks:
       - rice-net
@@ -84,7 +87,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - XINFERENCE_URL=http://xinference:9997
+      - BENTOML_URL=http://bentoml:3001
       - SHARED_TMP_DIR=/shared/ingest
     volumes:
       - ../backend:/app
@@ -92,7 +95,7 @@ services:
     depends_on:
       - redis
       - qdrant
-      - xinference
+      - bentoml
     networks:
       - rice-net
 
@@ -105,7 +108,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - XINFERENCE_URL=http://xinference:9997
+      - BENTOML_URL=http://bentoml:3001
       - SHARED_TMP_DIR=/shared/ingest
     volumes:
       - ../backend:/app
@@ -113,7 +116,7 @@ services:
     depends_on:
       - redis
       - qdrant
-      - xinference
+      - bentoml
     networks:
       - rice-net
 

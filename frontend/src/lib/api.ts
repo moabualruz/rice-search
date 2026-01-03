@@ -3,7 +3,11 @@ const API_BASE = "http://localhost:8000/api/v1";
 export type SearchResult = {
   score: number;
   text: string;
-  metadata: Record<string, any>;
+  file_path?: string;
+  start_line?: number;
+  end_line?: number;
+  chunk_index?: number;
+  metadata?: Record<string, any>;
 };
 
 export type SearchResponse = {

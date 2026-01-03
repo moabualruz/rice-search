@@ -142,7 +142,7 @@ export default function Home() {
                       <div className="flex-1 space-y-2">
                         <div className="flex items-center justify-between">
                            <h3 className="font-medium text-slate-200 text-sm">
-                             {hit.metadata?.filename || 'Unknown Document'}
+                             {hit.file_path || hit.metadata?.file_path || hit.metadata?.filename || 'Unknown Document'}
                            </h3>
                            <span className="text-xs text-slate-500 px-2 py-1 bg-slate-950 rounded-full">
                              {(hit.score * 100).toFixed(1)}% match

@@ -1,7 +1,7 @@
 """
-Neural Reranker Service - Xinference backend.
+Neural Reranker Service - BentoML backend.
 
-Uses Xinference's rerank endpoint for dedicated reranker models,
+Uses BentoML's rerank endpoint for dedicated reranker models,
 or LLM-based reranking via chat as fallback.
 """
 import logging
@@ -14,9 +14,9 @@ logger = logging.getLogger(__name__)
 
 def rerank_results(query: str, documents: List[str]) -> List[float]:
     """
-    Rerank documents using Xinference.
+    Rerank documents using BentoML.
     
-    Tries Xinference rerank endpoint first, falls back to LLM-based.
+    Tries BentoML rerank endpoint first, falls back to LLM-based.
     
     Args:
         query: The search query
@@ -28,17 +28,18 @@ def rerank_results(query: str, documents: List[str]) -> List[float]:
     if not documents:
         return []
     
-    from src.services.inference import get_xinference_client
-    client = get_xinference_client()
+    from src.services.inference import get_bentoml_client
+    client = get_bentoml_client()
     
     mode = settings.RERANK_MODE.lower()
     
     if mode == "tei" or mode == "rerank":
-        # Use Xinference's dedicated rerank endpoint
+        # Use BentoML's dedicated rerank endpoint
         try:
-            return client.rerank(query, documents)
+            results = client.rerank(query, documents)
+            return [r["score"] for r in results]
         except Exception as e:
-            logger.warning(f"Xinference rerank failed, trying LLM: {e}")
+            logger.warning(f"BentoML rerank failed, trying LLM: {e}")
     
     # LLM-based reranking via chat
     return _rerank_with_llm(client, query, documents)

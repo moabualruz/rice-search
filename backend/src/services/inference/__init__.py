@@ -1,17 +1,16 @@
 """
-Inference client modules for Xinference unified model serving.
+Inference client modules for BentoML unified model serving.
 
 Single service for all model inference:
 - Embeddings (dense)
-- Sparse embeddings (via LLM if needed)
 - Reranking
 - Chat/LLM
 
-All legacy clients (TEI, Triton, vLLM) are deprecated in favor of Xinference.
+All legacy clients (Xinference, TEI, Triton, vLLM) are deprecated in favor of BentoML.
 """
-from .xinference_client import XinferenceClient, get_xinference_client
+from .bentoml_client import BentoMLClient, get_bentoml_client
 
 __all__ = [
-    "XinferenceClient",
-    "get_xinference_client",
+    "BentoMLClient",
+    "get_bentoml_client",
 ]

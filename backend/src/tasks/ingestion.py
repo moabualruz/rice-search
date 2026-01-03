@@ -40,7 +40,7 @@ def ingest_file_task(self, file_path: str, original_path: str = None, repo_name:
     # Use original_path if provided, otherwise fall back to file_path
     display_path = original_path or file_path
     
-    # Indexer now uses Xinference internally - no model needed here
+    # Indexer now uses BentoML internally - no model needed here
     indexer = Indexer(qdrant_client=get_qdrant())
     
     return indexer.ingest_file(file_path, display_path, repo_name, org_id)

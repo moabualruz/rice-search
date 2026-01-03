@@ -1,8 +1,8 @@
 """
-Sparse Embedding Service - Xinference backend.
+Sparse Embedding Service.
 
-For sparse embeddings, Xinference doesn't have native SPLADE support.
-We use a workaround: LLM-based keyword extraction or skip sparse for now.
+For sparse embeddings, we use a simple keyword-based approach.
+SPLADE support can be added to BentoML service when needed.
 """
 import logging
 from typing import List
@@ -19,10 +19,9 @@ def sparse_embed(text: str) -> SparseEmbedding:
     """
     Generate sparse embedding for text.
     
-    Xinference doesn't have native SPLADE support, so we use
-    a simple keyword-based approach for now.
+    Uses a simple keyword-based approach for now.
     
-    TODO: Add SPLADE model to Xinference when supported.
+    TODO: Add SPLADE model to BentoML when needed.
     """
     # Simple keyword-based sparse embedding
     # Uses word frequencies as sparse vector

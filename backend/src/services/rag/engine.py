@@ -11,26 +11,40 @@ except ImportError:
     from langchain.llms import OpenAI
 
 from src.services.search.retriever import Retriever
+from src.services.inference.bentoml_client import get_bentoml_client
+import logging
+
+logger = logging.getLogger(__name__)
 
 class RAGEngine:
     def __init__(self):
-        # Setup LLM
+        # Setup LLM - prefer BentoML, then OpenAI, then FakeListLLM
+        self.bentoml_client = None
         api_key = os.getenv("OPENAI_API_KEY")
-        if api_key:
-            self.llm = OpenAI(temperature=0)
-        else:
-            # Fallback for "Iron Core" without external deps
-            responses = [
-                "This is a simulated RAG response based on the retrieved context.",
-                "SEARCH: query optimization techniques" # Simulator for deep dive testing
-            ]
-            self.llm = FakeListLLM(responses=responses)
+        
+        # Try BentoML first
+        try:
+            self.bentoml_client = get_bentoml_client()
+            if self.bentoml_client.health_check():
+                logger.info("RAG Engine: Using BentoML for LLM")
+                self.llm = None  # Will use bentoml_client.chat() directly
+            else:
+                raise RuntimeError("BentoML unhealthy")
+        except Exception as e:
+            logger.warning(f"BentoML unavailable: {e}")
+            if api_key:
+                self.llm = OpenAI(temperature=0)
+            else:
+                # Fallback for "Iron Core" without external deps
+                logger.warning("No LLM available - using simulated responses")
+                responses = [
+                    "LLM not available. Please start BentoML service to enable RAG answers.",
+                ]
+                self.llm = FakeListLLM(responses=responses)
 
         self.retriever = Retriever()
         
-        self.prompt = PromptTemplate(
-            input_variables=["context", "question"],
-            template="""You are an expert pair programmer. Use the following pieces of context to answer the question at the end.
+        self.prompt_template = """You are an expert pair programmer. Use the following pieces of context to answer the question at the end.
 Each context chunk is marked with a Source ID like [1]. 
 Cite your sources in your answer using these IDs, e.g. "The function `foo` handles X [1]."
 
@@ -42,9 +56,16 @@ Context:
 
 Question: {question}
 Answer:"""
+        
+        self.prompt = PromptTemplate(
+            input_variables=["context", "question"],
+            template=self.prompt_template
         )
         
-        self.chain = self.prompt | self.llm | StrOutputParser()
+        if self.llm:
+            self.chain = self.prompt | self.llm | StrOutputParser()
+        else:
+            self.chain = None  # Using BentoML directly
 
     def format_context(self, docs: List[Dict]) -> str:
         """
@@ -55,16 +76,43 @@ Answer:"""
         """
         formatted = []
         for i, doc in enumerate(docs, 1):
+            # Handle both nested metadata and flat payload structure
             meta = doc.get("metadata", {})
-            path = meta.get("file_path", "unknown")
-            start = meta.get("start_line", "?")
-            end = meta.get("end_line", "?")
+            path = doc.get("file_path") or meta.get("file_path", "unknown")
+            start = doc.get("start_line") or meta.get("start_line", "?")
+            end = doc.get("end_line") or meta.get("end_line", "?")
             
             header = f"\nSource [{i}]: {path} (Lines {start}-{end})"
             content = doc.get("text", "").strip()
             formatted.append(f"{header}\n{content}")
             
         return "\n".join(formatted)
+    
+    def _generate_response(self, context: str, question: str) -> str:
+        """Generate response using BentoML or LangChain LLM."""
+        prompt_text = self.prompt_template.format(context=context, question=question)
+        
+        # Try BentoML first
+        if self.bentoml_client:
+            try:
+                response = self.bentoml_client.chat(
+                    messages=[{"role": "user", "content": prompt_text}],
+                    max_tokens=1024,
+                    temperature=0.1
+                )
+                return response
+            except Exception as e:
+                logger.warning(f"BentoML chat failed: {e}")
+                if self.chain:
+                    # Fallback to LangChain
+                    return self.chain.invoke({"context": context, "question": question})
+                return f"LLM unavailable. Error: {e}"
+        
+        # Use LangChain chain
+        if self.chain:
+            return self.chain.invoke({"context": context, "question": question})
+        
+        return "No LLM available. Please start BentoML service."
 
     def ask(self, query: str, org_id: str = "public") -> Dict:
         """
@@ -107,8 +155,8 @@ Answer:"""
             # 2. Format Context
             context_text = self.format_context(all_docs)
             
-            # 3. Generate
-            response = self.chain.invoke({"context": context_text, "question": query})
+            # 3. Generate - use BentoML or LangChain chain
+            response = self._generate_response(context_text, query)
             
             # 4. Check for Search Request
             search_match = re.search(r"SEARCH:\s*(.+)", response)
