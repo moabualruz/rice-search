@@ -54,7 +54,8 @@ services:
       - HF_HOME=/root/.cache/huggingface
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
       - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-base}
-      - LLM_MODEL=${LLM_MODEL:-codellama/CodeLlama-7b-Instruct-hf}
+      - LLM_MODEL=${LLM_MODEL:-TechxGenus/codegemma-7b-it-AWQ}
+      - HF_TOKEN=${HF_TOKEN}
     deploy:
       resources:
         reservations:
@@ -106,7 +107,7 @@ services:
     build:
       context: ../backend
       dockerfile: Dockerfile
-    command: uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     environment:
@@ -116,6 +117,7 @@ services:
       - BENTOML_URL=http://bentoml:3001
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
+      - RERANK_MODE=${RERANK_MODE:-rerank}
     volumes:
       - ../backend:/app
       - ingest-shared:/shared/ingest
@@ -138,6 +140,7 @@ services:
       - BENTOML_URL=http://bentoml:3001
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
+      - RERANK_MODE=${RERANK_MODE:-rerank}
     volumes:
       - ../backend:/app
       - ingest-shared:/shared/ingest

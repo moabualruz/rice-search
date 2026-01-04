@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, memo } from "react";
 import Image from "next/image";
 import { Button, Input, Card } from "@/components/ui-elements";
 import {
@@ -15,6 +15,8 @@ import {
   Copy,
   Check,
   Loader2,
+  Minimize2,
+  Maximize2,
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
@@ -72,10 +74,12 @@ function formatRelevance(score: number): { label: string; color: string } {
 }
 
 // Expandable result card component
-function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
+const ResultCard = memo(function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
   const [rawMarkdown, setRawMarkdown] = useState(false);
+  const [fullContent, setFullContent] = useState<string | null>(null);
+  const [loadingFull, setLoadingFull] = useState(false);
 
   const filePath =
     hit.file_path ||
@@ -92,6 +96,24 @@ function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
     await navigator.clipboard.writeText(hit.text || "");
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+
+  const handleViewFullFile = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (fullContent) {
+      setFullContent(null);
+      return;
+    }
+
+    try {
+      setLoadingFull(true);
+      const data = await api.getFileContent(filePath);
+      setFullContent(data.content);
+    } catch (err) {
+      console.error("Failed to load file:", err);
+    } finally {
+      setLoadingFull(false);
+    }
   };
 
   return (
@@ -179,11 +201,86 @@ function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
                     <ExternalLink size={12} /> Open PDF
                   </a>
                 )}
+                
+                <button
+                  onClick={handleViewFullFile}
+                  disabled={loadingFull}
+                  className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                    fullContent
+                      ? "bg-indigo-600 text-white"
+                      : "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                  }`}
+                >
+                  {loadingFull ? (
+                     <Loader2 size={12} className="animate-spin" />
+                  ) : fullContent ? (
+                    <Minimize2 size={12} />
+                  ) : (
+                    <Maximize2 size={12} />
+                  )}
+                  {fullContent ? "Close Full File" : "View Full File"}
+                </button>
               </div>
 
-              {/* Content preview with syntax highlighting */}
+              {/* Content preview or Full File view */}
               <div className="rounded-lg overflow-hidden border border-slate-700">
-                {isMarkdown ? (
+                  {fullContent ? (
+                  (() => {
+                    // Safety check for large files
+                    const MAX_LINES = 2000;
+                    // Simple line count estimate (or split)
+                    const isLarge = fullContent.length > 50000 && (fullContent.match(/\n/g)||[]).length > MAX_LINES;
+                    let displayContent = fullContent;
+                    
+                    if (isLarge) {
+                       // Truncate to avoid freezing
+                       const lines = fullContent.split('\n');
+                       if (lines.length > MAX_LINES) {
+                           displayContent = lines.slice(0, MAX_LINES).join('\n');
+                       }
+                    }
+
+                    return (
+                      <div className="relative">
+                        {isLarge && (
+                          <div className="bg-yellow-500/10 border-l-4 border-yellow-500 p-2 mb-2 text-yellow-200 text-xs">
+                            Warning: File is very large. Showing first {MAX_LINES} lines to prevent browser freeze. 
+                            {!rawMarkdown && " Switch to Raw/Copy to retrieve full content."}
+                          </div>
+                        )}
+                        {isMarkdown && !rawMarkdown ? (
+                            <div className="prose prose-invert prose-sm max-w-none p-4 bg-slate-900">
+                              <ReactMarkdown>{displayContent}</ReactMarkdown>
+                            </div>
+                          ) : (
+                           <SyntaxHighlighter
+                             language={isMarkdown && rawMarkdown ? "markdown" : language}
+                             style={oneDark}
+                             showLineNumbers={true}
+                             wrapLines={false} // wrapLines=true is massive perf hit
+                             lineProps={(lineNumber): any => {
+                               const start = hit.start_line || 0;
+                               const end = hit.end_line || 0;
+                               if (lineNumber >= start && lineNumber <= end) {
+                                 return { style: { display: "block", backgroundColor: "rgba(99, 102, 241, 0.2)" } };
+                               }
+                               return {};
+                             }}
+                             customStyle={{
+                               margin: 0,
+                               padding: "1rem",
+                               fontSize: "0.75rem",
+                               maxHeight: "600px", 
+                               overflow: "auto",
+                             }}
+                           >
+                             {displayContent}
+                           </SyntaxHighlighter>
+                          )}
+                      </div>
+                    );
+                  })()
+                ) : isMarkdown ? (
                   rawMarkdown ? (
                     <SyntaxHighlighter
                       language="markdown"
@@ -247,7 +344,7 @@ function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
       </div>
     </Card>
   );
-}
+});
 
 export default function Home() {
   const [query, setQuery] = useState("");
@@ -353,7 +450,7 @@ export default function Home() {
               <Button
                 type="submit"
                 size="lg"
-                loading={loading}
+                disabled={loading}
                 className="rounded-lg h-12 w-12 p-0 flex items-center justify-center"
               >
                 {loading ? (
@@ -404,11 +501,11 @@ export default function Home() {
               <div className="prose prose-invert max-w-none text-slate-200">
                 <ReactMarkdown
                   components={{
-                    code({ node, inline, className, children, ...props }) {
+                    code({ node, inline, className, children, ...props }: any) {
                       const match = /language-(\w+)/.exec(className || "");
                       return !inline && match ? (
                         <SyntaxHighlighter
-                          style={oneDark}
+                          style={oneDark as any}
                           language={match[1]}
                           PreTag="div"
                           {...props}

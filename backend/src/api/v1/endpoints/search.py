@@ -96,7 +96,7 @@ async def _perform_search(
         org_id = user.get("org_id", "public")
 
         if mode == "search":
-            results = Retriever.search(
+            results = await Retriever.search(
                 query=query,
                 limit=limit,
                 org_id=org_id,
@@ -117,7 +117,7 @@ async def _perform_search(
         
         elif mode == "rag":
             engine = RAGEngine()
-            response = engine.ask(query, org_id=org_id)
+            response = await engine.ask(query, org_id=org_id)
             return {"mode": "rag", **response}
             
     except Exception as e:

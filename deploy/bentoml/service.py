@@ -132,9 +132,10 @@ class RiceInferenceService:
             self.llm = LLM(
                 model=self.llm_model_name,
                 trust_remote_code=True,
-                gpu_memory_utilization=0.7,  # Allow more GPU memory for 3B model + 8k context
-                max_model_len=8192,  # 8k context as requested
-                enforce_eager=True,  # Skip torch.compile to avoid compilation issues
+                gpu_memory_utilization=0.90,
+                max_model_len=8192,
+                disable_log_stats=True,
+                quantization="awq",
             )
             self.SamplingParams = SamplingParams
             logger.info("LLM loaded successfully")
@@ -211,7 +212,7 @@ class RiceInferenceService:
         sampling_params = self.SamplingParams(
             max_tokens=request.max_tokens,
             temperature=request.temperature,
-            stop=["[INST]", "</s>", "[/INST]", "<<SYS>>", "<</SYS>>"],  # Stop sequences
+            stop=["</s>"],  # Stop sequences
             repetition_penalty=1.1,  # Prevent repetitive output
         )
         
@@ -229,7 +230,34 @@ class RiceInferenceService:
     
     def _format_chat_prompt(self, messages: List[ChatMessage]) -> str:
         """Format chat messages into a prompt string."""
-        # CodeLlama Instruct format
+        model_name = self.llm_model_name.lower()
+        
+        # Gemma / CodeGemma format
+        if "gemma" in model_name:
+            prompt_parts = []
+            for msg in messages:
+                role = "model" if msg.role == "assistant" else msg.role
+                prompt_parts.append(f"<start_of_turn>{role}\n{msg.content}<end_of_turn>\n")
+            
+            # Start model turn if last was user
+            if messages and messages[-1].role == "user":
+                prompt_parts.append("<start_of_turn>model\n")
+            
+            return "".join(prompt_parts)
+
+        # Qwen format (ChatML)
+        if "qwen" in model_name:
+            prompt_parts = []
+            for msg in messages:
+                prompt_parts.append(f"<|im_start|>{msg.role}\n{msg.content}<|im_end|>\n")
+            
+            # Start assistant turn
+            if messages and messages[-1].role == "user":
+                prompt_parts.append("<|im_start|>assistant\n")
+            
+            return "".join(prompt_parts)
+
+        # Llama / CodeLlama Instruct format
         prompt_parts = []
         for msg in messages:
             if msg.role == "system":

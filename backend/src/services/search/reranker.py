@@ -12,9 +12,9 @@ from src.core.config import settings
 logger = logging.getLogger(__name__)
 
 
-def rerank_results(query: str, documents: List[str]) -> List[float]:
+async def rerank_results(query: str, documents: List[str]) -> List[float]:
     """
-    Rerank documents using BentoML.
+    Rerank documents using BentoML (Async).
     
     Tries BentoML rerank endpoint first, falls back to LLM-based.
     
@@ -32,21 +32,22 @@ def rerank_results(query: str, documents: List[str]) -> List[float]:
     client = get_bentoml_client()
     
     mode = settings.RERANK_MODE.lower()
+    logger.info(f"Reranking mode: {mode}")
     
     if mode == "tei" or mode == "rerank":
         # Use BentoML's dedicated rerank endpoint
         try:
-            results = client.rerank(query, documents)
+            results = await client.rerank(query, documents)
             return [r["score"] for r in results]
         except Exception as e:
             logger.warning(f"BentoML rerank failed, trying LLM: {e}")
     
     # LLM-based reranking via chat
-    return _rerank_with_llm(client, query, documents)
+    return await _rerank_with_llm(client, query, documents)
 
 
-def _rerank_with_llm(client, query: str, documents: List[str]) -> List[float]:
-    """Rerank using LLM prompting."""
+async def _rerank_with_llm(client, query: str, documents: List[str]) -> List[float]:
+    """Rerank using LLM prompting (Async)."""
     try:
         docs_text = "\n".join([
             f"[{i+1}] {doc[:500]}"
@@ -62,22 +63,54 @@ Documents:
 Return ONLY a comma-separated list of scores in order (e.g., "8,3,9,5").
 Scores:"""
 
-        response = client.chat(
+        response = await client.chat(
             messages=[{"role": "user", "content": prompt}],
             max_tokens=100,
             temperature=0.1
         )
         
         # Parse scores
+        import re
         try:
-            score_strs = response.strip().split(",")
-            scores = [float(s.strip()) / 10.0 for s in score_strs[:len(documents)]]
+            # Clean response: remove echoed prompt if present
+            clean_response = response
+            if "[/INST]" in response:
+                clean_response = response.split("[/INST]")[-1]
+            
+            # 1. Try finding a explicit comma-separated list first (e.g. "8, 9, 7")
+            # Look for at least 2 numbers separated by comma
+            list_match = re.search(r"(\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?)+)", clean_response)
+            
+            scores = []
+            if list_match:
+                # Parse the list found
+                score_strs = list_match.group(1).split(",")
+                scores = [float(s.strip()) for s in score_strs]
+            else:
+                # 2. Fallback: Find ALL numbers and try to interpret them
+                # Use simple heuristic: filter out integers that look like indices (1, 2, 3 in sequence) if possible?
+                # For now, just finding all numbers is risky but better than crashing.
+                matches = re.findall(r"\b(\d+(?:\.\d+)?)\b", clean_response)
+                scores = [float(m) for m in matches]
+
+            # Normalize 0-10 -> 0-1
+            # Heuristic: if any score > 1, assume 0-10 scale
+            if any(s > 1.0 for s in scores):
+                 scores = [s / 10.0 for s in scores]
+
+            # Clamp and Truncate/Pad
+            scores = [min(max(s, 0.0), 1.0) for s in scores]
+            scores = scores[:len(documents)]
+            
             while len(scores) < len(documents):
                 scores.append(0.5)
+            
             return scores
-        except ValueError:
-            logger.warning(f"Could not parse LLM rerank scores: {response}")
+
+        except Exception as e:
+            logger.warning(f"Could not parse LLM rerank scores: {e}. Response: {response[:100]}...")
             return [0.5] * len(documents)
+
             
     except Exception as e:
         logger.warning(f"LLM reranking unavailable, returning neutral scores: {e}")
@@ -85,13 +118,13 @@ Scores:"""
         return [0.5] * len(documents)
 
 
-def rerank_search_results(query: str, results: List[Dict[str, Any]], content_key: str = "content") -> List[Dict[str, Any]]:
-    """Rerank search results and return sorted by relevance."""
+async def rerank_search_results(query: str, results: List[Dict[str, Any]], content_key: str = "content") -> List[Dict[str, Any]]:
+    """Rerank search results and return sorted by relevance (Async)."""
     if not results:
         return results
     
     texts = [r.get(content_key, "") for r in results]
-    scores = rerank_results(query, texts)
+    scores = await rerank_results(query, texts)
     
     for i, result in enumerate(results):
         result["rerank_score"] = scores[i]

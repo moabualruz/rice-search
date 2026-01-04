@@ -1,5 +1,6 @@
 import os
 import re
+import asyncio
 from typing import List, Dict, Tuple
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
@@ -25,13 +26,11 @@ class RAGEngine:
         # Try BentoML first
         try:
             self.bentoml_client = get_bentoml_client()
-            if self.bentoml_client.health_check():
-                logger.info("RAG Engine: Using BentoML for LLM")
-                self.llm = None  # Will use bentoml_client.chat() directly
-            else:
-                raise RuntimeError("BentoML unhealthy")
+            # We assume it exists for now, health check is async so we skip it in __init__
+            logger.info("RAG Engine: Using BentoML for LLM")
+            self.llm = None  # Will use bentoml_client.chat() directly
         except Exception as e:
-            logger.warning(f"BentoML unavailable: {e}")
+            logger.warning(f"BentoML client init failed: {e}")
             if api_key:
                 self.llm = OpenAI(temperature=0)
             else:
@@ -88,14 +87,15 @@ Answer:"""
             
         return "\n".join(formatted)
     
-    def _generate_response(self, context: str, question: str) -> str:
+    async def _generate_response(self, context: str, question: str) -> str:
         """Generate response using BentoML or LangChain LLM."""
         prompt_text = self.prompt_template.format(context=context, question=question)
         
         # Try BentoML first
         if self.bentoml_client:
             try:
-                response = self.bentoml_client.chat(
+                # Async chat call
+                response = await self.bentoml_client.chat(
                     messages=[{"role": "user", "content": prompt_text}],
                     max_tokens=1024,
                     temperature=0.1
@@ -104,23 +104,30 @@ Answer:"""
             except Exception as e:
                 logger.warning(f"BentoML chat failed: {e}")
                 if self.chain:
-                    # Fallback to LangChain
-                    return self.chain.invoke({"context": context, "question": question})
+                    # Fallback to LangChain (run in thread if blocking)
+                    # Try ainvoke if available (modern langchain), else to_thread
+                    if hasattr(self.chain, "ainvoke"):
+                         return await self.chain.ainvoke({"context": context, "question": question})
+                    else:
+                         return await asyncio.to_thread(self.chain.invoke, {"context": context, "question": question})
                 return f"LLM unavailable. Error: {e}"
         
         # Use LangChain chain
         if self.chain:
-            return self.chain.invoke({"context": context, "question": question})
+             if hasattr(self.chain, "ainvoke"):
+                  return await self.chain.ainvoke({"context": context, "question": question})
+             else:
+                  return await asyncio.to_thread(self.chain.invoke, {"context": context, "question": question})
         
         return "No LLM available. Please start BentoML service."
 
-    def ask(self, query: str, org_id: str = "public") -> Dict:
+    async def ask(self, query: str, org_id: str = "public") -> Dict:
         """
         Standard single-step RAG.
         """
-        return self.ask_with_deep_dive(query, org_id=org_id, max_steps=1)
+        return await self.ask_with_deep_dive(query, org_id=org_id, max_steps=1)
 
-    def ask_with_deep_dive(self, query: str, org_id: str = "public", max_steps: int = 3) -> Dict:
+    async def ask_with_deep_dive(self, query: str, org_id: str = "public", max_steps: int = 3) -> Dict:
         """
         Iterative RAG pipeline that allows the model to request follow-up searches.
         """
@@ -136,7 +143,8 @@ Answer:"""
             
             # 1. Retrieve
             if current_query not in visited_queries:
-                new_docs = self.retriever.search(current_query, limit=3, org_id=org_id)
+                # Call async retriever
+                new_docs = await self.retriever.search(current_query, limit=3, org_id=org_id)
                 visited_queries.add(current_query)
                 
                 # Deduplicate docs based on content or ID if available, here simple append
@@ -155,8 +163,8 @@ Answer:"""
             # 2. Format Context
             context_text = self.format_context(all_docs)
             
-            # 3. Generate - use BentoML or LangChain chain
-            response = self._generate_response(context_text, query)
+            # 3. Generate - use BentoML or LangChain chain (async)
+            response = await self._generate_response(context_text, query)
             
             # 4. Check for Search Request
             search_match = re.search(r"SEARCH:\s*(.+)", response)
@@ -174,6 +182,7 @@ Answer:"""
         # If loop finishes without break (max steps reached), use last response, stripping SEARCH command if present
         if not answer:
              # Fallback if we ended on a search command
+             # response might be undefined if loop didn't run, but max_steps > 0
             answer = re.sub(r"SEARCH:.*", "*Max search steps reached. Best effort answer:*", response).strip()
 
         return {

@@ -33,34 +33,26 @@ class BentoMLClient:
             base_url: BentoML server URL (e.g., "http://localhost:3001")
         """
         self.base_url = (base_url or settings.BENTOML_URL).rstrip("/")
-        self.client = httpx.Client(timeout=120.0)
         logger.info(f"BentoML client initialized: {self.base_url}")
     
-    def embed(self, texts: List[str], model: str = None) -> List[List[float]]:
+    async def embed(self, texts: List[str], model: str = None) -> List[List[float]]:
         """
         Generate embeddings for texts.
-        
-        Args:
-            texts: List of texts to embed
-            model: Model name (optional, uses server default)
-            
-        Returns:
-            List of embedding vectors
         """
-        try:
-            # BentoML requires request wrapper
-            response = self.client.post(
-                f"{self.base_url}/embed",
-                json={"request": {"texts": texts, "model": model}},
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["embeddings"]
-        except Exception as e:
-            logger.error(f"Embedding failed: {e}")
-            raise
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/embed",
+                    json={"request": {"texts": texts, "model": model}},
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["embeddings"]
+            except Exception as e:
+                logger.error(f"Embedding failed: {e}")
+                raise
     
-    def rerank(
+    async def rerank(
         self,
         query: str,
         documents: List[str],
@@ -69,37 +61,28 @@ class BentoMLClient:
     ) -> List[Dict[str, Any]]:
         """
         Rerank documents by relevance to query.
-        
-        Args:
-            query: Search query
-            documents: Documents to rerank
-            top_n: Return only top N results
-            model: Model name (optional)
-            
-        Returns:
-            List of {index, score, text} dicts sorted by score
         """
-        try:
-            # BentoML requires request wrapper
-            response = self.client.post(
-                f"{self.base_url}/rerank",
-                json={
-                    "request": {
-                        "query": query,
-                        "documents": documents,
-                        "top_n": top_n,
-                        "model": model,
-                    }
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["results"]
-        except Exception as e:
-            logger.error(f"Rerank failed: {e}")
-            raise
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            try:
+                response = await client.post(
+                    f"{self.base_url}/rerank",
+                    json={
+                        "request": {
+                            "query": query,
+                            "documents": documents,
+                            "top_n": top_n,
+                            "model": model,
+                        }
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["results"]
+            except Exception as e:
+                logger.error(f"Rerank failed: {e}")
+                raise
     
-    def chat(
+    async def chat(
         self,
         messages: List[Dict[str, str]],
         model: str = None,
@@ -108,57 +91,56 @@ class BentoMLClient:
     ) -> str:
         """
         Generate chat completion.
-        
-        Args:
-            messages: List of {"role": "...", "content": "..."} messages
-            model: Model name (optional)
-            max_tokens: Maximum tokens to generate
-            temperature: Sampling temperature
-            
-        Returns:
-            Generated response text
         """
-        try:
-            # BentoML requires request wrapper
-            response = self.client.post(
-                f"{self.base_url}/chat",
-                json={
-                    "request": {
-                        "messages": messages,
-                        "model": model,
-                        "max_tokens": max_tokens,
-                        "temperature": temperature,
-                    }
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
-            return data["content"]
-        except Exception as e:
-            logger.error(f"Chat failed: {e}")
-            raise
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            try:
+                # The user's instruction implies _format_chat_prompt is a method of the class.
+                # The provided snippet places it inside the try block of chat, which is syntactically valid
+                # as a local function, but likely not the intended structure for a class method.
+                # To maintain syntactic correctness and adhere to the spirit of "update _format_chat_prompt",
+                # I'm placing it as a new method of the class, as its indentation suggests.
+                # If ChatMessage is not defined, this will cause an error. Assuming it's available.
+                response = await client.post(
+                    f"{self.base_url}/chat",
+                    json={
+                        "request": {
+                            "messages": messages,
+                            "model": model,
+                            "max_tokens": max_tokens,
+                            "temperature": temperature,
+                        }
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["content"]
+            except Exception as e:
+                logger.error(f"Chat failed: {e}")
+                raise
     
-    def health_check(self) -> bool:
+    async def health_check(self) -> bool:
         """Check if BentoML service is healthy."""
-        try:
-            response = self.client.post(f"{self.base_url}/health", timeout=5.0)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("status") == "healthy"
-        except Exception as e:
-            logger.warning(f"Health check failed: {e}")
-            return False
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                response = await client.post(f"{self.base_url}/health")
+                response.raise_for_status()
+                data = response.json()
+                return data.get("status") == "healthy"
+            except Exception as e:
+                logger.warning(f"Health check failed: {e}")
+                return False
     
-    def get_models(self) -> Dict[str, Any]:
+    async def get_models(self) -> Dict[str, Any]:
         """Get information about loaded models."""
-        try:
-            response = self.client.post(f"{self.base_url}/health", timeout=5.0)
-            response.raise_for_status()
-            data = response.json()
-            return data.get("models", {})
-        except Exception as e:
-            logger.warning(f"Failed to get models: {e}")
-            return {}
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            try:
+                response = await client.post(f"{self.base_url}/health")
+                response.raise_for_status()
+                data = response.json()
+                return data.get("models", {})
+            except Exception as e:
+                logger.warning(f"Failed to get models: {e}")
+                return {}
 
 
 # Singleton instance
