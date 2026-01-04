@@ -207,10 +207,12 @@ class RiceInferenceService:
         # Format messages into prompt
         prompt = self._format_chat_prompt(request.messages)
         
-        # Generate
+        # Generate with proper stop sequences for Llama/CodeLlama
         sampling_params = self.SamplingParams(
             max_tokens=request.max_tokens,
             temperature=request.temperature,
+            stop=["[INST]", "</s>", "[/INST]", "<<SYS>>", "<</SYS>>"],  # Stop sequences
+            repetition_penalty=1.1,  # Prevent repetitive output
         )
         
         outputs = self.llm.generate([prompt], sampling_params)

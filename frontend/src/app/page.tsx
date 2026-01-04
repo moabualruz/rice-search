@@ -75,6 +75,7 @@ function formatRelevance(score: number): { label: string; color: string } {
 function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [rawMarkdown, setRawMarkdown] = useState(false);
 
   const filePath =
     hit.file_path ||
@@ -154,6 +155,18 @@ function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
                   {copied ? <Check size={12} /> : <Copy size={12} />}
                   {copied ? "Copied!" : "Copy"}
                 </button>
+                {isMarkdown && (
+                  <button
+                    onClick={() => setRawMarkdown(!rawMarkdown)}
+                    className={`flex items-center gap-1 text-xs px-2 py-1 rounded ${
+                      rawMarkdown
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-800 hover:bg-slate-700 text-slate-300"
+                    }`}
+                  >
+                    {rawMarkdown ? "Raw" : "Rendered"}
+                  </button>
+                )}
                 {isPDF && (
                   <a
                     href={`/api/files/view?path=${encodeURIComponent(
@@ -171,9 +184,26 @@ function ResultCard({ hit, index }: { hit: SearchResult; index: number }) {
               {/* Content preview with syntax highlighting */}
               <div className="rounded-lg overflow-hidden border border-slate-700">
                 {isMarkdown ? (
-                  <div className="prose prose-invert prose-sm max-w-none p-4 bg-slate-900">
-                    <ReactMarkdown>{hit.text}</ReactMarkdown>
-                  </div>
+                  rawMarkdown ? (
+                    <SyntaxHighlighter
+                      language="markdown"
+                      style={oneDark}
+                      showLineNumbers={true}
+                      customStyle={{
+                        margin: 0,
+                        padding: "1rem",
+                        fontSize: "0.75rem",
+                        maxHeight: "400px",
+                        overflow: "auto",
+                      }}
+                    >
+                      {hit.text || ""}
+                    </SyntaxHighlighter>
+                  ) : (
+                    <div className="prose prose-invert prose-sm max-w-none p-4 bg-slate-900">
+                      <ReactMarkdown>{hit.text}</ReactMarkdown>
+                    </div>
+                  )
                 ) : (
                   <SyntaxHighlighter
                     language={language}
