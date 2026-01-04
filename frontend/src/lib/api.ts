@@ -2,6 +2,7 @@ const API_BASE = "http://localhost:8000/api/v1";
 
 export type SearchResult = {
   score: number;
+  rerank_score?: number; // Rerank score from backend (0-1)
   text: string;
   file_path?: string;
   start_line?: number;
