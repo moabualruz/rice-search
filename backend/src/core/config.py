@@ -62,6 +62,31 @@ class Settings(BaseSettings):
     
     # Model names (configured in BentoML service)
     LLM_MODEL: str = "codellama/CodeLlama-7b-Instruct-hf"  # For RAG chat
+    
+    # ==========================================================================
+    # TRIPLE RETRIEVAL SYSTEM
+    # ==========================================================================
+    
+    # Tantivy BM25 Service
+    TANTIVY_URL: str = "http://localhost:3002"
+    BM25_ENABLED: bool = True
+    
+    # SPLADE Neural Sparse
+    SPLADE_MODEL: str = "naver/splade-cocondenser-ensembledistil"
+    SPLADE_ENABLED: bool = True
+    SPLADE_DEVICE: str = "gpu"  # gpu | cpu
+    SPLADE_PRECISION: str = "fp16"  # fp16 | fp32
+    SPLADE_BATCH_SIZE: int = 32
+    SPLADE_MAX_TOKENS: int = 512
+    
+    # BM42 Hybrid (Qdrant-native)
+    BM42_ENABLED: bool = True
+    BM42_MODEL: str = "Qdrant/bm42-all-minilm-l6-v2-attentions"
+    
+    # Default search flags (all enabled)
+    DEFAULT_USE_BM25: bool = True
+    DEFAULT_USE_SPLADE: bool = True
+    DEFAULT_USE_BM42: bool = True
 
     class Config:
         env_file = ".env"

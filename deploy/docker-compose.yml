@@ -73,6 +73,32 @@ services:
       - rice-net
 
   # ---------------------------------------------------------------------------
+  # TANTIVY - Rust BM25 Lexical Search Service
+  # ---------------------------------------------------------------------------
+  tantivy:
+    build:
+      context: ../rust-tantivy
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    volumes:
+      - tantivy_data:/data
+    environment:
+      - RUST_LOG=info
+      - TANTIVY_DATA_DIR=/data
+      - PORT=3002
+      - HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - rice-net
+
+  # ---------------------------------------------------------------------------
   # PYTHON BACKEND (API & WORKER)
   # ---------------------------------------------------------------------------
 
@@ -88,6 +114,7 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
       - BENTOML_URL=http://bentoml:3001
+      - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
     volumes:
       - ../backend:/app
@@ -109,6 +136,7 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
       - BENTOML_URL=http://bentoml:3001
+      - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
     volumes:
       - ../backend:/app
@@ -168,3 +196,5 @@ networks:
 
 volumes:
   ingest-shared:
+  tantivy_data:  # Persistent storage for BM25 index
+
