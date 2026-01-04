@@ -22,7 +22,7 @@ class BentoMLClient:
     - POST /embed - Text embeddings
     - POST /rerank - Document reranking
     - POST /chat - LLM chat completion
-    - GET /health - Health check
+    - POST /health - Health check
     """
     
     def __init__(self, base_url: str = None):
@@ -48,9 +48,10 @@ class BentoMLClient:
             List of embedding vectors
         """
         try:
+            # BentoML requires request wrapper
             response = self.client.post(
                 f"{self.base_url}/embed",
-                json={"texts": texts, "model": model},
+                json={"request": {"texts": texts, "model": model}},
             )
             response.raise_for_status()
             data = response.json()
@@ -79,13 +80,16 @@ class BentoMLClient:
             List of {index, score, text} dicts sorted by score
         """
         try:
+            # BentoML requires request wrapper
             response = self.client.post(
                 f"{self.base_url}/rerank",
                 json={
-                    "query": query,
-                    "documents": documents,
-                    "top_n": top_n,
-                    "model": model,
+                    "request": {
+                        "query": query,
+                        "documents": documents,
+                        "top_n": top_n,
+                        "model": model,
+                    }
                 },
             )
             response.raise_for_status()
@@ -115,13 +119,16 @@ class BentoMLClient:
             Generated response text
         """
         try:
+            # BentoML requires request wrapper
             response = self.client.post(
                 f"{self.base_url}/chat",
                 json={
-                    "messages": messages,
-                    "model": model,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature,
+                    "request": {
+                        "messages": messages,
+                        "model": model,
+                        "max_tokens": max_tokens,
+                        "temperature": temperature,
+                    }
                 },
             )
             response.raise_for_status()
@@ -134,7 +141,7 @@ class BentoMLClient:
     def health_check(self) -> bool:
         """Check if BentoML service is healthy."""
         try:
-            response = self.client.get(f"{self.base_url}/health", timeout=5.0)
+            response = self.client.post(f"{self.base_url}/health", timeout=5.0)
             response.raise_for_status()
             data = response.json()
             return data.get("status") == "healthy"
@@ -145,7 +152,7 @@ class BentoMLClient:
     def get_models(self) -> Dict[str, Any]:
         """Get information about loaded models."""
         try:
-            response = self.client.get(f"{self.base_url}/health", timeout=5.0)
+            response = self.client.post(f"{self.base_url}/health", timeout=5.0)
             response.raise_for_status()
             data = response.json()
             return data.get("models", {})

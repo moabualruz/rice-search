@@ -22,7 +22,6 @@ from qdrant_client.models import (
     SparseIndexParams,
     Distance,
     SparseVector,
-    Modifier,
 )
 
 from src.core.config import settings
@@ -95,31 +94,31 @@ class Indexer:
         Ensure collection exists with proper schema for triple retrieval.
         
         Schema:
-        - dense: Dense vector (768 dims, cosine)
-        - splade: Sparse vector with IDF
-        - bm42: Sparse vector with IDF
+        - dense: Dense vector (768 dims for bge-base, cosine)
+        - splade: Sparse vector
+        - bm42: Sparse vector
         """
         try:
             self.qdrant.get_collection(self.collection_name)
             logger.info(f"Collection {self.collection_name} exists")
         except Exception:
             logger.info(f"Creating collection {self.collection_name}")
+            # Use 768 for BAAI/bge-base-en-v1.5
+            embedding_dim = 768
             self.qdrant.create_collection(
                 collection_name=self.collection_name,
                 vectors_config={
                     "dense": VectorParams(
-                        size=settings.EMBEDDING_DIM,
+                        size=embedding_dim,
                         distance=Distance.COSINE
                     )
                 },
                 sparse_vectors_config={
                     "splade": SparseVectorParams(
-                        index=SparseIndexParams(on_disk=False),
-                        modifier=Modifier.IDF  # Enable IDF for SPLADE
+                        index=SparseIndexParams(on_disk=False)
                     ),
                     "bm42": SparseVectorParams(
-                        index=SparseIndexParams(on_disk=False),
-                        modifier=Modifier.IDF  # Required for BM42 scoring
+                        index=SparseIndexParams(on_disk=False)
                     )
                 }
             )

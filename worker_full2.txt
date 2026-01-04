@@ -1,0 +1,200 @@
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/services/ingestion/indexer.py", line 295, in ingest_file
+    self.qdrant.upsert(
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_client.py", line 938, in upsert
+    return self._client.upsert(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_remote.py", line 1121, in upsert
+    http_result = self.openapi_client.points_api.upsert_points(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 994, in upsert_points
+    return self._build_for_upsert_points(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+worker: Warm shutdown (MainProcess)
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 515, in _build_for_upsert_points
+    return self.api_client.request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.ApiException
+/usr/local/lib/python3.11/site-packages/celery/platforms.py:841: SecurityWarning: You're running the worker with superuser privileges: this is
+absolutely not recommended!
+
+Please specify a different user using the --uid option.
+
+User information: uid=0 euid=0 gid=0 egid=0
+
+  warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+Starting Celery worker with pool=threads, concurrency=10
+ 
+ -------------- celery@95b4b3582312 v5.6.1 (recovery)
+--- ***** ----- 
+-- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.41 2026-01-04 03:18:57
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         rice_worker:0x7fcce9e27a90
+- ** ---------- .> transport:   redis://redis:6379/0
+- ** ---------- .> results:     redis://redis:6379/0
+- *** --- * --- .> concurrency: 10 (thread)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . src.tasks.ingestion.ingest_file_task
+  . src.tasks.ingestion.rebuild_index_task
+  . src.worker.celery_app.echo_task
+
+[2026-01-04 03:18:57,347: INFO/MainProcess] Connected to redis://redis:6379/0
+[2026-01-04 03:18:57,349: INFO/MainProcess] mingle: searching for neighbors
+[2026-01-04 03:18:58,355: INFO/MainProcess] mingle: all alone
+[2026-01-04 03:18:58,366: INFO/MainProcess] celery@95b4b3582312 ready.
+[2026-01-04 03:19:17,798: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[d3d237fb-351e-40f0-b01d-4bb35affd756] received
+[2026-01-04 03:19:17,804: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[f03290ba-ff5e-4185-a1bb-fc3d02777e20] received
+[2026-01-04 03:19:17,809: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[79f55895-70cd-4aa2-964b-79a48f7eb81a] received
+[2026-01-04 03:19:17,819: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[5365102e-4708-44a9-827f-85e58c75486a] received
+[2026-01-04 03:19:17,824: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[6c1e7ffe-de21-44e2-888c-164f6af19f4c] received
+[2026-01-04 03:19:18,032: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:19:18,033: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:19:18,044: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:19:18,045: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:19:18,045: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:19:19,491: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[5365102e-4708-44a9-827f-85e58c75486a] succeeded in 1.6712570089998735s: {'status': 'error', 'message': 'Parsing failed: partition_image() is not available because one or more dependencies are not installed. Use: pip install "unstructured[image]" (including quotes) to install the required dependencies'}
+[2026-01-04 03:19:19,498: INFO/MainProcess] Generated 2 chunks (AST=False)
+[2026-01-04 03:19:19,498: INFO/MainProcess] Generating dense embeddings...
+[2026-01-04 03:19:19,501: INFO/MainProcess] Generated 4 chunks (AST=False)
+[2026-01-04 03:19:19,501: INFO/MainProcess] Generating dense embeddings...
+[2026-01-04 03:19:19,513: INFO/MainProcess] Generated 4 chunks (AST=False)
+[2026-01-04 03:19:19,513: INFO/MainProcess] Generating dense embeddings...
+[2026-01-04 03:19:19,673: INFO/MainProcess] BentoML client initialized: http://bentoml:3001
+[2026-01-04 03:19:19,674: INFO/MainProcess] BentoML client initialized: http://bentoml:3001
+[2026-01-04 03:19:19,674: INFO/MainProcess] BentoML client initialized: http://bentoml:3001
+[2026-01-04 03:19:19,734: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[6c1e7ffe-de21-44e2-888c-164f6af19f4c] succeeded in 1.9081613710000056s: {'status': 'skipped', 'message': 'Empty file'}
+[2026-01-04 03:19:19,891: INFO/MainProcess] HTTP Request: POST http://bentoml:3001/embed "HTTP/1.1 200 OK"
+[2026-01-04 03:19:19,893: INFO/MainProcess] Loading SPLADE model: naver/splade-cocondenser-ensembledistil on cpu
+[2026-01-04 03:19:19,968: INFO/MainProcess] HTTP Request: POST http://bentoml:3001/embed "HTTP/1.1 200 OK"
+[2026-01-04 03:19:19,969: INFO/MainProcess] Loading SPLADE model: naver/splade-cocondenser-ensembledistil on cpu
+[2026-01-04 03:19:19,987: INFO/MainProcess] HTTP Request: POST http://bentoml:3001/embed "HTTP/1.1 200 OK"
+[2026-01-04 03:19:19,988: INFO/MainProcess] Loading SPLADE model: naver/splade-cocondenser-ensembledistil on cpu
+[2026-01-04 03:19:21,160: ERROR/MainProcess] Failed to load SPLADE model: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+[2026-01-04 03:19:21,160: WARNING/MainProcess] SPLADE encoder not available: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+[2026-01-04 03:19:21,163: INFO/MainProcess] Loading BM42 sparse model: Qdrant/bm42-all-minilm-l6-v2-attentions
+[2026-01-04 03:19:21,437: INFO/MainProcess] BM42 sparse model loaded successfully
+[2026-01-04 03:19:21,438: INFO/MainProcess] Generating BM42 vectors...
+[2026-01-04 03:19:21,558: INFO/MainProcess] HTTP Request: GET http://qdrant:6333/collections/rice_chunks "HTTP/1.1 200 OK"
+[2026-01-04 03:19:21,559: INFO/MainProcess] Collection rice_chunks exists
+[2026-01-04 03:19:21,560: INFO/MainProcess] Upserting 4 points to Qdrant...
+[2026-01-04 03:19:21,577: INFO/MainProcess] HTTP Request: PUT http://qdrant:6333/collections/rice_chunks/points?wait=true "HTTP/1.1 400 Bad Request"
+[2026-01-04 03:19:21,591: ERROR/MainProcess] Task src.tasks.ingestion.ingest_file_task[f03290ba-ff5e-4185-a1bb-fc3d02777e20] raised unexpected: ApiException()
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 479, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 779, in __protected_call__
+    return self.run(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/tasks/ingestion.py", line 46, in ingest_file_task
+    return indexer.ingest_file(file_path, display_path, repo_name, org_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/services/ingestion/indexer.py", line 294, in ingest_file
+    self.qdrant.upsert(
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_client.py", line 938, in upsert
+    return self._client.upsert(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_remote.py", line 1121, in upsert
+    http_result = self.openapi_client.points_api.upsert_points(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 994, in upsert_points
+    return self._build_for_upsert_points(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 515, in _build_for_upsert_points
+    return self.api_client.request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.ApiException
+[2026-01-04 03:19:21,771: ERROR/MainProcess] Failed to load SPLADE model: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+[2026-01-04 03:19:21,772: WARNING/MainProcess] SPLADE encoder not available: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+[2026-01-04 03:19:21,775: INFO/MainProcess] Generating BM42 vectors...
+[2026-01-04 03:19:21,805: INFO/MainProcess] HTTP Request: GET http://qdrant:6333/collections/rice_chunks "HTTP/1.1 200 OK"
+[2026-01-04 03:19:21,806: INFO/MainProcess] Collection rice_chunks exists
+[2026-01-04 03:19:21,807: INFO/MainProcess] Upserting 2 points to Qdrant...
+[2026-01-04 03:19:21,821: INFO/MainProcess] HTTP Request: PUT http://qdrant:6333/collections/rice_chunks/points?wait=true "HTTP/1.1 400 Bad Request"
+[2026-01-04 03:19:21,831: ERROR/MainProcess] Task src.tasks.ingestion.ingest_file_task[79f55895-70cd-4aa2-964b-79a48f7eb81a] raised unexpected: ApiException()
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 479, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 779, in __protected_call__
+    return self.run(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/tasks/ingestion.py", line 46, in ingest_file_task
+    return indexer.ingest_file(file_path, display_path, repo_name, org_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/services/ingestion/indexer.py", line 294, in ingest_file
+    self.qdrant.upsert(
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_client.py", line 938, in upsert
+    return self._client.upsert(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_remote.py", line 1121, in upsert
+    http_result = self.openapi_client.points_api.upsert_points(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 994, in upsert_points
+    return self._build_for_upsert_points(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 515, in _build_for_upsert_points
+    return self.api_client.request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.ApiException
+[2026-01-04 03:19:21,932: ERROR/MainProcess] Failed to load SPLADE model: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+[2026-01-04 03:19:21,932: WARNING/MainProcess] SPLADE encoder not available: Cannot copy out of meta tensor; no data! Please use torch.nn.Module.to_empty() instead of torch.nn.Module.to() when moving module from meta to a different device.
+[2026-01-04 03:19:21,935: INFO/MainProcess] Generating BM42 vectors...
+[2026-01-04 03:19:21,969: INFO/MainProcess] HTTP Request: GET http://qdrant:6333/collections/rice_chunks "HTTP/1.1 200 OK"
+[2026-01-04 03:19:21,970: INFO/MainProcess] Collection rice_chunks exists
+[2026-01-04 03:19:21,970: INFO/MainProcess] Upserting 4 points to Qdrant...
+[2026-01-04 03:19:21,976: INFO/MainProcess] HTTP Request: PUT http://qdrant:6333/collections/rice_chunks/points?wait=true "HTTP/1.1 400 Bad Request"
+[2026-01-04 03:19:21,984: ERROR/MainProcess] Task src.tasks.ingestion.ingest_file_task[d3d237fb-351e-40f0-b01d-4bb35affd756] raised unexpected: ApiException()
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 479, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 779, in __protected_call__
+    return self.run(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/tasks/ingestion.py", line 46, in ingest_file_task
+    return indexer.ingest_file(file_path, display_path, repo_name, org_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/services/ingestion/indexer.py", line 294, in ingest_file
+    self.qdrant.upsert(
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_client.py", line 938, in upsert
+    return self._client.upsert(
+           ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_remote.py", line 1121, in upsert
+    http_result = self.openapi_client.points_api.upsert_points(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 994, in upsert_points
+    return self._build_for_upsert_points(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/points_api.py", line 515, in _build_for_upsert_points
+    return self.api_client.request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.ApiException
