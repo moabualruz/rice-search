@@ -1,0 +1,150 @@
+Please specify a different user using the --uid option.
+
+User information: uid=0 euid=0 gid=0 egid=0
+
+  warnings.warn(SecurityWarning(ROOT_DISCOURAGED.format(
+ 
+ -------------- celery@95b4b3582312 v5.6.1 (recovery)
+--- ***** ----- 
+-- ******* ---- Linux-6.6.87.2-microsoft-standard-WSL2-x86_64-with-glibc2.41 2026-01-04 03:22:35
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         rice_worker:0x7dd6afb1a250
+- ** ---------- .> transport:   redis://redis:6379/0
+- ** ---------- .> results:     redis://redis:6379/0
+- *** --- * --- .> concurrency: 10 (thread)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . src.tasks.ingestion.ingest_file_task
+  . src.tasks.ingestion.rebuild_index_task
+  . src.worker.celery_app.echo_task
+
+[2026-01-04 03:22:35,562: INFO/MainProcess] Connected to redis://redis:6379/0
+[2026-01-04 03:22:35,563: INFO/MainProcess] mingle: searching for neighbors
+[2026-01-04 03:22:36,569: INFO/MainProcess] mingle: all alone
+[2026-01-04 03:22:36,579: INFO/MainProcess] celery@95b4b3582312 ready.
+[2026-01-04 03:22:54,924: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[1baf50e2-63e0-4859-a551-e7e5018fe2cb] received
+[2026-01-04 03:22:54,930: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[738c2baf-d480-4951-9ef1-84c26bef6801] received
+[2026-01-04 03:22:54,936: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[d7e6a556-32c3-4176-bb5d-334b64677bdb] received
+[2026-01-04 03:22:54,941: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[04809b85-ea8e-4dc0-acb3-0a83f3b09f63] received
+[2026-01-04 03:22:54,948: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[d6917a0f-5226-49ec-914a-9de33fb36c4c] received
+[2026-01-04 03:22:55,165: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:22:55,165: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:22:55,166: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:22:55,167: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:22:55,167: INFO/MainProcess] HTTP Request: GET http://qdrant:6333 "HTTP/1.1 200 OK"
+[2026-01-04 03:22:56,619: INFO/MainProcess] Generated 4 chunks (AST=False)
+[2026-01-04 03:22:56,619: INFO/MainProcess] Generating dense embeddings...
+[2026-01-04 03:22:56,623: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[04809b85-ea8e-4dc0-acb3-0a83f3b09f63] succeeded in 1.6809860809999009s: {'status': 'error', 'message': 'Parsing failed: partition_image() is not available because one or more dependencies are not installed. Use: pip install "unstructured[image]" (including quotes) to install the required dependencies'}
+[2026-01-04 03:22:56,625: INFO/MainProcess] Generated 2 chunks (AST=False)
+[2026-01-04 03:22:56,625: INFO/MainProcess] Generating dense embeddings...
+[2026-01-04 03:22:56,638: INFO/MainProcess] Generated 4 chunks (AST=False)
+[2026-01-04 03:22:56,638: INFO/MainProcess] Generating dense embeddings...
+[2026-01-04 03:22:56,762: INFO/MainProcess] BentoML client initialized: http://bentoml:3001
+[2026-01-04 03:22:56,795: INFO/MainProcess] BentoML client initialized: http://bentoml:3001
+[2026-01-04 03:22:56,795: INFO/MainProcess] BentoML client initialized: http://bentoml:3001
+[2026-01-04 03:22:56,853: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[d6917a0f-5226-49ec-914a-9de33fb36c4c] succeeded in 1.901926178999929s: {'status': 'skipped', 'message': 'Empty file'}
+[2026-01-04 03:22:56,910: INFO/MainProcess] HTTP Request: POST http://bentoml:3001/embed "HTTP/1.1 200 OK"
+[2026-01-04 03:22:56,912: INFO/MainProcess] Loading SPLADE model: naver/splade-cocondenser-ensembledistil on cpu
+[2026-01-04 03:22:56,938: INFO/MainProcess] HTTP Request: POST http://bentoml:3001/embed "HTTP/1.1 200 OK"
+[2026-01-04 03:22:56,939: INFO/MainProcess] Loading SPLADE model: naver/splade-cocondenser-ensembledistil on cpu
+[2026-01-04 03:22:56,958: INFO/MainProcess] HTTP Request: POST http://bentoml:3001/embed "HTTP/1.1 200 OK"
+[2026-01-04 03:22:56,959: INFO/MainProcess] Loading SPLADE model: naver/splade-cocondenser-ensembledistil on cpu
+[2026-01-04 03:22:58,566: INFO/MainProcess] SPLADE model loaded successfully on cpu
+[2026-01-04 03:22:58,567: INFO/MainProcess] Generating SPLADE vectors...
+[2026-01-04 03:22:58,568: INFO/MainProcess] SPLADE model loaded successfully on cpu
+[2026-01-04 03:22:58,568: INFO/MainProcess] Generating SPLADE vectors...
+[2026-01-04 03:22:58,569: INFO/MainProcess] SPLADE model loaded successfully on cpu
+[2026-01-04 03:22:58,570: INFO/MainProcess] Generating SPLADE vectors...
+[2026-01-04 03:22:59,297: INFO/MainProcess] Loading BM42 sparse model: Qdrant/bm42-all-minilm-l6-v2-attentions
+[2026-01-04 03:22:59,526: INFO/MainProcess] BM42 sparse model loaded successfully
+[2026-01-04 03:22:59,526: INFO/MainProcess] Generating BM42 vectors...
+[2026-01-04 03:22:59,566: INFO/MainProcess] HTTP Request: GET http://qdrant:6333/collections/rice_chunks "HTTP/1.1 404 Not Found"
+[2026-01-04 03:22:59,566: INFO/MainProcess] Creating collection rice_chunks
+[2026-01-04 03:22:59,975: INFO/MainProcess] Generating BM42 vectors...
+[2026-01-04 03:23:00,025: INFO/MainProcess] Generating BM42 vectors...
+[2026-01-04 03:23:00,065: INFO/MainProcess] HTTP Request: GET http://qdrant:6333/collections/rice_chunks "HTTP/1.1 404 Not Found"
+[2026-01-04 03:23:00,065: INFO/MainProcess] Creating collection rice_chunks
+[2026-01-04 03:23:00,074: INFO/MainProcess] HTTP Request: GET http://qdrant:6333/collections/rice_chunks "HTTP/1.1 404 Not Found"
+[2026-01-04 03:23:00,075: INFO/MainProcess] Creating collection rice_chunks
+[2026-01-04 03:23:00,102: INFO/MainProcess] HTTP Request: PUT http://qdrant:6333/collections/rice_chunks "HTTP/1.1 409 Conflict"
+[2026-01-04 03:23:00,104: INFO/MainProcess] HTTP Request: PUT http://qdrant:6333/collections/rice_chunks "HTTP/1.1 409 Conflict"
+[2026-01-04 03:23:00,113: ERROR/MainProcess] Task src.tasks.ingestion.ingest_file_task[1baf50e2-63e0-4859-a551-e7e5018fe2cb] raised unexpected: ApiException()
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 479, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 779, in __protected_call__
+    return self.run(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/tasks/ingestion.py", line 46, in ingest_file_task
+    return indexer.ingest_file(file_path, display_path, repo_name, org_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/services/ingestion/indexer.py", line 249, in ingest_file
+    self.ensure_collection()
+  File "/app/src/services/ingestion/indexer.py", line 108, in ensure_collection
+    self.qdrant.create_collection(
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_client.py", line 1694, in create_collection
+    return self._client.create_collection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_remote.py", line 2023, in create_collection
+    result: bool | None = self.http.collections_api.create_collection(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/collections_api.py", line 294, in create_collection
+    return self._build_for_create_collection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/collections_api.py", line 96, in _build_for_create_collection
+    return self.api_client.request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.ApiException
+[2026-01-04 03:23:00,113: ERROR/MainProcess] Task src.tasks.ingestion.ingest_file_task[738c2baf-d480-4951-9ef1-84c26bef6801] raised unexpected: ApiException()
+Traceback (most recent call last):
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 479, in trace_task
+    R = retval = fun(*args, **kwargs)
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/celery/app/trace.py", line 779, in __protected_call__
+    return self.run(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/tasks/ingestion.py", line 46, in ingest_file_task
+    return indexer.ingest_file(file_path, display_path, repo_name, org_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/app/src/services/ingestion/indexer.py", line 249, in ingest_file
+    self.ensure_collection()
+  File "/app/src/services/ingestion/indexer.py", line 108, in ensure_collection
+    self.qdrant.create_collection(
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_client.py", line 1694, in create_collection
+    return self._client.create_collection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/qdrant_remote.py", line 2023, in create_collection
+    result: bool | None = self.http.collections_api.create_collection(
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/collections_api.py", line 294, in create_collection
+    return self._build_for_create_collection(
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api/collections_api.py", line 96, in _build_for_create_collection
+    return self.api_client.request(
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 95, in request
+    return self.send(request, type_)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/local/lib/python3.11/site-packages/qdrant_client/http/api_client.py", line 130, in send
+    raise UnexpectedResponse.for_response(response)
+qdrant_client.http.exceptions.ApiException
+[2026-01-04 03:23:00,114: INFO/MainProcess] HTTP Request: PUT http://qdrant:6333/collections/rice_chunks "HTTP/1.1 200 OK"
+[2026-01-04 03:23:00,122: INFO/MainProcess] Collection rice_chunks created with triple vector schema
+[2026-01-04 03:23:00,123: INFO/MainProcess] Upserting 2 points to Qdrant...
+[2026-01-04 03:23:00,136: INFO/MainProcess] HTTP Request: PUT http://qdrant:6333/collections/rice_chunks/points?wait=true "HTTP/1.1 200 OK"
+[2026-01-04 03:23:00,137: INFO/MainProcess] Indexing in Tantivy (BM25)...
+[2026-01-04 03:23:00,219: INFO/MainProcess] HTTP Request: POST http://tantivy:3002/index/batch "HTTP/1.1 200 OK"
+[2026-01-04 03:23:00,220: INFO/MainProcess] Indexing complete
+[2026-01-04 03:23:00,232: INFO/MainProcess] Task src.tasks.ingestion.ingest_file_task[d7e6a556-32c3-4176-bb5d-334b64677bdb] succeeded in 5.294897138000124s: {'status': 'success', 'chunks_indexed': 2, 'mode': 'fallback', 'representations': {'dense': 2, 'splade': 2, 'bm42': 2, 'bm25': 2}}
