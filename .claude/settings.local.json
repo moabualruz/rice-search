@@ -11,7 +11,8 @@
       "Bash(docker ps:*)",
       "Bash(timeout 20 docker-compose logs:*)",
       "Bash(docker images:*)",
-      "Bash(docker compose:*)"
+      "Bash(docker compose:*)",
+      "Bash(chmod:*)"
     ]
   }
 }

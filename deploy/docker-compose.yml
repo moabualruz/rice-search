@@ -85,7 +85,6 @@ services:
       - "3002:3002"
     volumes:
       - ../data/tantivy:/data  # Persistent BM25 index (file-based for easy reset)
-      - cargo-cache:/usr/local/cargo/registry  # Persistent Cargo cache
     environment:
       - RUST_LOG=info
       - TANTIVY_DATA_DIR=/data
@@ -205,5 +204,4 @@ networks:
 volumes:
   pip-cache:     # Persistent pip download cache across all Python services
   npm-cache:     # Persistent npm download cache for frontend
-  cargo-cache:   # Persistent Cargo/Rust dependency cache
 
