@@ -55,17 +55,17 @@ function getLanguage(filepath?: string): string {
 
 // Helper to format relevance score
 function formatRelevance(score: number): { label: string; color: string } {
-  // Rerank scores are typically 0-1 with 0.5+ being relevant
-  // Map to a more intuitive display
+  // BGE reranker returns raw confidence scores typically in range [0, 0.3]
+  // with highly relevant documents scoring 0.15+
   const pct = Math.round(score * 100);
-  if (score >= 0.7)
+  if (score >= 0.15)
     return { label: `High (${pct}%)`, color: "text-green-400 bg-green-500/20" };
-  if (score >= 0.5)
+  if (score >= 0.08)
     return {
       label: `Good (${pct}%)`,
       color: "text-yellow-400 bg-yellow-500/20",
     };
-  if (score >= 0.3)
+  if (score >= 0.03)
     return {
       label: `Fair (${pct}%)`,
       color: "text-orange-400 bg-orange-500/20",

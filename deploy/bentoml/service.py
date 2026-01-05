@@ -53,9 +53,13 @@ class ChatMessage(BaseModel):
     role: str
     content: str
 
+    class Config:
+        # Allow dict input to be coerced to model
+        from_attributes = True
+
 
 class ChatRequest(BaseModel):
-    messages: List[ChatMessage]
+    messages: List[Dict[str, str]]  # Accept dicts directly
     model: Optional[str] = None
     max_tokens: int = 1024
     temperature: float = 0.7
@@ -95,95 +99,50 @@ class RiceInferenceServiceSGLang:
         self.embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
         self.rerank_model_name = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
-        # Memory configuration (tunable via env vars)
-        # max_total_tokens determines KV cache size - keep reasonable to save memory
-        self.max_total_tokens = int(os.getenv("MAX_TOTAL_TOKENS", "4096"))
-
         logger.info("=" * 80)
-        logger.info("🚀 Rice Search - SGLang Unified Inference Service")
+        logger.info("🚀 Rice Search - Hybrid Inference Service")
         logger.info("=" * 80)
-        logger.info(f"Memory Config:")
-        logger.info(f"  - Mode: DYNAMIC allocation (on-demand KV cache growth)")
-        logger.info(f"  - CUDA Graphs: DISABLED (required for dynamic memory)")
-        logger.info(f"  - Max context window: {self.max_total_tokens} tokens")
-        logger.info(f"  - Memory will grow as needed, not pre-allocated!")
-        logger.info("=" * 80)
-        logger.info(f"LLM Model: {self.llm_model_name}")
-        logger.info(f"Embedding Model: {self.embed_model_name}")
-        logger.info(f"Rerank Model: {self.rerank_model_name}")
+        logger.info(f"LLM Model: {self.llm_model_name} (SGLang)")
+        logger.info(f"Embedding Model: {self.embed_model_name} (SentenceTransformers)")
+        logger.info(f"Rerank Model: {self.rerank_model_name} (CrossEncoder)")
         logger.info("=" * 80)
 
         # =====================================================================
-        # Initialize SGLang Engine for LLM
+        # Initialize SentenceTransformers for Embeddings (NO EVENT LOOP ISSUES)
         # =====================================================================
         try:
-            import sglang as sgl
+            from sentence_transformers import SentenceTransformer
 
-            logger.info("Loading LLM via SGLang...")
-            self.llm_engine = sgl.Engine(
-                model_path=self.llm_model_name,
-                trust_remote_code=True,
-
-                # Memory optimization
-                max_total_tokens=self.max_total_tokens,  # Max context window
-                mem_fraction_static=0.5,         # 50% of VRAM for model+KV cache (~8GB)
-
-                # Prefill optimization
-                chunked_prefill_size=512,        # Process long sequences in chunks
-
-                # CUDA graph - disable for dynamic memory growth
-                disable_cuda_graph=True,         # Allows flexible batch sizes
-
-                # Quantization
-                quantization="awq" if "awq" in self.llm_model_name.lower() else None,
-            )
-            logger.info(f"✅ LLM loaded: {self.llm_model_name}")
-        except Exception as e:
-            logger.error(f"❌ Failed to load LLM: {e}")
-            self.llm_engine = None
-
-        # =====================================================================
-        # Initialize SGLang for Embeddings
-        # =====================================================================
-        try:
-            import sglang as sgl
-
-            logger.info("Loading Embedding model via SGLang...")
-            self.embed_engine = sgl.Engine(
-                model_path=self.embed_model_name,
-                trust_remote_code=True,
-                is_embedding=True,              # Mark as embedding model
-                mem_fraction_static=0.05,       # 5% VRAM (~800MB)
-                disable_cuda_graph=True,
-            )
+            logger.info("Loading Embedding model via SentenceTransformers...")
+            self.embed_model = SentenceTransformer(self.embed_model_name, device="cuda")
             logger.info(f"✅ Embedding model loaded: {self.embed_model_name}")
         except Exception as e:
             logger.error(f"❌ Failed to load Embedding model: {e}")
-            self.embed_engine = None
+            self.embed_model = None
 
         # =====================================================================
-        # Initialize SGLang for Reranking
+        # Initialize CrossEncoder for Reranking (NO EVENT LOOP ISSUES)
         # =====================================================================
         try:
-            import sglang as sgl
+            from sentence_transformers import CrossEncoder
 
-            logger.info("Loading Rerank model via SGLang...")
-            self.rerank_engine = sgl.Engine(
-                model_path=self.rerank_model_name,
-                trust_remote_code=True,
-                is_embedding=True,              # Rerankers use embedding mode
-                mem_fraction_static=0.05,       # 5% VRAM (~800MB)
-                disable_cuda_graph=True,
-            )
+            logger.info("Loading Rerank model via CrossEncoder...")
+            self.rerank_model = CrossEncoder(self.rerank_model_name, device="cuda")
             logger.info(f"✅ Rerank model loaded: {self.rerank_model_name}")
         except Exception as e:
             logger.error(f"❌ Failed to load Rerank model: {e}")
-            self.rerank_engine = None
+            self.rerank_model = None
+
+        # =====================================================================
+        # LLM via Standalone SGLang Service
+        # =====================================================================
+        # SGLang runs in separate process to avoid event loop conflicts
+        self.sglang_llm_url = os.getenv("SGLANG_LLM_URL", "http://sglang-llm:30003")
+        logger.info(f"LLM via standalone SGLang service: {self.sglang_llm_url}")
+        self.llm_engine = None  # Not running locally
 
         logger.info("=" * 80)
-        logger.info("✅ All models loaded successfully via SGLang unified service")
-        logger.info("🎯 RadixAttention enabled for automatic KV cache reuse")
-        logger.info("⚡ Unified memory pool - better GPU utilization")
+        logger.info("✅ All models loaded successfully")
         logger.info("=" * 80)
 
     @bentoml.api
@@ -191,32 +150,26 @@ class RiceInferenceServiceSGLang:
         """Health check endpoint."""
         return {
             "status": "healthy",
-            "framework": "sglang",
+            "framework": "hybrid",
             "models": {
                 "llm": self.llm_model_name if self.llm_engine else None,
-                "embedding": self.embed_model_name if self.embed_engine else None,
-                "rerank": self.rerank_model_name if self.rerank_engine else None,
+                "embedding": self.embed_model_name if self.embed_model else None,
+                "rerank": self.rerank_model_name if self.rerank_model else None,
             },
             "llm_available": self.llm_engine is not None,
-            "embedding_available": self.embed_engine is not None,
-            "rerank_available": self.rerank_engine is not None,
+            "embedding_available": self.embed_model is not None,
+            "rerank_available": self.rerank_model is not None,
         }
 
     @bentoml.api
-    async def embed(self, request: EmbedRequest) -> EmbedResponse:
+    def embed(self, request: EmbedRequest) -> EmbedResponse:
         """Generate embeddings for texts."""
-        if self.embed_engine is None:
+        if self.embed_model is None:
             raise RuntimeError("Embedding model not available")
 
-        # Use SGLang embedding engine in a separate thread to avoid event loop conflict
-        import asyncio
-        results = await asyncio.to_thread(
-            self.embed_engine.encode,
-            request.texts
-        )
-
-        # SGLang returns a list of dicts with 'embedding' key
-        embeddings = [r["embedding"] for r in results]
+        # Use SentenceTransformers (NO EVENT LOOP ISSUES!)
+        embeddings = self.embed_model.encode(request.texts, convert_to_numpy=True)
+        embeddings = embeddings.tolist()  # Convert numpy to list
 
         return EmbedResponse(
             embeddings=embeddings,
@@ -225,29 +178,25 @@ class RiceInferenceServiceSGLang:
         )
 
     @bentoml.api
-    async def rerank(self, request: RerankRequest) -> RerankResponse:
+    def rerank(self, request: RerankRequest) -> RerankResponse:
         """Rerank documents by relevance to query."""
-        if self.rerank_engine is None:
+        if self.rerank_model is None:
             raise RuntimeError("Rerank model not available")
 
         # Create query-document pairs
         pairs = [[request.query, doc] for doc in request.documents]
 
-        # Use SGLang rerank engine in a separate thread to avoid event loop conflict
-        import asyncio
-        results = await asyncio.to_thread(
-            self.rerank_engine.encode,
-            pairs
-        )
+        # Use CrossEncoder (NO EVENT LOOP ISSUES!)
+        scores = self.rerank_model.predict(pairs)
 
-        # Extract scores and sort
+        # Create scored results
         scored_results = [
             RerankResult(
                 index=i,
-                score=float(r.get("score", 0.0)),
+                score=float(score),
                 text=doc
             )
-            for i, (r, doc) in enumerate(zip(results, request.documents))
+            for i, (score, doc) in enumerate(zip(scores, request.documents))
         ]
         scored_results.sort(key=lambda x: x.score, reverse=True)
 
@@ -261,45 +210,37 @@ class RiceInferenceServiceSGLang:
         )
 
     @bentoml.api
-    async def chat(self, request: ChatRequest) -> ChatResponse:
+    def chat(self, request: ChatRequest) -> ChatResponse:
         """Generate chat completion using LLM."""
-        if self.llm_engine is None:
+        import httpx
+
+        # Call standalone SGLang LLM service
+        try:
+            with httpx.Client(timeout=120.0) as client:
+                response = client.post(
+                    f"{self.sglang_llm_url}/chat",
+                    json={
+                        "messages": request.messages,
+                        "max_tokens": request.max_tokens,
+                        "temperature": request.temperature,
+                    }
+                )
+                response.raise_for_status()
+                data = response.json()
+                return ChatResponse(
+                    content=data["content"],
+                    model=data["model"],
+                    usage=data["usage"],
+                )
+        except Exception as e:
+            logger.error(f"SGLang LLM service error: {e}")
             return ChatResponse(
-                content="LLM not available. Please check server configuration.",
-                model="none",
+                content=f"LLM service unavailable: {str(e)}. Please ensure SGLang LLM service is running.",
+                model="error",
                 usage={"prompt_tokens": 0, "completion_tokens": 0},
             )
 
-        from sglang.srt.sampling.sampling_params import SamplingParams
-        import asyncio
-
-        # Format messages into prompt
-        prompt = self._format_chat_prompt(request.messages)
-
-        # Generate with SGLang in a separate thread to avoid event loop conflict
-        sampling_params = SamplingParams(
-            max_new_tokens=request.max_tokens,
-            temperature=request.temperature,
-            stop=["</s>", "<|im_end|>"],
-        )
-
-        outputs = await asyncio.to_thread(
-            self.llm_engine.generate,
-            [prompt],
-            sampling_params
-        )
-        generated_text = outputs[0].text
-
-        return ChatResponse(
-            content=generated_text,
-            model=self.llm_model_name,
-            usage={
-                "prompt_tokens": len(prompt.split()),
-                "completion_tokens": len(generated_text.split()),
-            },
-        )
-
-    def _format_chat_prompt(self, messages: List[ChatMessage]) -> str:
+    def _format_chat_prompt(self, messages: List[Dict[str, str]]) -> str:
         """Format chat messages into a prompt string."""
         model_name = self.llm_model_name.lower()
 
@@ -307,9 +248,9 @@ class RiceInferenceServiceSGLang:
         if "qwen" in model_name:
             prompt_parts = []
             for msg in messages:
-                prompt_parts.append(f"<|im_start|>{msg.role}\n{msg.content}<|im_end|>\n")
+                prompt_parts.append(f"<|im_start|>{msg['role']}\n{msg['content']}<|im_end|>\n")
 
-            if messages and messages[-1].role == "user":
+            if messages and messages[-1]['role'] == "user":
                 prompt_parts.append("<|im_start|>assistant\n")
 
             return "".join(prompt_parts)
@@ -318,10 +259,10 @@ class RiceInferenceServiceSGLang:
         if "gemma" in model_name:
             prompt_parts = []
             for msg in messages:
-                role = "model" if msg.role == "assistant" else msg.role
-                prompt_parts.append(f"<start_of_turn>{role}\n{msg.content}<end_of_turn>\n")
+                role = "model" if msg['role'] == "assistant" else msg['role']
+                prompt_parts.append(f"<start_of_turn>{role}\n{msg['content']}<end_of_turn>\n")
 
-            if messages and messages[-1].role == "user":
+            if messages and messages[-1]['role'] == "user":
                 prompt_parts.append("<start_of_turn>model\n")
 
             return "".join(prompt_parts)
@@ -329,14 +270,14 @@ class RiceInferenceServiceSGLang:
         # Llama / CodeLlama Instruct format (fallback)
         prompt_parts = []
         for msg in messages:
-            if msg.role == "system":
-                prompt_parts.append(f"[INST] <<SYS>>\n{msg.content}\n<</SYS>>\n\n")
-            elif msg.role == "user":
+            if msg['role'] == "system":
+                prompt_parts.append(f"[INST] <<SYS>>\n{msg['content']}\n<</SYS>>\n\n")
+            elif msg['role'] == "user":
                 if prompt_parts and not prompt_parts[-1].endswith("[/INST]"):
-                    prompt_parts.append(f"{msg.content} [/INST]")
+                    prompt_parts.append(f"{msg['content']} [/INST]")
                 else:
-                    prompt_parts.append(f"[INST] {msg.content} [/INST]")
-            elif msg.role == "assistant":
-                prompt_parts.append(f" {msg.content} ")
+                    prompt_parts.append(f"[INST] {msg['content']} [/INST]")
+            elif msg['role'] == "assistant":
+                prompt_parts.append(f" {msg['content']} ")
 
         return "".join(prompt_parts)

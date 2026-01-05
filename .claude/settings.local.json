@@ -25,7 +25,14 @@
       "Bash(./target/release/ricesearch index:*)",
       "Bash(tee:*)",
       "Bash(python:*)",
-      "Bash(docker-compose restart:*)"
+      "Bash(docker-compose restart:*)",
+      "Bash(timeout 180 ./target/release/ricesearch index:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker restart:*)",
+      "Bash(python3:*)",
+      "Bash(docker-compose:*)",
+      "Bash(cat:*)"
     ]
   }
 }

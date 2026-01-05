@@ -38,7 +38,9 @@ async def rerank_results(query: str, documents: List[str]) -> List[float]:
         # Use BentoML's dedicated rerank endpoint
         try:
             results = await client.rerank(query, documents)
-            return [r["score"] for r in results]
+            scores = [r["score"] for r in results]
+            logger.info(f"BentoML rerank returned {len(scores)} scores. Range: {min(scores):.3f} - {max(scores):.3f}")
+            return scores
         except Exception as e:
             logger.warning(f"BentoML rerank failed, trying LLM: {e}")
     
@@ -118,15 +120,21 @@ Scores:"""
         return [0.5] * len(documents)
 
 
-async def rerank_search_results(query: str, results: List[Dict[str, Any]], content_key: str = "content") -> List[Dict[str, Any]]:
+async def rerank_search_results(query: str, results: List[Dict[str, Any]], content_key: str = "text") -> List[Dict[str, Any]]:
     """Rerank search results and return sorted by relevance (Async)."""
     if not results:
         return results
-    
+
     texts = [r.get(content_key, "") for r in results]
+    logger.debug(f"Reranking {len(texts)} documents. First text sample: {texts[0][:100] if texts else 'N/A'}...")
     scores = await rerank_results(query, texts)
-    
+    logger.info(f"Raw rerank scores range: {min(scores):.3f} - {max(scores):.3f}")
+
+    # BGE reranker returns raw confidence scores, typically in range [-1, 1]
+    # but practically [0, 0.3] for most queries. We keep the raw scores as-is.
+    # NO normalization - these are actual model confidence scores!
+
     for i, result in enumerate(results):
         result["rerank_score"] = scores[i]
-    
+
     return sorted(results, key=lambda x: x.get("rerank_score", 0), reverse=True)
