@@ -37,7 +37,7 @@ RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
     && pip3.12 install --upgrade pip setuptools wheel
 
 WORKDIR /app
-COPY service.py .
+# Don't copy service.py - it will be mounted as a volume!
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

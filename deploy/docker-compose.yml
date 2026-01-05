@@ -49,7 +49,8 @@ services:
       - "3001:3001"  # BentoML API
     volumes:
       - ../data/hf_cache:/root/.cache/huggingface
-      - pip-cache:/root/.cache/pip  # Persistent pip cache for faster rebuilds
+      - pip-cache-bentoml:/root/.cache/pip  # Separate pip cache for bentoml
+      - ./bentoml:/app  # Mount source code for live updates!
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - HF_HOME=/root/.cache/huggingface
@@ -57,6 +58,8 @@ services:
       - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
       - LLM_MODEL=${LLM_MODEL:-Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ}
       - HF_TOKEN=${HF_TOKEN}
+      # Memory tuning - max_total_tokens sets KV cache size (pre-allocated!)
+      - MAX_TOTAL_TOKENS=${MAX_TOTAL_TOKENS:-4096}  # Context window (4096=~4GB KV cache)
     deploy:
       resources:
         reservations:
@@ -122,7 +125,7 @@ services:
     volumes:
       - ../backend:/app
       - ../data/ingest-shared:/shared/ingest  # Shared ingestion temp files (file-based)
-      - pip-cache:/root/.cache/pip  # Persistent pip cache
+      - pip-cache-backend:/root/.cache/pip  # Separate pip cache for backend
     depends_on:
       - redis
       - qdrant
@@ -146,7 +149,7 @@ services:
     volumes:
       - ../backend:/app
       - ../data/ingest-shared:/shared/ingest  # Shared ingestion temp files (file-based)
-      - pip-cache:/root/.cache/pip  # Persistent pip cache
+      - pip-cache-backend:/root/.cache/pip  # Shared with backend-api (same dependencies)
     depends_on:
       - redis
       - qdrant
@@ -202,6 +205,7 @@ networks:
     driver: bridge
 
 volumes:
-  pip-cache:     # Persistent pip download cache across all Python services
-  npm-cache:     # Persistent npm download cache for frontend
+  pip-cache-bentoml:  # Separate pip cache for BentoML (SGLang, PyTorch, etc.)
+  pip-cache-backend:  # Separate pip cache for Backend (FastAPI, LangChain, etc.)
+  npm-cache:          # Persistent npm download cache for frontend
 

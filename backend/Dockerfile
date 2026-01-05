@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y \
     libmagic-dev \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml .
-COPY . .
+# Don't copy source code - it will be mounted as a volume!
+# Only copy the entrypoint script
 COPY entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

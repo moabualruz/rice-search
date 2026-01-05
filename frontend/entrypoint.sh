@@ -5,18 +5,13 @@ echo "========================================="
 echo "Frontend Runtime Package Installation"
 echo "========================================="
 
-# Check if node_modules exists and has packages
-MARKER="/root/.npm/.packages_installed"
-
-if [ ! -f "$MARKER" ]; then
-    echo "Installing npm packages for the first time..."
-    npm install
-
-    # Create marker file
-    touch "$MARKER"
-    echo "✅ npm install complete!"
-else
+# Check if node_modules exists and has critical packages
+if [ -d "node_modules" ] && [ -d "node_modules/next" ] && [ -d "node_modules/react" ]; then
     echo "✅ Packages already installed, skipping..."
+else
+    echo "Installing npm packages (first time or cache corrupted)..."
+    npm install
+    echo "✅ npm install complete!"
 fi
 
 echo "========================================="

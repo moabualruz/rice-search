@@ -5,11 +5,12 @@ echo "========================================="
 echo "Backend Runtime Package Installation"
 echo "========================================="
 
-# Check if packages are already installed (marker file)
-MARKER="/root/.cache/pip/.packages_installed"
-
-if [ ! -f "$MARKER" ]; then
-    echo "Installing packages for the first time..."
+# Check if packages are ACTUALLY installed (not just marker file)
+if python -c "import fastapi" 2>/dev/null && \
+   python -c "import qdrant_client" 2>/dev/null; then
+    echo "✅ Packages already installed, skipping..."
+else
+    echo "Installing packages (first time or cache corrupted)..."
 
     # Install OpenTelemetry dependencies
     echo "Installing OpenTelemetry..."
@@ -21,11 +22,7 @@ if [ ! -f "$MARKER" ]; then
     echo "Installing backend package..."
     pip install .
 
-    # Create marker file
-    touch "$MARKER"
     echo "✅ Package installation complete!"
-else
-    echo "✅ Packages already installed, skipping..."
 fi
 
 echo "========================================="

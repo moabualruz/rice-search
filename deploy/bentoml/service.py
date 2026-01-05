@@ -95,8 +95,18 @@ class RiceInferenceServiceSGLang:
         self.embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
         self.rerank_model_name = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
+        # Memory configuration (tunable via env vars)
+        # max_total_tokens determines KV cache size - keep reasonable to save memory
+        self.max_total_tokens = int(os.getenv("MAX_TOTAL_TOKENS", "4096"))
+
         logger.info("=" * 80)
         logger.info("🚀 Rice Search - SGLang Unified Inference Service")
+        logger.info("=" * 80)
+        logger.info(f"Memory Config:")
+        logger.info(f"  - Mode: DYNAMIC allocation (on-demand KV cache growth)")
+        logger.info(f"  - CUDA Graphs: DISABLED (required for dynamic memory)")
+        logger.info(f"  - Max context window: {self.max_total_tokens} tokens")
+        logger.info(f"  - Memory will grow as needed, not pre-allocated!")
         logger.info("=" * 80)
         logger.info(f"LLM Model: {self.llm_model_name}")
         logger.info(f"Embedding Model: {self.embed_model_name}")
@@ -115,10 +125,14 @@ class RiceInferenceServiceSGLang:
                 trust_remote_code=True,
 
                 # Memory optimization
-                max_total_tokens=4096,           # Not 128K wasteful allocation!
-                mem_fraction_static=0.70,        # 70% of VRAM (vs vLLM's 90%)
+                max_total_tokens=self.max_total_tokens,  # Max context window
+                mem_fraction_static=0.5,         # 50% of VRAM for model+KV cache (~8GB)
 
-                # RadixAttention is enabled by default in SGLang 0.5.7+
+                # Prefill optimization
+                chunked_prefill_size=512,        # Process long sequences in chunks
+
+                # CUDA graph - disable for dynamic memory growth
+                disable_cuda_graph=True,         # Allows flexible batch sizes
 
                 # Quantization
                 quantization="awq" if "awq" in self.llm_model_name.lower() else None,
@@ -139,7 +153,8 @@ class RiceInferenceServiceSGLang:
                 model_path=self.embed_model_name,
                 trust_remote_code=True,
                 is_embedding=True,              # Mark as embedding model
-                mem_fraction_static=0.15,       # Small allocation
+                mem_fraction_static=0.05,       # 5% VRAM (~800MB)
+                disable_cuda_graph=True,
             )
             logger.info(f"✅ Embedding model loaded: {self.embed_model_name}")
         except Exception as e:
@@ -157,7 +172,8 @@ class RiceInferenceServiceSGLang:
                 model_path=self.rerank_model_name,
                 trust_remote_code=True,
                 is_embedding=True,              # Rerankers use embedding mode
-                mem_fraction_static=0.15,       # Small allocation
+                mem_fraction_static=0.05,       # 5% VRAM (~800MB)
+                disable_cuda_graph=True,
             )
             logger.info(f"✅ Rerank model loaded: {self.rerank_model_name}")
         except Exception as e:

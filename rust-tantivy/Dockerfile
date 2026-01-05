@@ -10,24 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy manifests only first (for dependency caching)
+# Copy manifests and source
 COPY Cargo.toml .
-
-# Create dummy src to build dependencies only
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-
-# Build dependencies with cache mount (much faster on rebuilds)
-RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo build --release && rm -rf src
-
-# Now copy actual source
 COPY src/ src/
 
-# Build the real application (dependencies are already cached)
-# We need to copy the binary out of the cache mount in the same RUN command
+# Build with cache mount for faster builds
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    cargo build --release && \
-    cp target/release/rice-tantivy /app/rice-tantivy
+    cargo build --release
 
 # Runtime stage
 FROM debian:bookworm-slim

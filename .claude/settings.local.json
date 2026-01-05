@@ -12,7 +12,11 @@
       "Bash(timeout 20 docker-compose logs:*)",
       "Bash(docker images:*)",
       "Bash(docker compose:*)",
-      "Bash(chmod:*)"
+      "Bash(chmod:*)",
+      "Bash(nvidia-smi:*)",
+      "Bash(docker run:*)",
+      "Bash(docker volume rm:*)",
+      "WebFetch(domain:github.com)"
     ]
   }
 }
