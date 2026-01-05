@@ -1,16 +1,23 @@
 """
-Inference client modules for BentoML unified model serving.
+Inference client modules for unified-inference service.
 
 Single service for all model inference:
-- Embeddings (dense)
-- Reranking
-- Chat/LLM
+- Embeddings (dense) - default: bge-base-en
+- Reranking - default: bge-reranker
+- Chat/LLM - default: qwen-coder-1.5b
 
-All legacy clients (Xinference, TEI, Triton, vLLM) are deprecated in favor of BentoML.
+Uses OpenAI-compatible API with default model auto-selection.
 """
-from .bentoml_client import BentoMLClient, get_bentoml_client
+from .unified_inference_client import (
+    UnifiedInferenceClient,
+    get_unified_inference_client,
+    get_bentoml_client,  # Backward compatibility
+    BentoMLClient,  # Backward compatibility alias
+)
 
 __all__ = [
-    "BentoMLClient",
-    "get_bentoml_client",
+    "UnifiedInferenceClient",
+    "get_unified_inference_client",
+    "BentoMLClient",  # Backward compatibility
+    "get_bentoml_client",  # Backward compatibility
 ]

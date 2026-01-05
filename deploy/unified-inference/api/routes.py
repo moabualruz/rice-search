@@ -182,7 +182,7 @@ async def proxy_to_backend(request: Request, path: str):
                 body = {}
 
         # Extract model name
-        model_name = model_selector.extract_model_name(body, dict(request.query_params))
+        model_name = model_selector.extract_model_name(body, dict(request.query_params), f"/{path}")
 
         # Validate model
         model_selector.validate_model(model_name)

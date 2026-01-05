@@ -26,6 +26,9 @@ class ModelConfig(BaseModel):
     # Lifecycle
     idle_timeout: int = Field(300, description="Seconds before stopping idle model")
 
+    # Default model flag
+    default: bool = Field(False, description="Is this the default model for its type")
+
     # SGLang-specific options (for GPU mode)
     is_embedding: bool = Field(False, description="Use --is-embedding flag")
     trust_remote_code: bool = Field(True, description="Trust remote code")
@@ -85,6 +88,13 @@ class ModelRegistry:
     def get(self, name: str) -> Optional[ModelConfig]:
         """Get model config by name."""
         return self.models.get(name)
+
+    def get_default_model(self, model_type: str) -> Optional[ModelConfig]:
+        """Get the default model for a given type."""
+        for model in self.models.values():
+            if model.type == model_type and model.default:
+                return model
+        return None
 
     def list_models(
         self,

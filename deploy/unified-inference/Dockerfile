@@ -1,22 +1,21 @@
-# Use NVIDIA CUDA base image with Python 3.12
-FROM nvidia/cuda:12.6.1-cudnn-devel-ubuntu22.04
+# Use NVIDIA CUDA base image with Ubuntu 24.04 (Python 3.12 included by default)
+FROM nvidia/cuda:12.6.1-cudnn-devel-ubuntu24.04
 
-# Install system dependencies
+# Install system dependencies (Python 3.12 is in default repos)
 RUN apt-get update && apt-get install -y \
-    python3.12 \
-    python3.12-dev \
+    python3 \
+    python3-dev \
     python3-pip \
     curl \
     git \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
-# Set Python 3.12 as default
-RUN update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
-    update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1
+# Set Python 3 as default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3 1
 
-# Upgrade pip
-RUN python3 -m pip install --no-cache-dir --upgrade pip setuptools wheel
+# Upgrade pip (--break-system-packages is safe in Docker containers)
+RUN python3 -m pip install --no-cache-dir --break-system-packages --ignore-installed --upgrade pip setuptools wheel
 
 # Set working directory
 WORKDIR /app
@@ -31,9 +30,11 @@ RUN chmod +x /entrypoint.sh
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
+ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
-# Expose router port
+# Expose router port and SGLang backend ports
 EXPOSE 3001
+EXPOSE 30001-30020
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=60s \

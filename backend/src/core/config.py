@@ -56,9 +56,11 @@ class Settings(BaseSettings):
     MODEL_TTL_SECONDS: int = 300  # Unload unused models after 5 minutes
     MODEL_AUTO_UNLOAD: bool = True
     
-    # BentoML - Unified Model Inference Server
+    # Unified Inference - SGLang-based Model Inference Server
     # Single service for embeddings, reranking, and LLM chat
-    BENTOML_URL: str = "http://localhost:3001"
+    # Uses OpenAI-compatible API with default model auto-selection
+    BENTOML_URL: str = "http://localhost:3001"  # Backward compatibility
+    INFERENCE_URL: str = "http://localhost:3001"  # New name (same as BENTOML_URL)
     
     # Model names (configured in BentoML service)
     LLM_MODEL: str = "Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ"  # For RAG chat - optimized for code

@@ -6,7 +6,7 @@ models:
   # GPU FULL MODE MODELS (SGLang backends)
   # ============================================================================
 
-  # Embedding model (GPU)
+  # Embedding model (GPU) - DEFAULT
   - name: bge-base-en
     type: embedding
     execution_mode: gpu
@@ -19,8 +19,9 @@ models:
     is_embedding: true
     trust_remote_code: true
     dtype: auto
+    default: true  # Default embedding model
 
-  # Reranking model (GPU)
+  # Reranking model (GPU) - DEFAULT
   - name: bge-reranker
     type: rerank
     execution_mode: gpu
@@ -33,8 +34,9 @@ models:
     is_embedding: false
     trust_remote_code: true
     dtype: auto
+    default: true  # Default rerank model
 
-  # LLM model (GPU) - AWQ quantized for memory efficiency
+  # LLM model (GPU) - DEFAULT - AWQ quantized for memory efficiency
   - name: qwen-coder-1.5b
     type: llm
     execution_mode: gpu
@@ -48,6 +50,7 @@ models:
     trust_remote_code: true
     dtype: auto
     cpu_offload_model: qwen-coder-1.5b-cpu  # Offload target for CPU spillover
+    default: true  # Default LLM model
 
   # ============================================================================
   # CPU FULL MODE MODELS (CPU backends)
@@ -66,6 +69,8 @@ models:
     trust_remote_code: true
 
 # Notes:
+# - DEFAULT models are auto-selected based on endpoint (no 'model' parameter needed)
+# - Custom models require explicit 'model' parameter in requests
 # - execution_mode is STATIC per model instance (requires restart to change)
 # - GPU models use SGLang with --max-running-requests 3 --max-total-tokens 0
 # - CPU models use separate CPU backend (llama.cpp, ggml, etc.)
