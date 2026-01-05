@@ -118,9 +118,7 @@ class RiceInferenceServiceSGLang:
                 max_total_tokens=4096,           # Not 128K wasteful allocation!
                 mem_fraction_static=0.70,        # 70% of VRAM (vs vLLM's 90%)
 
-                # RadixAttention for KV cache reuse
-                enable_radix_cache=True,
-                radix_cache_size_gb=0.5,
+                # RadixAttention is enabled by default in SGLang 0.5.7+
 
                 # Quantization
                 quantization="awq" if "awq" in self.llm_model_name.lower() else None,

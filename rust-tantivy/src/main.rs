@@ -247,7 +247,7 @@ async fn main() {
         .route("/health", get(health))
         .route("/index", post(index_chunk))
         .route("/index/batch", post(batch_index))
-        .route("/index/:chunk_id", delete(delete_chunk))
+        .route("/index/{chunk_id}", delete(delete_chunk))
         .route("/index/clear", post(clear_index))
         .route("/search", post(search_chunks))
         .layer(CorsLayer::new().allow_origin(Any).allow_methods(Any))
