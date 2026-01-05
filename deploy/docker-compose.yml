@@ -38,27 +38,53 @@ services:
       - rice-net
 
   # ---------------------------------------------------------------------------
-  # UNIFIED INFERENCE - All Models in ONE Service (Flask + SGLang)
-  # Embeddings (SentenceTransformers), Reranking (CrossEncoder), LLM (SGLang)
+  # UNIFIED INFERENCE - Python Router/Orchestrator for SGLang Backends
+  # Manages multiple SGLang model instances with dynamic lifecycle
   # ---------------------------------------------------------------------------
   unified-inference:
     build:
       context: ./unified-inference
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"  # Unified Inference API
+      - "3001:3001"      # Router API
+      - "30001-30020:30001-30020"  # SGLang backends (dynamic allocation)
     volumes:
-      - ../data/hf_cache:/root/.cache/huggingface
-      - pip-cache-unified-inference:/root/.cache/pip  # Separate pip cache for unified inference
+      - ./unified-inference:/app  # Source code (hot reload)
+      - ../data/hf_cache:/root/.cache/huggingface  # HuggingFace model cache
+      - pip-cache-unified-inference:/root/.cache/pip  # Pip cache for unified-inference
     environment:
-      - CUDA_VISIBLE_DEVICES=0
+      # Execution mode (gpu or cpu)
+      - EXECUTION_MODE=${EXECUTION_MODE:-gpu}
+
+      # Router configuration
+      - ROUTER_HOST=0.0.0.0
+      - ROUTER_PORT=3001
+
+      # SGLang backend configuration (ENFORCED)
+      - SGLANG_MAX_RUNNING_REQUESTS=3
+      - SGLANG_MAX_TOTAL_TOKENS=0  # Elastic memory
+
+      # Model registry
+      - MODELS_CONFIG_PATH=/app/config/models.yaml
+
+      # Lifecycle management
+      - DEFAULT_IDLE_TIMEOUT=${DEFAULT_IDLE_TIMEOUT:-300}
+      - HEALTH_CHECK_INTERVAL=10
+      - STARTUP_TIMEOUT=120
+
+      # CPU offload (GPU mode only)
+      - ENABLE_CPU_OFFLOAD=${ENABLE_CPU_OFFLOAD:-true}
+      - OFFLOAD_QUEUE_THRESHOLD=3
+
+      # HuggingFace
       - HF_HOME=/root/.cache/huggingface
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
-      - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
-      - LLM_MODEL=${LLM_MODEL:-Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ}
       - HF_TOKEN=${HF_TOKEN}
-      # Memory tuning - max_total_tokens sets KV cache size (pre-allocated!)
-      - MAX_TOTAL_TOKENS=${MAX_TOTAL_TOKENS:-4096}  # Context window (4096=~4GB KV cache)
+
+      # GPU selection
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
+      # Logging
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     deploy:
       resources:
         reservations:

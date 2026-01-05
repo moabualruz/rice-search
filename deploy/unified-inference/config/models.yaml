@@ -1,0 +1,73 @@
+# Model Registry for unified-inference
+# Each model instance runs in its own backend server process
+
+models:
+  # ============================================================================
+  # GPU FULL MODE MODELS (SGLang backends)
+  # ============================================================================
+
+  # Embedding model (GPU)
+  - name: bge-base-en
+    type: embedding
+    execution_mode: gpu
+    backend: sglang
+    model_path: BAAI/bge-base-en-v1.5
+    format: hf
+    gpu_id: 0
+    port: 30001
+    idle_timeout: 300
+    is_embedding: true
+    trust_remote_code: true
+    dtype: auto
+
+  # Reranking model (GPU)
+  - name: bge-reranker
+    type: rerank
+    execution_mode: gpu
+    backend: sglang
+    model_path: BAAI/bge-reranker-v2-m3
+    format: hf
+    gpu_id: 0
+    port: 30002
+    idle_timeout: 300
+    is_embedding: false
+    trust_remote_code: true
+    dtype: auto
+
+  # LLM model (GPU) - AWQ quantized for memory efficiency
+  - name: qwen-coder-1.5b
+    type: llm
+    execution_mode: gpu
+    backend: sglang
+    model_path: Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ
+    format: awq
+    gpu_id: 0
+    port: 30003
+    idle_timeout: 600
+    is_embedding: false
+    trust_remote_code: true
+    dtype: auto
+    cpu_offload_model: qwen-coder-1.5b-cpu  # Offload target for CPU spillover
+
+  # ============================================================================
+  # CPU FULL MODE MODELS (CPU backends)
+  # ============================================================================
+
+  # LLM model (CPU) - GGUF format for CPU efficiency
+  - name: qwen-coder-1.5b-cpu
+    type: llm
+    execution_mode: cpu
+    backend: cpu_backend
+    model_path: Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF
+    format: gguf
+    gpu_id: null
+    port: 30010
+    idle_timeout: 600
+    trust_remote_code: true
+
+# Notes:
+# - execution_mode is STATIC per model instance (requires restart to change)
+# - GPU models use SGLang with --max-running-requests 3 --max-total-tokens 0
+# - CPU models use separate CPU backend (llama.cpp, ggml, etc.)
+# - GGUF is NOT supported by SGLang (GPU mode)
+# - cpu_offload_model specifies which CPU model to route to when GPU is overloaded
