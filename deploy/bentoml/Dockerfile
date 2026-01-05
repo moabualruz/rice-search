@@ -1,7 +1,7 @@
 # Rice Search - BentoML Inference Service
 # GPU-enabled image with BuildKit pip caching
 
-FROM nvidia/cuda:12.6.1-runtime-ubuntu24.04
+FROM nvidia/cuda:12.6.1-devel-ubuntu24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
     PIP_BREAK_SYSTEM_PACKAGES=1
@@ -36,27 +36,10 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
     && pip3.12 install --upgrade pip setuptools wheel
 
-# Install PyTorch 2.5.1 with CUDA 12.1 (latest for cu121) (cached)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3.12 install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
-
-# Install latest stable ML dependencies (cached)
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3.12 install \
-    bentoml==1.3.15 \
-    transformers==4.57.3 \
-    accelerate==1.12.0 \
-    pydantic==2.12.5 \
-    einops \
-    httpx
-
-# Install SGLang - Unified inference for LLM, Embeddings, Reranking (cached)
-# [all] extra includes FlashInfer for CUDA 12.1 automatically
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip3.12 install "sglang[all]==0.5.7"
-
 WORKDIR /app
 COPY service.py .
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 ENV HF_HOME=/root/.cache/huggingface
 ENV BENTOML_PORT=3001
@@ -64,7 +47,8 @@ ENV BENTOML_PORT=3001
 
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=30s --start-period=180s --retries=5 \
     CMD curl -sf -X POST http://localhost:3001/health || exit 1
 
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python3.12", "-m", "bentoml", "serve", "service:RiceInferenceServiceSGLang", "--host", "0.0.0.0", "--port", "3001"]
