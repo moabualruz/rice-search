@@ -1,59 +1,70 @@
-# syntax=docker/dockerfile:1.4
 # Rice Search - BentoML Inference Service
 # GPU-enabled image with BuildKit pip caching
 
-FROM nvidia/cuda:12.1.0-runtime-ubuntu22.04
+FROM nvidia/cuda:12.6.1-runtime-ubuntu24.04
 
-ENV DEBIAN_FRONTEND=noninteractive
+ENV DEBIAN_FRONTEND=noninteractive \
+    PIP_BREAK_SYSTEM_PACKAGES=1
 
-# Install Python and system deps (including C compiler for vLLM)
+# Install Python 3.12 (stable with broad compatibility) and system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.10 \
-    python3.10-venv \
-    python3.10-dev \
-    python3-pip \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
     git \
     curl \
     build-essential \
     gcc \
+    libnuma1 \
+    pkg-config \
+    libssl-dev \
     && rm -rf /var/lib/apt/lists/* \
-    && update-alternatives --install /usr/bin/python python /usr/bin/python3.10 1 \
-    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+    && apt-get purge -y python3.10 python3.11 2>/dev/null || true \
+    && update-alternatives --install /usr/bin/python python /usr/bin/python3.12 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python3
 
-# Upgrade pip
-RUN pip install --upgrade pip setuptools wheel
+# Install Rust for building outlines_core (SGLang dependency)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
+ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Install PyTorch with CUDA (cached)
+# Bootstrap pip for Python 3.12 (PEP 668 bypassed via ENV)
+RUN curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
+    && pip3.12 install --upgrade pip setuptools wheel
+
+# Install PyTorch 2.5.1 with CUDA 12.1 (latest for cu121) (cached)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install torch==2.3.0 --index-url https://download.pytorch.org/whl/cu121
+    pip3.12 install torch==2.5.1 --index-url https://download.pytorch.org/whl/cu121
 
-# Install ML dependencies (cached)
+# Install latest stable ML dependencies (cached)
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install \
-    bentoml>=1.2.0 \
-    sentence-transformers>=2.2.0 \
-    transformers>=4.40.0 \
-    accelerate>=0.20.0 \
-    pydantic>=2.0.0 \
+    pip3.12 install \
+    bentoml==1.3.15 \
+    transformers==4.57.3 \
+    accelerate==1.12.0 \
+    pydantic==2.12.5 \
     einops \
     httpx
 
-# Install vLLM (cached)
+# Install SGLang - Unified inference for LLM, Embeddings, Reranking (cached)
+# [all] extra includes FlashInfer for CUDA 12.1 automatically
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install vllm>=0.4.0
+    pip3.12 install "sglang[all]==0.5.7"
 
 WORKDIR /app
 COPY service.py .
 
 ENV HF_HOME=/root/.cache/huggingface
-ENV EMBEDDING_MODEL=BAAI/bge-base-en-v1.5
-ENV RERANK_MODEL=BAAI/bge-reranker-base
-ENV LLM_MODEL=codellama/CodeLlama-7b-Instruct-hf
 ENV BENTOML_PORT=3001
+# Model names come from docker-compose.yml environment variables
 
 EXPOSE 3001
 
 HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=3 \
     CMD curl -sf -X POST http://localhost:3001/health || exit 1
 
-CMD ["bentoml", "serve", "service:RiceInferenceService", "--host", "0.0.0.0", "--port", "3001"]
+CMD ["python3.12", "-m", "bentoml", "serve", "service:RiceInferenceServiceSGLang", "--host", "0.0.0.0", "--port", "3001"]

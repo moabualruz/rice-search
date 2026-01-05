@@ -1,7 +1,7 @@
 # Rice Search - Tantivy BM25 Service
 # Lightweight Rust container for lexical search
 
-FROM rust:1.83-slim-bookworm AS builder
+FROM rust:1.86-slim-bookworm AS builder
 
 WORKDIR /app
 

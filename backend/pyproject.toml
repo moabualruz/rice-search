@@ -3,7 +3,7 @@ name = "rice-search-backend"
 version = "0.1.0"
 description = "Enterprise Neural Search Backend"
 authors = [{name = "Rice Search Team"}]
-requires-python = ">=3.10"
+requires-python = ">=3.12,<3.13"  # Python 3.12 for compatibility
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
@@ -17,12 +17,14 @@ dependencies = [
     "unstructured>=0.11.0",
     "sentence-transformers>=3.1.0",
 
+    # Latest stable ML/AI dependencies (Jan 2025)
+    "torch==2.5.1",  # Latest for CUDA 12.1
+    "transformers==4.57.3",
+    "accelerate==1.12.0",
 
-
-    "torch>=2.4.0",
     "pyjwt[crypto]>=2.9.0",
     "passlib[bcrypt]>=1.7.4",
-    "pydantic-settings>=2.4.0",
+    "pydantic-settings>=2.6.0",
     "httpx>=0.27.0",
     "python-multipart>=0.0.9",
     "typer[all]>=0.9.0",
@@ -31,7 +33,6 @@ dependencies = [
     "opentelemetry-instrumentation-fastapi>=0.46b0",
     "opentelemetry-instrumentation-requests>=0.46b0",
     "opentelemetry-exporter-otlp>=1.25.0",
-    "transformers>=4.36.0",
     "mcp>=0.9.0",
     "rich>=13.0.0",
     "watchdog>=3.0.0",
@@ -50,8 +51,8 @@ dev = [
     "black>=24.0.0",
     "isort>=5.13.0",
     "flake8>=7.0.0",
-    "pytest-playwright==0.4.4",
-    "playwright==1.40.0",
+    "pytest-playwright>=0.7.0",
+    "playwright>=1.57.0",
     "pytest-cov>=4.1.0"
 ]
 

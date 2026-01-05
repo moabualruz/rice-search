@@ -21,6 +21,7 @@ use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::index::TantivyIndex;
+use crate::search::{filter_by_score, SearchConfig};
 
 /// Application state shared across handlers
 struct AppState {
@@ -45,7 +46,11 @@ struct BatchIndexRequest {
 #[derive(Debug, Deserialize)]
 struct SearchRequest {
     query: String,
+    #[serde(flatten)]
+    config: Option<SearchConfig>,
+    // Legacy fields for backward compatibility
     limit: Option<usize>,
+    min_score: Option<f32>,
 }
 
 #[derive(Debug, Serialize)]
@@ -139,12 +144,23 @@ async fn search_chunks(
     Json(req): Json<SearchRequest>,
 ) -> Result<impl IntoResponse, (StatusCode, String)> {
     let index = state.index.read().await;
-    let limit = req.limit.unwrap_or(10);
-    
-    let results = index
-        .search(&req.query, limit)
+
+    // Use config if provided, otherwise use legacy fields
+    let config = req.config.unwrap_or_else(|| SearchConfig {
+        limit: req.limit.unwrap_or(10),
+        min_score: req.min_score,
+        highlight: false,
+    });
+
+    let mut results = index
+        .search(&req.query, config.limit)
         .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
-    
+
+    // Apply minimum score filter if specified
+    if let Some(min_score) = config.min_score {
+        results = filter_by_score(results, min_score);
+    }
+
     let search_results: Vec<SearchResult> = results
         .iter()
         .map(|(chunk_id, score)| SearchResult {
@@ -152,9 +168,9 @@ async fn search_chunks(
             score: *score,
         })
         .collect();
-    
+
     let total = search_results.len();
-    
+
     Ok(Json(SearchResponse {
         results: search_results,
         query: req.query,

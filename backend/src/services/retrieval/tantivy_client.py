@@ -106,25 +106,27 @@ class TantivyClient:
             logger.error(f"Failed to batch index {len(chunks)} chunks: {e}")
             return False
     
-    def search(self, query: str, limit: int = 10) -> List[BM25Result]:
+    def search(self, query: str, limit: int = 10, min_score: Optional[float] = None) -> List[BM25Result]:
         """
         Search using BM25.
-        
+
         Args:
             query: Search query
             limit: Maximum number of results
-            
+            min_score: Minimum score threshold (filters out lower scores)
+
         Returns:
             List of BM25Result objects
         """
         try:
-            response = self.client.post(
-                "/search",
-                json={"query": query, "limit": limit}
-            )
+            payload = {"query": query, "limit": limit}
+            if min_score is not None:
+                payload["min_score"] = min_score
+
+            response = self.client.post("/search", json=payload)
             response.raise_for_status()
             data = response.json()
-            
+
             return [
                 BM25Result(chunk_id=r["chunk_id"], score=r["score"])
                 for r in data.get("results", [])

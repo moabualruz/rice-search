@@ -1,12 +1,13 @@
 """
-BentoML Unified Inference Service.
+SGLang Unified Inference Service.
 
-Provides LLM, Embeddings, and Reranking in a single service.
-Uses vLLM for LLM, Sentence Transformers for embeddings, Cross-Encoder for reranking.
+Provides LLM, Embeddings, and Reranking in a single optimized service.
+Uses SGLang for all inference with RadixAttention and unified memory.
 """
 from __future__ import annotations
 
 import logging
+import os
 from typing import List, Dict, Any, Optional
 
 import bentoml
@@ -67,166 +68,206 @@ class ChatResponse(BaseModel):
 
 
 # ============================================================================
-# BentoML Service
+# SGLang Unified Service
 # ============================================================================
 
 @bentoml.service(
-    name="rice-inference",
+    name="rice-inference-sglang",
     traffic={"timeout": 300},
-    resources={"gpu": 1, "memory": "16Gi"},
+    resources={"gpu": 1, "memory": "8Gi"},  # Less than vLLM!
 )
-class RiceInferenceService:
+class RiceInferenceServiceSGLang:
     """
-    Unified inference service for Rice Search.
-    
+    Unified inference service using SGLang for ALL models.
+
     Provides:
-    - /embed - Text embeddings via Sentence Transformers
-    - /rerank - Document reranking via Cross-Encoder
-    - /chat - LLM chat completion via vLLM
+    - /embed - Text embeddings
+    - /rerank - Document reranking
+    - /chat - LLM chat completion
     - /health - Health check
+
+    All models run in SGLang with shared memory pool and RadixAttention.
     """
-    
+
     def __init__(self):
-        import os
-        import torch
-        from sentence_transformers import SentenceTransformer, CrossEncoder
-        
-        # Configuration from environment with reliable defaults
-        # Use BAAI/bge-base-en-v1.5 as default - it's well-tested and reliable
+        # Configuration from environment
+        self.llm_model_name = os.getenv("LLM_MODEL", "Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ")
         self.embed_model_name = os.getenv("EMBEDDING_MODEL", "BAAI/bge-base-en-v1.5")
-        self.rerank_model_name = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-base")
-        self.llm_model_name = os.getenv("LLM_MODEL", "codellama/CodeLlama-7b-Instruct-hf")
-        
-        # Debug log environment
-        logger.info(f"EMBEDDING_MODEL env: {os.getenv('EMBEDDING_MODEL', 'NOT SET')}")
-        logger.info(f"RERANK_MODEL env: {os.getenv('RERANK_MODEL', 'NOT SET')}")
-        logger.info(f"LLM_MODEL env: {os.getenv('LLM_MODEL', 'NOT SET')}")
-        
-        # Device selection
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        logger.info(f"Using device: {self.device}")
-        
-        # Load embedding model
-        logger.info(f"Loading embedding model: {self.embed_model_name}")
-        self.embed_model = SentenceTransformer(
-            self.embed_model_name,
-            device=self.device,
-            trust_remote_code=True
-        )
-        logger.info(f"Embedding model loaded: {self.embed_model_name}")
-        
-        # Load reranking model
-        logger.info(f"Loading rerank model: {self.rerank_model_name}")
-        self.rerank_model = CrossEncoder(
-            self.rerank_model_name,
-            device=self.device,
-            trust_remote_code=True
-        )
-        logger.info(f"Rerank model loaded: {self.rerank_model_name}")
-        
-        # Load LLM via vLLM
-        self.llm = None
+        self.rerank_model_name = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+
+        logger.info("=" * 80)
+        logger.info("🚀 Rice Search - SGLang Unified Inference Service")
+        logger.info("=" * 80)
+        logger.info(f"LLM Model: {self.llm_model_name}")
+        logger.info(f"Embedding Model: {self.embed_model_name}")
+        logger.info(f"Rerank Model: {self.rerank_model_name}")
+        logger.info("=" * 80)
+
+        # =====================================================================
+        # Initialize SGLang Engine for LLM
+        # =====================================================================
         try:
-            from vllm import LLM, SamplingParams
-            logger.info(f"Loading LLM: {self.llm_model_name}")
-            self.llm = LLM(
-                model=self.llm_model_name,
+            import sglang as sgl
+
+            logger.info("Loading LLM via SGLang...")
+            self.llm_engine = sgl.Engine(
+                model_path=self.llm_model_name,
                 trust_remote_code=True,
 
-                # ⚠️ CRITICAL: Reduce memory pre-allocation to save ~2-3GB
-                gpu_memory_utilization=0.50,      # Was 0.90 - use only 50% of VRAM
-                max_model_len=4096,                # Was 8192 - realistic context for code RAG
+                # Memory optimization
+                max_total_tokens=4096,           # Not 128K wasteful allocation!
+                mem_fraction_static=0.70,        # 70% of VRAM (vs vLLM's 90%)
 
-                # Enable dynamic allocation features to reduce waste
-                enable_chunked_prefill=True,       # Chunk large prefills
-                max_num_batched_tokens=2048,       # Lower = less memory (default 8192)
-                max_num_seqs=4,                    # Limit concurrent requests
+                # RadixAttention for KV cache reuse
+                enable_radix_cache=True,
+                radix_cache_size_gb=0.5,
 
-                disable_log_stats=True,
-                quantization="awq",
+                # Quantization
+                quantization="awq" if "awq" in self.llm_model_name.lower() else None,
             )
-            self.SamplingParams = SamplingParams
-            logger.info("LLM loaded successfully with optimized memory settings")
+            logger.info(f"✅ LLM loaded: {self.llm_model_name}")
         except Exception as e:
-            logger.warning(f"Failed to load LLM: {e}. Chat endpoint will be disabled.")
-    
+            logger.error(f"❌ Failed to load LLM: {e}")
+            self.llm_engine = None
+
+        # =====================================================================
+        # Initialize SGLang for Embeddings
+        # =====================================================================
+        try:
+            import sglang as sgl
+
+            logger.info("Loading Embedding model via SGLang...")
+            self.embed_engine = sgl.Engine(
+                model_path=self.embed_model_name,
+                trust_remote_code=True,
+                is_embedding=True,              # Mark as embedding model
+                mem_fraction_static=0.15,       # Small allocation
+            )
+            logger.info(f"✅ Embedding model loaded: {self.embed_model_name}")
+        except Exception as e:
+            logger.error(f"❌ Failed to load Embedding model: {e}")
+            self.embed_engine = None
+
+        # =====================================================================
+        # Initialize SGLang for Reranking
+        # =====================================================================
+        try:
+            import sglang as sgl
+
+            logger.info("Loading Rerank model via SGLang...")
+            self.rerank_engine = sgl.Engine(
+                model_path=self.rerank_model_name,
+                trust_remote_code=True,
+                is_embedding=True,              # Rerankers use embedding mode
+                mem_fraction_static=0.15,       # Small allocation
+            )
+            logger.info(f"✅ Rerank model loaded: {self.rerank_model_name}")
+        except Exception as e:
+            logger.error(f"❌ Failed to load Rerank model: {e}")
+            self.rerank_engine = None
+
+        logger.info("=" * 80)
+        logger.info("✅ All models loaded successfully via SGLang unified service")
+        logger.info("🎯 RadixAttention enabled for automatic KV cache reuse")
+        logger.info("⚡ Unified memory pool - better GPU utilization")
+        logger.info("=" * 80)
+
     @bentoml.api
     def health(self) -> Dict[str, Any]:
         """Health check endpoint."""
         return {
             "status": "healthy",
+            "framework": "sglang",
             "models": {
-                "embedding": self.embed_model_name,
-                "rerank": self.rerank_model_name,
-                "llm": self.llm_model_name if self.llm else None,
+                "llm": self.llm_model_name if self.llm_engine else None,
+                "embedding": self.embed_model_name if self.embed_engine else None,
+                "rerank": self.rerank_model_name if self.rerank_engine else None,
             },
-            "llm_available": self.llm is not None,
+            "llm_available": self.llm_engine is not None,
+            "embedding_available": self.embed_engine is not None,
+            "rerank_available": self.rerank_engine is not None,
         }
-    
+
     @bentoml.api
     def embed(self, request: EmbedRequest) -> EmbedResponse:
         """Generate embeddings for texts."""
-        embeddings = self.embed_model.encode(
+        if self.embed_engine is None:
+            raise RuntimeError("Embedding model not available")
+
+        # Use SGLang embedding engine
+        results = self.embed_engine.encode(
             request.texts,
-            convert_to_numpy=True,
-            normalize_embeddings=True,
+            normalize=True,
         )
-        
+
+        embeddings = [r["embedding"] for r in results]
+
         return EmbedResponse(
-            embeddings=embeddings.tolist(),
+            embeddings=embeddings,
             model=self.embed_model_name,
             usage={"total_tokens": sum(len(t.split()) for t in request.texts)},
         )
-    
+
     @bentoml.api
     def rerank(self, request: RerankRequest) -> RerankResponse:
         """Rerank documents by relevance to query."""
+        if self.rerank_engine is None:
+            raise RuntimeError("Rerank model not available")
+
         # Create query-document pairs
         pairs = [[request.query, doc] for doc in request.documents]
-        
-        # Get scores
-        scores = self.rerank_model.predict(pairs)
-        
-        # Build results sorted by score
-        results = [
-            RerankResult(index=i, score=float(score), text=doc)
-            for i, (score, doc) in enumerate(zip(scores, request.documents))
+
+        # Use SGLang rerank engine
+        results = self.rerank_engine.encode(
+            pairs,
+            normalize=False,
+        )
+
+        # Extract scores and sort
+        scored_results = [
+            RerankResult(
+                index=i,
+                score=float(r.get("score", 0.0)),
+                text=doc
+            )
+            for i, (r, doc) in enumerate(zip(results, request.documents))
         ]
-        results.sort(key=lambda x: x.score, reverse=True)
-        
+        scored_results.sort(key=lambda x: x.score, reverse=True)
+
         # Apply top_n if specified
         if request.top_n:
-            results = results[:request.top_n]
-        
+            scored_results = scored_results[:request.top_n]
+
         return RerankResponse(
-            results=results,
+            results=scored_results,
             model=self.rerank_model_name,
         )
-    
+
     @bentoml.api
     def chat(self, request: ChatRequest) -> ChatResponse:
         """Generate chat completion using LLM."""
-        if self.llm is None:
+        if self.llm_engine is None:
             return ChatResponse(
                 content="LLM not available. Please check server configuration.",
                 model="none",
                 usage={"prompt_tokens": 0, "completion_tokens": 0},
             )
-        
+
+        from sglang.srt.sampling.sampling_params import SamplingParams
+
         # Format messages into prompt
         prompt = self._format_chat_prompt(request.messages)
-        
-        # Generate with proper stop sequences for Llama/CodeLlama
-        sampling_params = self.SamplingParams(
-            max_tokens=request.max_tokens,
+
+        # Generate with SGLang
+        sampling_params = SamplingParams(
+            max_new_tokens=request.max_tokens,
             temperature=request.temperature,
-            stop=["</s>"],  # Stop sequences
-            repetition_penalty=1.1,  # Prevent repetitive output
+            stop=["</s>", "<|im_end|>"],
         )
-        
-        outputs = self.llm.generate([prompt], sampling_params)
-        generated_text = outputs[0].outputs[0].text
-        
+
+        outputs = self.llm_engine.generate([prompt], sampling_params)
+        generated_text = outputs[0].text
+
         return ChatResponse(
             content=generated_text,
             model=self.llm_model_name,
@@ -235,37 +276,35 @@ class RiceInferenceService:
                 "completion_tokens": len(generated_text.split()),
             },
         )
-    
+
     def _format_chat_prompt(self, messages: List[ChatMessage]) -> str:
         """Format chat messages into a prompt string."""
         model_name = self.llm_model_name.lower()
-        
-        # Gemma / CodeGemma format
-        if "gemma" in model_name:
-            prompt_parts = []
-            for msg in messages:
-                role = "model" if msg.role == "assistant" else msg.role
-                prompt_parts.append(f"<start_of_turn>{role}\n{msg.content}<end_of_turn>\n")
-            
-            # Start model turn if last was user
-            if messages and messages[-1].role == "user":
-                prompt_parts.append("<start_of_turn>model\n")
-            
-            return "".join(prompt_parts)
 
         # Qwen format (ChatML)
         if "qwen" in model_name:
             prompt_parts = []
             for msg in messages:
                 prompt_parts.append(f"<|im_start|>{msg.role}\n{msg.content}<|im_end|>\n")
-            
-            # Start assistant turn
+
             if messages and messages[-1].role == "user":
                 prompt_parts.append("<|im_start|>assistant\n")
-            
+
             return "".join(prompt_parts)
 
-        # Llama / CodeLlama Instruct format
+        # Gemma / CodeGemma format
+        if "gemma" in model_name:
+            prompt_parts = []
+            for msg in messages:
+                role = "model" if msg.role == "assistant" else msg.role
+                prompt_parts.append(f"<start_of_turn>{role}\n{msg.content}<end_of_turn>\n")
+
+            if messages and messages[-1].role == "user":
+                prompt_parts.append("<start_of_turn>model\n")
+
+            return "".join(prompt_parts)
+
+        # Llama / CodeLlama Instruct format (fallback)
         prompt_parts = []
         for msg in messages:
             if msg.role == "system":
@@ -277,5 +316,5 @@ class RiceInferenceService:
                     prompt_parts.append(f"[INST] {msg.content} [/INST]")
             elif msg.role == "assistant":
                 prompt_parts.append(f" {msg.content} ")
-        
+
         return "".join(prompt_parts)

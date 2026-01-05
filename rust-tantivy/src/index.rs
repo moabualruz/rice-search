@@ -5,7 +5,7 @@
 use std::path::Path;
 use tantivy::{
     directory::MmapDirectory,
-    schema::{Schema, STORED, STRING, TEXT},
+    schema::{Schema, Value, STORED, STRING, TEXT},
     Index, IndexWriter, TantivyDocument,
 };
 use thiserror::Error;
@@ -129,8 +129,8 @@ impl TantivyIndex {
         for (score, doc_address) in top_docs {
             let doc: TantivyDocument = searcher.doc(doc_address)?;
             if let Some(chunk_id_value) = doc.get_first(self.chunk_id_field) {
-                // Extract string from OwnedValue
-                if let tantivy::schema::OwnedValue::Str(text) = chunk_id_value {
+                // Extract string from CompactDocValue (Tantivy 0.25+)
+                if let Some(text) = chunk_id_value.as_str() {
                     results.push((text.to_string(), score));
                 }
             }
