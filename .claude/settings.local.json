@@ -32,7 +32,10 @@
       "Bash(docker restart:*)",
       "Bash(python3:*)",
       "Bash(docker-compose:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebFetch(domain:docs.sglang.io)",
+      "WebFetch(domain:docs.sglang.ai)",
+      "Bash(timeout 180 docker-compose logs:*)"
     ]
   }
 }

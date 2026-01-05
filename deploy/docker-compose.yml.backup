@@ -38,18 +38,19 @@ services:
       - rice-net
 
   # ---------------------------------------------------------------------------
-  # UNIFIED INFERENCE - All Models in ONE Service (Flask + SGLang)
-  # Embeddings (SentenceTransformers), Reranking (CrossEncoder), LLM (SGLang)
+  # BENTOML - Unified Model Inference (LLM, Embeddings, Rerank)
+  # Single service with vLLM, Sentence Transformers, Cross-Encoder
   # ---------------------------------------------------------------------------
-  unified-inference:
+  bentoml:
     build:
-      context: ./unified-inference
+      context: ./bentoml
       dockerfile: Dockerfile
     ports:
-      - "3001:3001"  # Unified Inference API
+      - "3001:3001"  # BentoML API
     volumes:
       - ../data/hf_cache:/root/.cache/huggingface
-      - pip-cache-unified-inference:/root/.cache/pip  # Separate pip cache for unified inference
+      - pip-cache-bentoml:/root/.cache/pip  # Separate pip cache for bentoml
+      - ./bentoml:/app  # Mount source code for live updates!
     environment:
       - CUDA_VISIBLE_DEVICES=0
       - HF_HOME=/root/.cache/huggingface
@@ -117,7 +118,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - BENTOML_URL=http://unified-inference:3001
+      - BENTOML_URL=http://bentoml:3001
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
       - RERANK_MODE=${RERANK_MODE:-rerank}
@@ -128,7 +129,7 @@ services:
     depends_on:
       - redis
       - qdrant
-      - unified-inference
+      - bentoml
     networks:
       - rice-net
 
@@ -141,7 +142,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - BENTOML_URL=http://unified-inference:3001
+      - BENTOML_URL=http://bentoml:3001
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
       - RERANK_MODE=${RERANK_MODE:-rerank}
@@ -152,7 +153,7 @@ services:
     depends_on:
       - redis
       - qdrant
-      - unified-inference
+      - bentoml
     networks:
       - rice-net
 
@@ -204,7 +205,7 @@ networks:
     driver: bridge
 
 volumes:
-  pip-cache-unified-inference:  # Separate pip cache for Unified Inference (SGLang, PyTorch, SentenceTransformers)
+  pip-cache-bentoml:  # Separate pip cache for BentoML (SGLang, PyTorch, etc.)
   pip-cache-backend:  # Separate pip cache for Backend (FastAPI, LangChain, etc.)
   npm-cache:          # Persistent npm download cache for frontend
 
