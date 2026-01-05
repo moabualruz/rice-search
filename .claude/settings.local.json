@@ -16,7 +16,16 @@
       "Bash(nvidia-smi:*)",
       "Bash(docker run:*)",
       "Bash(docker volume rm:*)",
-      "WebFetch(domain:github.com)"
+      "WebFetch(domain:github.com)",
+      "Bash(docker-compose down:*)",
+      "Bash(timeout 10 docker-compose:*)",
+      "Bash(curl:*)",
+      "Bash(timeout 30 docker-compose logs:*)",
+      "Bash(cargo build:*)",
+      "Bash(./target/release/ricesearch index:*)",
+      "Bash(tee:*)",
+      "Bash(python:*)",
+      "Bash(docker-compose restart:*)"
     ]
   }
 }

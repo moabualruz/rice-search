@@ -203,17 +203,19 @@ class RiceInferenceServiceSGLang:
         }
 
     @bentoml.api
-    def embed(self, request: EmbedRequest) -> EmbedResponse:
+    async def embed(self, request: EmbedRequest) -> EmbedResponse:
         """Generate embeddings for texts."""
         if self.embed_engine is None:
             raise RuntimeError("Embedding model not available")
 
-        # Use SGLang embedding engine
-        results = self.embed_engine.encode(
-            request.texts,
-            normalize=True,
+        # Use SGLang embedding engine in a separate thread to avoid event loop conflict
+        import asyncio
+        results = await asyncio.to_thread(
+            self.embed_engine.encode,
+            request.texts
         )
 
+        # SGLang returns a list of dicts with 'embedding' key
         embeddings = [r["embedding"] for r in results]
 
         return EmbedResponse(
@@ -223,7 +225,7 @@ class RiceInferenceServiceSGLang:
         )
 
     @bentoml.api
-    def rerank(self, request: RerankRequest) -> RerankResponse:
+    async def rerank(self, request: RerankRequest) -> RerankResponse:
         """Rerank documents by relevance to query."""
         if self.rerank_engine is None:
             raise RuntimeError("Rerank model not available")
@@ -231,10 +233,11 @@ class RiceInferenceServiceSGLang:
         # Create query-document pairs
         pairs = [[request.query, doc] for doc in request.documents]
 
-        # Use SGLang rerank engine
-        results = self.rerank_engine.encode(
-            pairs,
-            normalize=False,
+        # Use SGLang rerank engine in a separate thread to avoid event loop conflict
+        import asyncio
+        results = await asyncio.to_thread(
+            self.rerank_engine.encode,
+            pairs
         )
 
         # Extract scores and sort
@@ -258,7 +261,7 @@ class RiceInferenceServiceSGLang:
         )
 
     @bentoml.api
-    def chat(self, request: ChatRequest) -> ChatResponse:
+    async def chat(self, request: ChatRequest) -> ChatResponse:
         """Generate chat completion using LLM."""
         if self.llm_engine is None:
             return ChatResponse(
@@ -268,18 +271,23 @@ class RiceInferenceServiceSGLang:
             )
 
         from sglang.srt.sampling.sampling_params import SamplingParams
+        import asyncio
 
         # Format messages into prompt
         prompt = self._format_chat_prompt(request.messages)
 
-        # Generate with SGLang
+        # Generate with SGLang in a separate thread to avoid event loop conflict
         sampling_params = SamplingParams(
             max_new_tokens=request.max_tokens,
             temperature=request.temperature,
             stop=["</s>", "<|im_end|>"],
         )
 
-        outputs = self.llm_engine.generate([prompt], sampling_params)
+        outputs = await asyncio.to_thread(
+            self.llm_engine.generate,
+            [prompt],
+            sampling_params
+        )
         generated_text = outputs[0].text
 
         return ChatResponse(
