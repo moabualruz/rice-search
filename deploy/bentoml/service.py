@@ -132,13 +132,21 @@ class RiceInferenceService:
             self.llm = LLM(
                 model=self.llm_model_name,
                 trust_remote_code=True,
-                gpu_memory_utilization=0.90,
-                max_model_len=8192,
+
+                # ⚠️ CRITICAL: Reduce memory pre-allocation to save ~2-3GB
+                gpu_memory_utilization=0.50,      # Was 0.90 - use only 50% of VRAM
+                max_model_len=4096,                # Was 8192 - realistic context for code RAG
+
+                # Enable dynamic allocation features to reduce waste
+                enable_chunked_prefill=True,       # Chunk large prefills
+                max_num_batched_tokens=2048,       # Lower = less memory (default 8192)
+                max_num_seqs=4,                    # Limit concurrent requests
+
                 disable_log_stats=True,
                 quantization="awq",
             )
             self.SamplingParams = SamplingParams
-            logger.info("LLM loaded successfully")
+            logger.info("LLM loaded successfully with optimized memory settings")
         except Exception as e:
             logger.warning(f"Failed to load LLM: {e}. Chat endpoint will be disabled.")
     

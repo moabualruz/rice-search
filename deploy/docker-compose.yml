@@ -54,7 +54,7 @@ services:
       - HF_HOME=/root/.cache/huggingface
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
       - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-base}
-      - LLM_MODEL=${LLM_MODEL:-TechxGenus/codegemma-7b-it-AWQ}
+      - LLM_MODEL=${LLM_MODEL:-Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ}
       - HF_TOKEN=${HF_TOKEN}
     deploy:
       resources:

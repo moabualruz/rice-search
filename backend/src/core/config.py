@@ -61,7 +61,7 @@ class Settings(BaseSettings):
     BENTOML_URL: str = "http://localhost:3001"
     
     # Model names (configured in BentoML service)
-    LLM_MODEL: str = "codellama/CodeLlama-7b-Instruct-hf"  # For RAG chat
+    LLM_MODEL: str = "Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ"  # For RAG chat - optimized for code
     
     # ==========================================================================
     # TRIPLE RETRIEVAL SYSTEM
