@@ -59,10 +59,9 @@ class Settings(BaseSettings):
     # Unified Inference - SGLang-based Model Inference Server
     # Single service for embeddings, reranking, and LLM chat
     # Uses OpenAI-compatible API with default model auto-selection
-    BENTOML_URL: str = "http://localhost:3001"  # Backward compatibility
-    INFERENCE_URL: str = "http://localhost:3001"  # New name (same as BENTOML_URL)
-    
-    # Model names (configured in BentoML service)
+    INFERENCE_URL: str = "http://localhost:3001"
+
+    # Model names (configured in unified-inference service)
     LLM_MODEL: str = "Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ"  # For RAG chat - optimized for code
     
     # ==========================================================================

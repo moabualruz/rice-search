@@ -1,72 +1,55 @@
 # Model Registry for unified-inference
-# Each model instance runs in its own backend server process
+# Using Ollama for automatic memory management and GPU/CPU support
 
 models:
   # ============================================================================
-  # GPU FULL MODE MODELS (SGLang backends)
+  # OLLAMA MODELS (GPU/CPU with automatic memory management)
   # ============================================================================
 
-  # Embedding model (GPU) - DEFAULT
-  - name: bge-base-en
+  # Embedding model - DEFAULT
+  - name: nomic-embed
     type: embedding
-    execution_mode: gpu
-    backend: sglang
-    model_path: BAAI/bge-base-en-v1.5
-    format: hf
+    execution_mode: gpu  # Ollama auto-switches between GPU/CPU
+    backend: ollama
+    model_path: nomic-embed-text  # Ollama model name
+    format: ollama
     gpu_id: 0
-    port: 30001
-    idle_timeout: 300
+    port: 11434  # Ollama shared port
+    idle_timeout: 0  # Never unload
     is_embedding: true
-    trust_remote_code: true
+    trust_remote_code: false
     dtype: auto
     default: true  # Default embedding model
 
-  # Reranking model (GPU) - DEFAULT
-  - name: bge-reranker
+  # Reranking model - DEFAULT (using LLM with reranking prompt)
+  - name: qwen-reranker
     type: rerank
     execution_mode: gpu
-    backend: sglang
-    model_path: BAAI/bge-reranker-v2-m3
-    format: hf
+    backend: ollama
+    model_path: qwen2.5-coder:1.5b  # Use LLM for reranking
+    format: ollama
     gpu_id: 0
-    port: 30002
+    port: 11434
     idle_timeout: 300
     is_embedding: false
-    trust_remote_code: true
+    trust_remote_code: false
     dtype: auto
     default: true  # Default rerank model
 
-  # LLM model (GPU) - DEFAULT - AWQ quantized for memory efficiency
+  # LLM model - DEFAULT
   - name: qwen-coder-1.5b
     type: llm
     execution_mode: gpu
-    backend: sglang
-    model_path: Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ
-    format: awq
+    backend: ollama
+    model_path: qwen2.5-coder:1.5b  # Ollama model name
+    format: ollama
     gpu_id: 0
-    port: 30003
+    port: 11434  # Ollama shared port
     idle_timeout: 600
     is_embedding: false
-    trust_remote_code: true
+    trust_remote_code: false
     dtype: auto
-    cpu_offload_model: qwen-coder-1.5b-cpu  # Offload target for CPU spillover
     default: true  # Default LLM model
-
-  # ============================================================================
-  # CPU FULL MODE MODELS (CPU backends)
-  # ============================================================================
-
-  # LLM model (CPU) - GGUF format for CPU efficiency
-  - name: qwen-coder-1.5b-cpu
-    type: llm
-    execution_mode: cpu
-    backend: cpu_backend
-    model_path: Qwen/Qwen2.5-Coder-1.5B-Instruct-GGUF
-    format: gguf
-    gpu_id: null
-    port: 30010
-    idle_timeout: 600
-    trust_remote_code: true
 
 # Notes:
 # - DEFAULT models are auto-selected based on endpoint (no 'model' parameter needed)

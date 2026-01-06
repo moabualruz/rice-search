@@ -2,7 +2,7 @@
 Sparse Embedding Service.
 
 For sparse embeddings, we use a simple keyword-based approach.
-SPLADE support can be added to BentoML service when needed.
+SPLADE support can be added to unified-inference service when needed.
 """
 import logging
 from typing import List
@@ -21,7 +21,7 @@ def sparse_embed(text: str) -> SparseEmbedding:
     
     Uses a simple keyword-based approach for now.
     
-    TODO: Add SPLADE model to BentoML when needed.
+    TODO: Add SPLADE model to unified-inference when needed.
     """
     # Simple keyword-based sparse embedding
     # Uses word frequencies as sparse vector

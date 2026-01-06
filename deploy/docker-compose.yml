@@ -70,7 +70,7 @@ services:
       # Lifecycle management
       - DEFAULT_IDLE_TIMEOUT=${DEFAULT_IDLE_TIMEOUT:-300}
       - HEALTH_CHECK_INTERVAL=10
-      - STARTUP_TIMEOUT=120
+      - STARTUP_TIMEOUT=300
 
       # CPU offload (GPU mode only)
       - ENABLE_CPU_OFFLOAD=${ENABLE_CPU_OFFLOAD:-true}
@@ -143,7 +143,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - BENTOML_URL=http://unified-inference:3001
+      - INFERENCE_URL=http://unified-inference:3001  # Router with auto model selection
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
       - RERANK_MODE=${RERANK_MODE:-rerank}
@@ -167,7 +167,7 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - BENTOML_URL=http://unified-inference:3001
+      - INFERENCE_URL=http://unified-inference:3001  # Router with auto model selection
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
       - RERANK_MODE=${RERANK_MODE:-rerank}

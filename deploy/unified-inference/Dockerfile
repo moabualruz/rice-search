@@ -9,6 +9,8 @@ RUN apt-get update && apt-get install -y \
     curl \
     git \
     build-essential \
+    libnuma-dev \
+    libnuma1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Set Python 3 as default python

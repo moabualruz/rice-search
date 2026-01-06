@@ -9,6 +9,7 @@ from datetime import datetime
 from backends.base import Backend
 from backends.sglang import SGLangBackend
 from backends.cpu_backend import CPUBackend
+from backends.ollama import OllamaBackend
 from config.models import ModelConfig, ModelRegistry
 from config.settings import settings
 
@@ -21,6 +22,7 @@ class LifecycleManager:
     def __init__(self, model_registry: ModelRegistry):
         self.model_registry = model_registry
         self.backends: Dict[str, Backend] = {}
+        self._starting: Dict[str, bool] = {}  # Track models currently starting
         self._health_check_task: Optional[asyncio.Task] = None
         self._idle_check_task: Optional[asyncio.Task] = None
 
@@ -30,31 +32,68 @@ class LifecycleManager:
             return SGLangBackend(model_config)
         elif model_config.backend == "cpu_backend":
             return CPUBackend(model_config)
+        elif model_config.backend == "ollama":
+            return OllamaBackend(model_config)
         else:
             raise ValueError(f"Unknown backend type: {model_config.backend}")
 
     async def start_model(self, model_name: str) -> bool:
         """Start a model instance backend."""
+        # Check if already running in backends dict
         if model_name in self.backends:
             backend = self.backends[model_name]
-            if backend.status.is_running:
-                logger.info(f"Model {model_name} is already running")
+            if backend.status.is_running and backend.status.is_healthy:
+                logger.info(f"Model {model_name} is already running and healthy")
+                return True
+            elif backend.status.is_running:
+                # Running but not healthy - try health check first
+                is_healthy = await backend.health_check()
+                if is_healthy:
+                    logger.info(f"Model {model_name} is running and now healthy")
+                    return True
+                else:
+                    logger.warning(f"Model {model_name} exists but is unhealthy, will restart")
+                    await self.stop_model(model_name)
+
+        # Wait if another request is already starting this model
+        while self._starting.get(model_name, False):
+            logger.debug(f"Model {model_name} is being started by another request, waiting...")
+            await asyncio.sleep(0.5)
+            # Re-check if it's now running
+            if model_name in self.backends and self.backends[model_name].status.is_running:
+                logger.info(f"Model {model_name} started by another request")
                 return True
 
-        model_config = self.model_registry.get(model_name)
-        if not model_config:
-            logger.error(f"Model {model_name} not found in registry")
-            return False
-
-        if model_config.execution_mode != settings.execution_mode:
-            logger.error(
-                f"Model {model_name} requires {model_config.execution_mode}, "
-                f"but service is in {settings.execution_mode} mode"
-            )
-            return False
+        # Mark as starting
+        self._starting[model_name] = True
 
         try:
+            model_config = self.model_registry.get(model_name)
+            if not model_config:
+                logger.error(f"Model {model_name} not found in registry")
+                return False
+
+            if model_config.execution_mode != settings.execution_mode:
+                logger.error(
+                    f"Model {model_name} requires {model_config.execution_mode}, "
+                    f"but service is in {settings.execution_mode} mode"
+                )
+                return False
+
+            # Create backend and check if already running on port (from previous crash)
             backend = self._create_backend(model_config)
+
+            # Try health check first - if port is already serving this model, reuse it
+            logger.debug(f"Checking if {model_name} is already running on port {model_config.port}")
+            is_already_running = await backend.health_check()
+            if is_already_running:
+                logger.info(f"Model {model_name} found already running on port {model_config.port}, reusing instance")
+                backend.status.is_running = True
+                backend.status.is_healthy = True
+                self.backends[model_name] = backend
+                return True
+
+            # Not running, start fresh
             success = await backend.start()
 
             if success:
@@ -68,6 +107,10 @@ class LifecycleManager:
         except Exception as e:
             logger.error(f"Exception starting model {model_name}: {e}", exc_info=True)
             return False
+
+        finally:
+            # Clear starting flag
+            self._starting[model_name] = False
 
     async def stop_model(self, model_name: str) -> bool:
         """Stop a model instance backend."""
@@ -127,6 +170,10 @@ class LifecycleManager:
                 await asyncio.sleep(30)
 
                 for model_name, backend in list(self.backends.items()):
+                    # Skip models with idle_timeout=0 (never unload)
+                    if backend.model_config.idle_timeout == 0:
+                        continue
+
                     if backend.is_idle:
                         logger.info(f"Model {model_name} is idle, stopping")
                         await self.stop_model(model_name)

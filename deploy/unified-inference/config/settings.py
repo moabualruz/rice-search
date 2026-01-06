@@ -18,8 +18,11 @@ class Settings(BaseSettings):
 
     # SGLang backend configuration
     sglang_base_port: int = 30000  # Auto-increment for each model instance
-    sglang_max_running_requests: int = 3  # ENFORCED
-    sglang_max_total_tokens: int = 0  # ENFORCED (elastic memory)
+    sglang_max_running_requests: int = 3  # ENFORCED (LLM models)
+    sglang_max_running_requests_embedding: int = 20  # Higher for embedding/rerank models (handle concurrent tasks)
+    sglang_max_total_tokens: int = 16384  # Max tokens for LLM (allows reasonable context while fitting 3 models on GPU)
+    sglang_mem_fraction_static: float = 0.15  # Minimal static allocation (15% of GPU) to fit embedding + reranker + LLM
+    sglang_schedule_conservativeness: float = 0.5  # Lower = more aggressive scheduling (default 1.0), applies to ALL models
 
     # Model registry
     models_config_path: str = "/app/config/models.yaml"

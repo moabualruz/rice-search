@@ -35,7 +35,20 @@
       "Bash(cat:*)",
       "WebFetch(domain:docs.sglang.io)",
       "WebFetch(domain:docs.sglang.ai)",
-      "Bash(timeout 180 docker-compose logs:*)"
+      "Bash(timeout 180 docker-compose logs:*)",
+      "Bash(./target/release/ricesearch:*)",
+      "Bash(./target/release/rice-tantivy.exe:*)",
+      "Bash(./client/target/release/ricesearch.exe:*)",
+      "Bash(timeout 60 docker-compose logs:*)",
+      "Bash(timeout 120 docker-compose up:*)",
+      "Bash(./target/release/ricesearch.exe index:*)",
+      "Bash(cargo install:*)",
+      "Bash(ricesearch --help:*)",
+      "Bash(ricesearch config set:*)",
+      "Bash(ricesearch index:*)",
+      "Bash(timeout 90 bash -c 'curl -s -X POST http://localhost:8000/api/v1/search/query -H \"\"Content-Type: application/json\"\" -d \"\"{\\\\\"\"query\\\\\"\": \\\\\"\"SGLang backend\\\\\"\", \\\\\"\"limit\\\\\"\": 3}\"\" 2>&1')",
+      "Bash(timeout 120 bash -c:*)",
+      "Bash(timeout:*)"
     ]
   }
 }

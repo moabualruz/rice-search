@@ -26,15 +26,30 @@ class SGLangBackend(Backend):
 
     def _build_command(self):
         """Build the SGLang server command."""
+        # Special handling for embedding and rerank models (different parallelism and memory requirements)
+        if self.model_config.is_embedding or self.model_config.type == "rerank":
+            # Embedding/rerank models process batches of text chunks
+            # Use very high value to support long documents (32768 tokens ≈ 130KB text)
+            # Cannot use 0 (elastic) because it causes OOM with mem_fraction_static=0.95
+            max_total_tokens = 32768  # Very high limit for long code files
+            # Higher max_running_requests for batch processing models (handle concurrent tasks)
+            max_running_requests = settings.sglang_max_running_requests_embedding
+        else:
+            # LLM models - standard configuration
+            max_total_tokens = settings.sglang_max_total_tokens
+            max_running_requests = settings.sglang_max_running_requests
+
         cmd = [
             "python", "-m", "sglang.launch_server",
             "--model-path", self.model_config.model_path,
             "--host", "0.0.0.0",
             "--port", str(self.model_config.port),
-            
-            # ENFORCED: Elastic memory configuration
-            "--max-running-requests", str(settings.sglang_max_running_requests),
-            "--max-total-tokens", str(settings.sglang_max_total_tokens),
+
+            # ENFORCED: Elastic memory and parallelism configuration
+            "--max-running-requests", str(max_running_requests),
+            "--max-total-tokens", str(max_total_tokens),
+            "--mem-fraction-static", str(settings.sglang_mem_fraction_static),  # Baseline memory allocation with elastic expansion
+            "--schedule-conservativeness", str(settings.sglang_schedule_conservativeness),  # More aggressive scheduling
         ]
 
         # GPU configuration
@@ -151,7 +166,8 @@ class SGLangBackend(Backend):
         """Check if SGLang server is healthy."""
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                response = await client.get(f"{self.url}/health")
+                # SGLang doesn't have /health endpoint, use /get_model_info instead
+                response = await client.get(f"{self.url}/get_model_info")
                 is_healthy = response.status_code == 200
                 self.status.is_healthy = is_healthy
                 return is_healthy

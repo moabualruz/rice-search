@@ -35,7 +35,7 @@ class UnifiedInferenceClient:
         Args:
             base_url: Unified-inference server URL (e.g., "http://localhost:3001")
         """
-        self.base_url = (base_url or settings.BENTOML_URL).rstrip("/")
+        self.base_url = (base_url or settings.INFERENCE_URL).rstrip("/")
         logger.info(f"Unified-inference client initialized: {self.base_url}")
     
     async def embed(self, texts: List[str], model: str = None) -> List[List[float]]:
@@ -49,7 +49,7 @@ class UnifiedInferenceClient:
         Returns:
             List of embedding vectors
         """
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=310.0) as client:
             try:
                 # OpenAI-compatible format
                 payload = {"input": texts}
@@ -89,7 +89,7 @@ class UnifiedInferenceClient:
         Returns:
             List of reranked results with scores
         """
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=310.0) as client:
             try:
                 # SGLang rerank format
                 payload = {
@@ -187,20 +187,15 @@ class UnifiedInferenceClient:
 _unified_inference_client: Optional[UnifiedInferenceClient] = None
 
 
-def get_bentoml_client() -> UnifiedInferenceClient:
-    """
-    Get singleton unified-inference client.
-
-    Note: Function name kept as get_bentoml_client() for backward compatibility.
-    """
+def get_inference_client() -> UnifiedInferenceClient:
+    """Get singleton unified-inference client."""
     global _unified_inference_client
     if _unified_inference_client is None:
         _unified_inference_client = UnifiedInferenceClient()
     return _unified_inference_client
 
 
-# Alias for clarity
-get_unified_inference_client = get_bentoml_client
-
-# Backward compatibility alias
+# Backward compatibility aliases
+get_unified_inference_client = get_inference_client
+get_bentoml_client = get_inference_client
 BentoMLClient = UnifiedInferenceClient

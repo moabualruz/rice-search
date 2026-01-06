@@ -18,7 +18,7 @@ dependencies = [
     "sentence-transformers>=3.1.0",
 
     # Latest stable ML/AI dependencies (Jan 2025)
-    "torch==2.5.1",  # Latest for CUDA 12.1
+    "torch>=2.6.0",  # Upgraded for SPLADE security requirements
     "transformers==4.57.3",
     "accelerate==1.12.0",
 

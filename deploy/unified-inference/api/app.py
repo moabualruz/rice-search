@@ -65,6 +65,16 @@ async def lifespan(app: FastAPI):
         # Start background tasks
         await lifecycle_manager.start_background_tasks()
 
+        # Pre-load default embedding model to avoid race conditions
+        logger.info("Pre-loading default embedding model...")
+        default_embedding = model_registry.get_default_model("embedding")
+        if default_embedding:
+            success = await lifecycle_manager.start_model(default_embedding.name)
+            if success:
+                logger.info(f"✓ Pre-loaded embedding model: {default_embedding.name}")
+            else:
+                logger.error(f"✗ Failed to pre-load embedding model: {default_embedding.name}")
+
         logger.info("unified-inference ready")
 
         yield

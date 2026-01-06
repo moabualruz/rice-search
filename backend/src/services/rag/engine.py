@@ -12,32 +12,32 @@ except ImportError:
     from langchain.llms import OpenAI
 
 from src.services.search.retriever import Retriever
-from src.services.inference.bentoml_client import get_bentoml_client
+from src.services.inference import get_inference_client
 import logging
 
 logger = logging.getLogger(__name__)
 
 class RAGEngine:
     def __init__(self):
-        # Setup LLM - prefer BentoML, then OpenAI, then FakeListLLM
-        self.bentoml_client = None
+        # Setup LLM - prefer unified-inference, then OpenAI, then FakeListLLM
+        self.inference_client = None
         api_key = os.getenv("OPENAI_API_KEY")
-        
-        # Try BentoML first
+
+        # Try unified-inference first
         try:
-            self.bentoml_client = get_bentoml_client()
+            self.inference_client = get_inference_client()
             # We assume it exists for now, health check is async so we skip it in __init__
-            logger.info("RAG Engine: Using BentoML for LLM")
-            self.llm = None  # Will use bentoml_client.chat() directly
+            logger.info("RAG Engine: Using unified-inference for LLM")
+            self.llm = None  # Will use inference_client.chat() directly
         except Exception as e:
-            logger.warning(f"BentoML client init failed: {e}")
+            logger.warning(f"Unified-inference client init failed: {e}")
             if api_key:
                 self.llm = OpenAI(temperature=0)
             else:
                 # Fallback for "Iron Core" without external deps
                 logger.warning("No LLM available - using simulated responses")
                 responses = [
-                    "LLM not available. Please start BentoML service to enable RAG answers.",
+                    "LLM not available. Please start unified-inference service to enable RAG answers.",
                 ]
                 self.llm = FakeListLLM(responses=responses)
 
@@ -88,14 +88,14 @@ Answer:"""
         return "\n".join(formatted)
     
     async def _generate_response(self, context: str, question: str) -> str:
-        """Generate response using BentoML or LangChain LLM."""
+        """Generate response using unified-inference or LangChain LLM."""
         prompt_text = self.prompt_template.format(context=context, question=question)
         
-        # Try BentoML first
-        if self.bentoml_client:
+        # Try unified-inference first
+        if self.inference_client:
             try:
                 # Async chat call
-                response = await self.bentoml_client.chat(
+                response = await self.inference_client.chat(
                     messages=[{"role": "user", "content": prompt_text}],
                     max_tokens=1024,
                     temperature=0.1

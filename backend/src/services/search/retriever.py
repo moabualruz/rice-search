@@ -35,17 +35,17 @@ COLLECTION_NAME = "rice_chunks"
 
 async def embed_texts_async(texts: List[str]) -> List[List[float]]:
     """
-    Embed texts using BentoML dense embeddings (Async).
-    
+    Embed texts using unified-inference dense embeddings (Async).
+
     Args:
         texts: List of texts to embed
-        
+
     Returns:
         List of embedding vectors
     """
-    from src.services.inference import get_bentoml_client
-    
-    client = get_bentoml_client()
+    from src.services.inference import get_inference_client
+
+    client = get_inference_client()
     return await client.embed(texts)
 
 
@@ -201,8 +201,8 @@ class MultiRetriever:
             # But rerank_search_results is a standalone function in reranker.py
             # We need to check if that file needs async refactor too.
             # For now, let's wrap it in to_thread just in case, or fix it later.
-            # Wait, reranker.py calls BentoMLClient.rerank().
-            # BentoMLClient.rerank is now ASYNC.
+            # Wait, reranker.py calls UnifiedInferenceClient.rerank().
+            # UnifiedInferenceClient.rerank is now ASYNC.
             # So `rerank_search_results` will FAIL if it expects sync.
             # We MUST check `src/services/search/reranker.py` next.
             # For now, I will comment this out or handle it.
@@ -217,13 +217,13 @@ class MultiRetriever:
     
     async def _rerank_async(self, query: str, results: List[Dict]) -> List[Dict]:
         """Helper to call reranker async."""
-        from src.services.inference import get_bentoml_client
-        client = get_bentoml_client()
-        
+        from src.services.inference import get_inference_client
+        client = get_inference_client()
+
         # Prepare docs
         docs = [r["text"] for r in results]
         try:
-             # Call BentoML async rerank
+             # Call unified-inference async rerank
              reranked = await client.rerank(query, docs)
              # Map back scores logic... rerank_search_results does complexity.
              # I should probably refactor reranker.py to be async.

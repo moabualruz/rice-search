@@ -54,13 +54,15 @@ class RequestProxy:
             if body is None and request.method in ("POST", "PUT", "PATCH"):
                 body = await request.json()
 
-            # Prepare headers (exclude hop-by-hop headers)
+            # Prepare headers (exclude hop-by-hop headers and content-length)
+            # content-length must be excluded because we re-serialize the body
             headers = {
                 k: v for k, v in request.headers.items()
                 if k.lower() not in (
                     "host", "connection", "keep-alive",
                     "proxy-authenticate", "proxy-authorization",
-                    "te", "trailers", "transfer-encoding", "upgrade"
+                    "te", "trailers", "transfer-encoding", "upgrade",
+                    "content-length"  # Let httpx calculate correct length for re-serialized body
                 )
             }
 

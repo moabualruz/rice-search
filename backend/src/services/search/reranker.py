@@ -1,7 +1,7 @@
 """
-Neural Reranker Service - BentoML backend.
+Neural Reranker Service - unified-inference backend.
 
-Uses BentoML's rerank endpoint for dedicated reranker models,
+Uses unified-inference's rerank endpoint for dedicated reranker models,
 or LLM-based reranking via chat as fallback.
 """
 import logging
@@ -14,35 +14,35 @@ logger = logging.getLogger(__name__)
 
 async def rerank_results(query: str, documents: List[str]) -> List[float]:
     """
-    Rerank documents using BentoML (Async).
-    
-    Tries BentoML rerank endpoint first, falls back to LLM-based.
-    
+    Rerank documents using unified-inference (Async).
+
+    Tries unified-inference rerank endpoint first, falls back to LLM-based.
+
     Args:
         query: The search query
         documents: List of document texts to rerank
-        
+
     Returns:
         List of relevance scores (higher = more relevant)
     """
     if not documents:
         return []
-    
-    from src.services.inference import get_bentoml_client
-    client = get_bentoml_client()
-    
+
+    from src.services.inference import get_inference_client
+    client = get_inference_client()
+
     mode = settings.RERANK_MODE.lower()
     logger.info(f"Reranking mode: {mode}")
-    
+
     if mode == "tei" or mode == "rerank":
-        # Use BentoML's dedicated rerank endpoint
+        # Use unified-inference's dedicated rerank endpoint
         try:
             results = await client.rerank(query, documents)
             scores = [r["score"] for r in results]
-            logger.info(f"BentoML rerank returned {len(scores)} scores. Range: {min(scores):.3f} - {max(scores):.3f}")
+            logger.info(f"Unified-inference rerank returned {len(scores)} scores. Range: {min(scores):.3f} - {max(scores):.3f}")
             return scores
         except Exception as e:
-            logger.warning(f"BentoML rerank failed, trying LLM: {e}")
+            logger.warning(f"Unified-inference rerank failed, trying LLM: {e}")
     
     # LLM-based reranking via chat
     return await _rerank_with_llm(client, query, documents)
