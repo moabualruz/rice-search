@@ -5,6 +5,20 @@
 *.log
 *.tmp
 
+# Log files (root directory)
+/*_logs*.txt
+/*_log*.txt
+/api_logs.txt
+/backend_logs*.txt
+/frontend_logs.txt
+/worker_logs*.txt
+/bentoml_log*.txt
+/xinference_logs.txt
+/xinf_log.txt
+/qdrant_dir.txt
+/signature.txt
+/*command-message*.txt
+
 # Environement
 .env
 .env.local
@@ -80,6 +94,4 @@ __pycache__/
 
 # Rust
 rust-tantivy/target/
-rust-tantivy/Cargo.lock
 client/target/
-client/Cargo.lock
