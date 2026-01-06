@@ -287,16 +287,61 @@ python -m src.services.mcp.mcp_daemon
 
 ## CLI Tool (ricesearch)
 
+**IMPORTANT: Always use the CLI for indexing files, not direct API calls.**
+
 Installed as `ricesearch` command via `pip install -e .`
+
+### Indexing with CLI
+
+**Use `ricesearch watch` for indexing:**
+
+```bash
+# Index current directory (recommended)
+ricesearch watch .
+
+# Index specific directory
+ricesearch watch ./backend --org-id myorg
+
+# Initial index without watching
+ricesearch watch ./src --no-initial
+
+# The CLI handles:
+# - File path normalization
+# - Automatic .gitignore/.riceignore respect
+# - Proper metadata (full_path + filename fields)
+# - Incremental updates
+# - Error handling
+```
+
+**Full reindex after schema changes:**
+
+```bash
+# The watch command with initial scan reindexes everything
+ricesearch watch ./backend --org-id public
+
+# It handles:
+# - Scanning all files
+# - Updating existing documents
+# - Adding new files
+# - Removing deleted files
+```
+
+### Searching
 
 ```bash
 # Search
 ricesearch search "authentication" --limit 20
 
-# Watch mode (auto-indexing)
-ricesearch watch ./src --org-id myorg
+# Search for file names (now works!)
+ricesearch search "config.yaml"
+ricesearch search "README"
+ricesearch search "test_api"
 
-# Config management
+# Dense-only search
+ricesearch search "function" --no-hybrid
+```
+
+### Config management
 ricesearch config show
 ricesearch config set backend_url http://localhost:8000
 ```

@@ -35,9 +35,9 @@ class TantivyClient:
     - GET /health - Health check
     """
     
-    def __init__(self, base_url: str = None, timeout: float = 30.0):
-        self.base_url = base_url or getattr(settings, "TANTIVY_URL", "http://localhost:3002")
-        self.timeout = timeout
+    def __init__(self, base_url: str = None, timeout: float = None):
+        self.base_url = base_url or settings.TANTIVY_URL
+        self.timeout = timeout if timeout is not None else settings.TANTIVY_TIMEOUT
         self._client = None
     
     @property

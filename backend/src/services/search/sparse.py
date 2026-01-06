@@ -18,25 +18,30 @@ SparseEmbedding = namedtuple("SparseEmbedding", ["indices", "values"])
 def sparse_embed(text: str) -> SparseEmbedding:
     """
     Generate sparse embedding for text.
-    
+
     Uses a simple keyword-based approach for now.
-    
+
     TODO: Add SPLADE model to unified-inference when needed.
     """
+    from src.core.config import settings
+
     # Simple keyword-based sparse embedding
     # Uses word frequencies as sparse vector
+    min_word_length = settings.SPARSE_MIN_WORD_LENGTH
+    vocab_size = settings.SPARSE_VOCAB_SIZE
+
     words = text.lower().split()
     word_counts = {}
     for word in words:
-        if len(word) > 2:  # Skip short words
+        if len(word) > min_word_length:  # Skip short words
             word_counts[word] = word_counts.get(word, 0) + 1
-    
+
     # Convert to sparse format (word hash -> count)
     indices = []
     values = []
     for word, count in word_counts.items():
         # Use hash of word as index (modulo vocab size)
-        idx = hash(word) % 30000  # Typical vocab size
+        idx = hash(word) % vocab_size
         indices.append(idx)
         values.append(float(count))
     

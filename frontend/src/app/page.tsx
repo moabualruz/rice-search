@@ -55,17 +55,24 @@ function getLanguage(filepath?: string): string {
 
 // Helper to format relevance score
 function formatRelevance(score: number): { label: string; color: string } {
-  // BGE reranker returns raw confidence scores typically in range [0, 0.3]
-  // with highly relevant documents scoring 0.15+
-  const pct = Math.round(score * 100);
-  if (score >= 0.15)
+  // Cross-encoder (ms-marco-MiniLM-L-12-v2) returns scores typically in range [-10, +10]
+  // Positive scores = relevant, negative = less relevant
+  // We normalize to 0-100% using sigmoid-like mapping
+
+  // Map [-10, +10] to [0, 1] using sigmoid function
+  // This gives smooth 0-100% range with 50% at score=0
+  const normalized = 1 / (1 + Math.exp(-score));
+  const pct = Math.round(normalized * 100);
+
+  // Thresholds based on normalized scores
+  if (normalized >= 0.75)  // score > ~1.1
     return { label: `High (${pct}%)`, color: "text-green-400 bg-green-500/20" };
-  if (score >= 0.08)
+  if (normalized >= 0.60)  // score > ~0.4
     return {
       label: `Good (${pct}%)`,
       color: "text-yellow-400 bg-yellow-500/20",
     };
-  if (score >= 0.03)
+  if (normalized >= 0.40)  // score > -0.4
     return {
       label: `Fair (${pct}%)`,
       color: "text-orange-400 bg-orange-500/20",

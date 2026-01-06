@@ -55,8 +55,9 @@ class OllamaClient:
             List of embedding vectors
         """
         model = model or settings.EMBEDDING_MODEL_NAME
+        embedding_timeout = settings.EMBEDDING_TIMEOUT
 
-        async with httpx.AsyncClient(timeout=310.0) as client:
+        async with httpx.AsyncClient(timeout=embedding_timeout) as client:
             try:
                 # Ollama embeddings API
                 embeddings = []
@@ -111,8 +112,8 @@ class OllamaClient:
         self,
         messages: List[Dict[str, str]],
         model: str = None,
-        max_tokens: int = 1024,
-        temperature: float = 0.7,
+        max_tokens: int = None,
+        temperature: float = None,
     ) -> str:
         """
         Generate chat completion using Ollama.
@@ -127,8 +128,11 @@ class OllamaClient:
             Generated text response
         """
         model = model or settings.LLM_MODEL
+        max_tokens = max_tokens if max_tokens is not None else settings.LLM_MAX_TOKENS
+        temperature = temperature if temperature is not None else settings.LLM_TEMPERATURE
+        chat_timeout = settings.LLM_CHAT_TIMEOUT
 
-        async with httpx.AsyncClient(timeout=120.0) as client:
+        async with httpx.AsyncClient(timeout=chat_timeout) as client:
             try:
                 # Ollama chat API
                 response = await client.post(

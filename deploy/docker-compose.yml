@@ -106,14 +106,22 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # Core environment (direct overrides for backwards compatibility)
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - INFERENCE_URL=http://ollama:11434  # Ollama with automatic memory management
+      - INFERENCE_URL=http://ollama:11434
       - OLLAMA_BASE_URL=http://ollama:11434
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
       - RERANK_MODE=${RERANK_MODE:-rerank}
+
+      # Centralized settings overrides (RICE_SEARCH_ prefix)
+      - RICE_SEARCH_INFRASTRUCTURE_REDIS_URL=redis://redis:6379/0
+      - RICE_SEARCH_INFRASTRUCTURE_QDRANT_URL=http://qdrant:6333
+      - RICE_SEARCH_INFRASTRUCTURE_MINIO_ENDPOINT=minio:9000
+      - RICE_SEARCH_INFERENCE_OLLAMA_BASE_URL=http://ollama:11434
+      - RICE_SEARCH_SEARCH_BM25_URL=http://tantivy:3002
     volumes:
       - ../backend:/app
       - ../data/ingest-shared:/shared/ingest  # Shared ingestion temp files (file-based)

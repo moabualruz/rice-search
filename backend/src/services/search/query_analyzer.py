@@ -164,11 +164,12 @@ Categories: {', '.join(categories)}
 
 Respond with ONLY the category name, nothing else."""
 
+        from src.core.config import settings
         import asyncio
         result = asyncio.run(client.chat(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=10,
-            temperature=0.0
+            max_tokens=settings.QUERY_ANALYSIS_LLM_MAX_TOKENS,
+            temperature=settings.QUERY_ANALYSIS_LLM_TEMPERATURE
         ))
 
         # Parse result

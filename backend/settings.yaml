@@ -1,0 +1,246 @@
+app:
+  name: Rice Search
+  version: 1.0.0
+  api_prefix: /api/v1
+  environment: development
+server:
+  host: 0.0.0.0
+  port: 8000
+  workers: 4
+  reload: true
+  cors_origins:
+  - http://localhost:3000
+  - http://localhost:8000
+infrastructure:
+  qdrant:
+    url: http://qdrant:6333
+    timeout: 30
+    grpc_port: 6334
+  redis:
+    url: redis://redis:6379/0
+    max_connections: 50
+    socket_timeout: 5
+  minio:
+    endpoint: minio:9000
+    access_key: minioadmin
+    secret_key: minioadmin
+    secure: false
+    bucket_name: rice-search
+auth:
+  enabled: false
+  jwt_secret: change-me-in-production
+  jwt_algorithm: HS256
+  access_token_expire_minutes: 30
+  keycloak_url: http://localhost:8080
+  keycloak_realm: rice-search
+inference:
+  ollama:
+    base_url: http://ollama:11434
+    timeout: 300
+    max_retries: 3
+    embedding_model: qwen3-embedding:4b
+    llm_model: qwen2.5-coder:1.5b
+    keep_alive: 5m
+    num_parallel: 4
+    max_loaded_models: 3
+    base:
+      url: http://ollama:11434
+models:
+  embedding:
+    name: jina-embeddings-v3
+    dimension: 1024
+    fallback_dimension: 768
+    ollama_model: qwen3-embedding:4b
+    batch_size: 32
+    normalize: true
+    timeout: 310.0
+  sparse:
+    model: naver/splade-cocondenser-ensembledistil
+    lightweight_model: naver/splade-cocondenser-distil
+    enabled: true
+    device: gpu
+    precision: fp16
+    batch_size: 32
+    max_tokens: 512
+    vocab_size: 30000
+    min_word_length: 2
+  reranker:
+    enabled: true
+    model: cross-encoder/ms-marco-MiniLM-L-12-v2
+    mode: local
+    top_k: 10
+    batch_size: 16
+    doc_preview_length: 500
+    llm_max_tokens: 100
+    llm_temperature: 0.1
+  bm42:
+    model: Qdrant/bm42-all-minilm-l6-v2-attentions
+    enabled: true
+  query_analysis:
+    model: microsoft/codebert-base
+    enabled: true
+    llm_max_tokens: 10
+    llm_temperature: 0.0
+  llm:
+    model: qwen2.5-coder:1.5b
+    max_tokens: 1024
+    temperature: 0.7
+    top_p: 0.9
+    chat_timeout: 120.0
+search:
+  default_limit: 10
+  max_limit: 150
+  default_mode: rag
+  collection_prefix: rice_chunks
+  hybrid:
+    enabled: true
+    rrf_k: 60
+    use_bm25: true
+    use_splade: true
+    use_bm42: true
+  bm25:
+    enabled: true
+    url: http://tantivy:3002
+    timeout: 30.0
+  query_analysis:
+    enabled: true
+    use_llm: false
+    confidence_threshold: 0.7
+ast:
+  enabled: true
+  languages:
+  - py
+  - js
+  - ts
+  - go
+  - rs
+  - java
+  - cpp
+  max_chunk_lines: 200
+  parallel_processing: true
+mcp:
+  enabled: false
+  transport: stdio
+  tcp:
+    host: 0.0.0.0
+    port: 9090
+  sse:
+    port: 9091
+  tools:
+  - search
+  - read_file
+  - list_files
+model_management:
+  auto_unload: true
+  ttl_seconds: 300
+  force_gpu: true
+  memory_threshold_mb: 1024
+rag:
+  enabled: true
+  max_tokens: 1024
+  temperature: 0.1
+  context_window: 4096
+  max_context_chunks: 10
+  system_prompt: 'You are a helpful AI assistant that answers questions based on the
+    provided code context.
+
+    Use the code snippets below to answer the user''s question accurately and concisely.
+
+    If the answer is not in the provided context, say "I don''t have enough context
+    to answer that."
+
+    '
+indexing:
+  chunk_size: 1000
+  chunk_overlap: 200
+  batch_size: 200
+  temp_dir: /tmp/ingest
+  file:
+    max_size_mb: 100
+    supported_extensions:
+    - .py
+    - .js
+    - .ts
+    - .go
+    - .rs
+    - .java
+    - .cpp
+    - .md
+    - .txt
+    ignore_patterns:
+    - node_modules
+    - .git
+    - __pycache__
+    - '*.pyc'
+    - .env
+worker:
+  pool: solo
+  concurrency: 4
+  max_tasks_per_child: 1000
+  task_timeout: 600
+  queues:
+    default: default
+    high_priority: high
+    low_priority: low
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  file:
+    enabled: false
+    path: /var/log/rice-search/app.log
+    max_bytes: 10485760
+    backup_count: 5
+telemetry:
+  enabled: false
+  otlp_endpoint: http://jaeger:4317
+  service_name: rice-search-api
+  sample_rate: 0.1
+features:
+  rag_chat: true
+  file_preview: true
+  syntax_highlighting: true
+  admin_ui: true
+  metrics_dashboard: true
+defaults:
+  org_id: public
+  store_type: production
+  replication_factor: 1
+performance:
+  max_concurrent_requests: 100
+  request_timeout: 30
+  connection_pool_size: 50
+  cache:
+    enabled: true
+    ttl_seconds: 300
+    max_size_mb: 512
+admin:
+  persist_dir: data/admin
+  redis_key_prefix: 'rice:admin:'
+  files:
+    models: models.json
+    stats: stats.json
+    config: config.json
+metrics:
+  enabled: true
+  psutil_interval: 0.1
+  prometheus_port: 9090
+cli:
+  default_limit: 10
+  default_hybrid: true
+  watch_interval: 5
+messages:
+  errors:
+    model_not_found: Model {model_name} not found
+    inference_unavailable: 'Inference service unavailable: {error}'
+    indexing_failed: 'Failed to index file {file_path}: {error}'
+    search_failed: 'Search failed: {error}'
+    unauthorized: Unauthorized access
+    invalid_credentials: Invalid credentials
+  success:
+    file_indexed: File {file_path} indexed successfully
+    model_loaded: Model {model_name} loaded successfully
+    settings_updated: Settings updated successfully
+  info:
+    starting_server: Starting Rice Search server on {host}:{port}
+    loading_models: Loading models...
+    connecting_service: Connecting to {service}...

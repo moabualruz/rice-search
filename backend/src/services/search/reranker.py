@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 
 async def rerank_results(query: str, documents: List[str]) -> List[float]:
     """
-    Rerank documents using unified-inference (Async).
+    Rerank documents using local cross-encoder or LLM fallback (Async).
 
-    Tries unified-inference rerank endpoint first, falls back to LLM-based.
+    Uses sentence-transformers cross-encoder for accurate reranking.
+    Falls back to LLM-based reranking if cross-encoder fails.
 
     Args:
         query: The search query
@@ -32,30 +33,34 @@ async def rerank_results(query: str, documents: List[str]) -> List[float]:
     client = get_inference_client()
 
     mode = settings.RERANK_MODE.lower()
-    logger.info(f"Reranking mode: {mode}")
+    logger.info(f"Reranking mode: {mode}, documents: {len(documents)}")
 
-    if mode == "tei" or mode == "rerank":
-        # Use unified-inference's dedicated rerank endpoint
+    # Use local cross-encoder reranker
+    if mode == "local":
         try:
             results = await client.rerank(query, documents)
-            scores = [r["score"] for r in results]
-            logger.info(f"Unified-inference rerank returned {len(scores)} scores. Range: {min(scores):.3f} - {max(scores):.3f}")
+            # local_reranker returns list of dicts with "relevance_score" key
+            scores = [r["relevance_score"] for r in results]
+            logger.info(f"Local reranker returned {len(scores)} scores. Range: {min(scores):.3f} - {max(scores):.3f}")
             return scores
         except Exception as e:
-            logger.warning(f"Unified-inference rerank failed, trying LLM: {e}")
-    
-    # LLM-based reranking via chat
+            logger.warning(f"Local reranker failed, trying LLM fallback: {e}")
+
+    # LLM-based reranking via chat (fallback)
     return await _rerank_with_llm(client, query, documents)
 
 
 async def _rerank_with_llm(client, query: str, documents: List[str]) -> List[float]:
     """Rerank using LLM prompting (Async)."""
+    from src.core.config import settings
+
     try:
+        doc_preview_length = settings.RERANK_DOC_PREVIEW_LENGTH
         docs_text = "\n".join([
-            f"[{i+1}] {doc[:500]}"
+            f"[{i+1}] {doc[:doc_preview_length]}"
             for i, doc in enumerate(documents)
         ])
-        
+
         prompt = f"""Score each document's relevance to the query on a scale of 0-10.
 Query: {query}
 
@@ -67,8 +72,8 @@ Scores:"""
 
         response = await client.chat(
             messages=[{"role": "user", "content": prompt}],
-            max_tokens=100,
-            temperature=0.1
+            max_tokens=settings.RERANK_LLM_MAX_TOKENS,
+            temperature=settings.RERANK_LLM_TEMPERATURE
         )
         
         # Parse scores
@@ -103,21 +108,29 @@ Scores:"""
             # Clamp and Truncate/Pad
             scores = [min(max(s, 0.0), 1.0) for s in scores]
             scores = scores[:len(documents)]
-            
-            while len(scores) < len(documents):
-                scores.append(0.5)
-            
+
+            # If we got fewer scores than documents, pad with descending fallback scores
+            if len(scores) < len(documents):
+                remaining = len(documents) - len(scores)
+                min_score = min(scores) if scores else 0.5
+                fallback_scores = [max(0.0, min_score - (i * 0.1)) for i in range(remaining)]
+                scores.extend(fallback_scores)
+
             return scores
 
         except Exception as e:
             logger.warning(f"Could not parse LLM rerank scores: {e}. Response: {response[:100]}...")
-            return [0.5] * len(documents)
+            # Return descending scores to maintain original ranking order
+            n = len(documents)
+            return [1.0 - (i / n) for i in range(n)]
 
             
     except Exception as e:
-        logger.warning(f"LLM reranking unavailable, returning neutral scores: {e}")
-        # Return neutral scores instead of failing - allows search without LLM
-        return [0.5] * len(documents)
+        logger.warning(f"LLM reranking unavailable, returning fallback scores: {e}")
+        # Return descending scores to maintain original ranking order
+        # This is better than 0.5 for all which loses ranking information
+        n = len(documents)
+        return [1.0 - (i / n) for i in range(n)]
 
 
 async def rerank_search_results(query: str, results: List[Dict[str, Any]], content_key: str = "text") -> List[Dict[str, Any]]:

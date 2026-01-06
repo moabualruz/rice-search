@@ -30,7 +30,7 @@ class SparseVector(NamedTuple):
 class SpladeEncoder:
     """
     SPLADE neural sparse encoder with GPU/CPU switching.
-    
+
     Features:
     - GPU-first with CPU fallback
     - Runtime model switching
@@ -38,21 +38,22 @@ class SpladeEncoder:
     - Batched inference
     - fp16 support on GPU
     """
-    
-    DEFAULT_MODEL = "naver/splade-cocondenser-ensembledistil"
-    LIGHTWEIGHT_MODEL = "naver/splade-cocondenser-distil"
-    
+
     def __init__(
         self,
         model_id: str = None,
         device: str = None,
         use_fp16: bool = True,
-        max_length: int = 512,
-        batch_size: int = 32
+        max_length: int = None,
+        batch_size: int = None
     ):
-        self.model_id = model_id or settings.SPARSE_MODEL or self.DEFAULT_MODEL
-        self.max_length = max_length
-        self.batch_size = batch_size
+        # Get defaults from settings
+        default_model = settings.SPARSE_MODEL
+        lightweight_model = settings.SPARSE_LIGHTWEIGHT_MODEL
+
+        self.model_id = model_id or settings.SPARSE_MODEL or default_model
+        self.max_length = max_length if max_length is not None else settings.SPLADE_MAX_TOKENS
+        self.batch_size = batch_size if batch_size is not None else settings.SPLADE_BATCH_SIZE
         self.use_fp16 = use_fp16
         
         # Determine device

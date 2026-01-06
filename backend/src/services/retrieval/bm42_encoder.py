@@ -12,6 +12,7 @@ This encoder ONLY generates the sparse vectors. BM42 scoring is done internally 
 
 import logging
 from typing import List, NamedTuple, Optional
+from src.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -25,15 +26,12 @@ class SparseVector(NamedTuple):
 class BM42Encoder:
     """
     BM42-compatible sparse vector encoder.
-    
+
     Uses FastEmbed's sparse text embedding model optimized for BM42.
     """
-    
-    # Default model for BM42 sparse embeddings
-    DEFAULT_MODEL = "Qdrant/bm42-all-minilm-l6-v2-attentions"
-    
+
     def __init__(self, model_name: str = None):
-        self.model_name = model_name or self.DEFAULT_MODEL
+        self.model_name = model_name or settings.BM42_MODEL
         self.model = None
         self._load_model()
     

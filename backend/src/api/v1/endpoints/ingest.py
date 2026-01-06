@@ -5,10 +5,11 @@ from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Form
 from typing import Dict, Optional
 from src.tasks.ingestion import ingest_file_task
 from src.api.v1.dependencies import verify_admin
+from src.core.config import settings
 
 router = APIRouter()
 
-TEMP_DIR = "/tmp/ingest" 
+TEMP_DIR = settings.TEMP_DIR
 os.makedirs(TEMP_DIR, exist_ok=True)
 
 @router.post("/file", status_code=202)

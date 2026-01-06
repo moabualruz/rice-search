@@ -32,8 +32,6 @@ from src.services.search.retriever import embed_texts
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_NAME = "rice_chunks"
-
 
 class Indexer:
     """
@@ -49,7 +47,7 @@ class Indexer:
     def __init__(self, qdrant_client):
         self.qdrant = qdrant_client
         self.chunker = DocumentChunker()
-        self.collection_name = COLLECTION_NAME
+        self.collection_name = settings.COLLECTION_PREFIX
         
         # Lazy-loaded encoders
         self._splade_encoder = None
@@ -103,8 +101,7 @@ class Indexer:
             logger.info(f"Collection {self.collection_name} exists")
         except Exception:
             logger.info(f"Creating collection {self.collection_name}")
-            # Use 768 for BAAI/bge-base-en-v1.5
-            embedding_dim = 768
+            embedding_dim = settings.get("models.embedding.fallback_dimension", settings.EMBEDDING_DIM)
             self.qdrant.create_collection(
                 collection_name=self.collection_name,
                 vectors_config={
@@ -217,8 +214,21 @@ class Indexer:
         logger.info(f"Generated {len(chunks)} chunks (AST={is_ast})")
         
         # 3. Generate all representations
-        contents = [c["content"] for c in chunks]
-        
+        # Extract file name for enhanced indexing
+        import os
+        file_name = os.path.basename(display_path)
+
+        # Enhance content with file path/name for better searchability
+        # This allows searches for file names to work properly
+        enhanced_contents = []
+        for c in chunks:
+            # Prepend file metadata to make file names searchable
+            enhanced = f"File: {file_name}\nPath: {display_path}\n\n{c['content']}"
+            enhanced_contents.append(enhanced)
+
+        # Use enhanced contents for embedding (file path is now searchable)
+        contents = enhanced_contents
+
         # 3a. Dense embeddings (BentoML)
         logger.info("Generating dense embeddings...")
         try:
@@ -281,11 +291,14 @@ class Indexer:
                 id=chunk_id,
                 vector=vectors,
                 payload={
-                    "text": chunk["content"],
+                    "text": chunk["content"],  # Original chunk content (not enhanced)
                     **chunk["metadata"],
                     "chunk_id": chunk_id,
                     "chunk_index": chunk["chunk_index"],
                     "content_hash": content_hash,
+                    # Add separate fields for filtering and display
+                    "full_path": display_path,  # Full path for filtering
+                    "filename": file_name,  # Just filename for quick access
                 }
             ))
         

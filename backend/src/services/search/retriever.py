@@ -30,8 +30,6 @@ from src.services.retrieval.fusion import rrf_fusion, FusedResult
 
 logger = logging.getLogger(__name__)
 
-COLLECTION_NAME = "rice_chunks"
-
 
 async def embed_texts_async(texts: List[str]) -> List[List[float]]:
     """
@@ -121,7 +119,7 @@ class MultiRetriever:
         use_splade: bool = True,
         use_bm42: bool = True,
         rerank: bool = None,
-        rrf_k: int = 60,
+        rrf_k: int = None,
     ) -> List[Dict[str, Any]]:
         """
         Search using selected retrievers with RRF fusion.
@@ -141,7 +139,10 @@ class MultiRetriever:
         """
         if rerank is None:
             rerank = settings.RERANK_ENABLED
-        
+
+        if rrf_k is None:
+            rrf_k = settings.RRF_K
+
         qdrant = get_qdrant_client()
         result_sets: Dict[str, List[Dict]] = {}
         
@@ -265,7 +266,7 @@ class MultiRetriever:
         
         points = await asyncio.to_thread(
             qdrant.retrieve,
-            collection_name=COLLECTION_NAME,
+            collection_name=settings.COLLECTION_PREFIX,
             ids=chunk_ids,
             with_payload=True
         )
@@ -298,7 +299,7 @@ class MultiRetriever:
         # Search Qdrant (Network/IO bound but client is sync)
         results = await asyncio.to_thread(
              qdrant.query_points,
-             collection_name=COLLECTION_NAME,
+             collection_name=settings.COLLECTION_PREFIX,
              query=SparseVector(
                  indices=sparse_vec.indices,
                  values=sparse_vec.values
@@ -338,7 +339,7 @@ class MultiRetriever:
         # Hybrid search with RRF fusion
         results = await asyncio.to_thread(
             qdrant.query_points,
-            collection_name=COLLECTION_NAME,
+            collection_name=settings.COLLECTION_PREFIX,
             prefetch=[
                 Prefetch(
                     query=dense_vec,

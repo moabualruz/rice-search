@@ -1,9 +1,17 @@
 # from langchain_text_splitters import RecursiveCharacterTextSplitter # Lazy
 from typing import List, Dict
+from src.core.config import settings
 
 class DocumentChunker:
-    def __init__(self, chunk_size: int = 1000, chunk_overlap: int = 200):
+    def __init__(self, chunk_size: int = None, chunk_overlap: int = None):
         from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+        # Use settings if not provided
+        if chunk_size is None:
+            chunk_size = settings.CHUNK_SIZE
+        if chunk_overlap is None:
+            chunk_overlap = settings.CHUNK_OVERLAP
+
         self.splitter = RecursiveCharacterTextSplitter(
             chunk_size=chunk_size,
             chunk_overlap=chunk_overlap,
@@ -26,10 +34,13 @@ class DocumentChunker:
             })
         return chunks
 
-def chunk_text(text: str, chunk_size: int = 1000) -> List[str]:
+def chunk_text(text: str, chunk_size: int = None) -> List[str]:
     """
     Standalone function to chunk text (wrapper for compatibility).
     """
+    if chunk_size is None:
+        chunk_size = settings.CHUNK_SIZE
+
     splitter = DocumentChunker(chunk_size=chunk_size, chunk_overlap=0)
     chunks = splitter.chunk_text(text, {})
     return [c["content"] for c in chunks]
