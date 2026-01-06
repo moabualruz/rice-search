@@ -48,8 +48,8 @@ inference:
 models:
   embedding:
     name: jina-embeddings-v3
-    dimension: 1024
-    fallback_dimension: 768
+    dimension: 2560
+    fallback_dimension: 2560
     ollama_model: qwen3-embedding:4b
     batch_size: 32
     normalize: true

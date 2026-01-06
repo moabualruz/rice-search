@@ -23,25 +23,32 @@ Simple multiplication by 100 doesn't work:
 
 ## Solution
 
-Use **sigmoid normalization** to map scores to 0-100%:
+Use **scaled sigmoid normalization** to map scores to 12-98% (with 100% reserved for exceptional matches):
 
 ```typescript
 function formatRelevance(score: number): { label: string; color: string } {
   // Cross-encoder (ms-marco-MiniLM-L-12-v2) returns scores typically in range [-10, +10]
   // Positive scores = relevant, negative = less relevant
-  // We normalize to 0-100% using sigmoid-like mapping
+  // We normalize to 12-98% using scaled sigmoid mapping
 
-  // Map [-10, +10] to [0, 1] using sigmoid function
-  // This gives smooth 0-100% range with 50% at score=0
-  const normalized = 1 / (1 + Math.exp(-score));
-  const pct = Math.round(normalized * 100);
+  // Map to [0, 1] using sigmoid, then scale to [0.12, 0.98] to avoid extreme percentages
+  // Only truly perfect matches (score > 6) should approach 100%
+  const sigmoid = 1 / (1 + Math.exp(-score));
+  const scaled = sigmoid * 0.86 + 0.12; // Maps [0,1] to [0.12, 0.98]
+  let pct = Math.round(scaled * 100);
 
-  // Thresholds based on normalized scores
-  if (normalized >= 0.75)  // score > ~1.1
+  // Only show 100% for exceptional matches (raw score > 6)
+  if (score > 6) pct = 100;
+
+  // Never show less than 12%
+  if (pct < 12) pct = 12;
+
+  // Thresholds based on scaled percentages
+  if (pct >= 75)  // Very relevant
     return { label: `High (${pct}%)`, color: "text-green-400 bg-green-500/20" };
-  if (normalized >= 0.60)  // score > ~0.4
+  if (pct >= 60)  // Relevant
     return { label: `Good (${pct}%)`, color: "text-yellow-400 bg-yellow-500/20" };
-  if (normalized >= 0.40)  // score > -0.4
+  if (pct >= 45)  // Moderately relevant
     return { label: `Fair (${pct}%)`, color: "text-orange-400 bg-orange-500/20" };
   return { label: `Low (${pct}%)`, color: "text-slate-400 bg-slate-500/20" };
 }
@@ -60,34 +67,40 @@ function formatRelevance(score: number): { label: string; color: string } {
 
 ## Score Mapping Examples
 
-Using the actual backend scores from your search results:
+Using the actual backend scores with **scaled sigmoid** (12-98% range):
 
-| Raw Score | Sigmoid | Percentage | Label | Interpretation |
-|-----------|---------|------------|-------|----------------|
-| **0.407** | 0.600 | **60%** | Good | Relevant match |
-| **0.0** | 0.500 | **50%** | Fair | Neutral |
-| **-1.428** | 0.193 | **19%** | Low | Less relevant |
-| **-3.373** | 0.033 | **3%** | Low | Not relevant |
+| Raw Score | Sigmoid | Scaled | Percentage | Label | Interpretation |
+|-----------|---------|--------|------------|-------|----------------|
+| **0.407** | 0.600 | 0.636 | **64%** | Good | Relevant match |
+| **0.0** | 0.500 | 0.550 | **55%** | Good | Neutral/moderate |
+| **-1.428** | 0.193 | 0.286 | **29%** | Low | Less relevant |
+| **-3.373** | 0.033 | 0.148 | **15%** | Low | Not relevant |
 
-**Reference Scale:**
+**Reference Scale (Scaled Sigmoid):**
 
-| Raw Score | Sigmoid | Percentage | Label |
-|-----------|---------|------------|-------|
-| +5.0 | 0.993 | 99% | High |
-| +3.0 | 0.953 | 95% | High |
-| +2.0 | 0.881 | 88% | High |
-| **+1.1** | **0.750** | **75%** | **High** ← threshold |
-| +0.8 | 0.690 | 69% | Good |
-| **+0.4** | **0.599** | **60%** | **Good** ← threshold |
-| +0.2 | 0.550 | 55% | Good |
-| 0.0 | 0.500 | 50% | Fair |
-| -0.2 | 0.450 | 45% | Fair |
-| **-0.4** | **0.401** | **40%** | **Fair** ← threshold |
-| -0.8 | 0.310 | 31% | Low |
-| -1.1 | 0.250 | 25% | Low |
-| -2.0 | 0.119 | 12% | Low |
-| -3.0 | 0.047 | 5% | Low |
-| -5.0 | 0.007 | 1% | Low |
+| Raw Score | Sigmoid | Scaled | Percentage | Label |
+|-----------|---------|--------|------------|-------|
+| +7.0 | 0.999 | 0.979 | 98% → **100%** | High (exceptional) |
+| +5.0 | 0.993 | 0.974 | 97% | High |
+| +3.0 | 0.953 | 0.939 | 94% | High |
+| +2.0 | 0.881 | 0.878 | 88% | High |
+| **+1.1** | **0.750** | **0.765** | **77%** | **High** ← threshold |
+| +0.8 | 0.690 | 0.713 | 71% | Good |
+| **+0.4** | **0.599** | **0.635** | **64%** | **Good** ← threshold |
+| +0.2 | 0.550 | 0.593 | 59% | Good |
+| 0.0 | 0.500 | 0.550 | 55% | Good |
+| -0.2 | 0.450 | 0.507 | 51% | Fair |
+| **-0.4** | **0.401** | **0.465** | **47%** | **Fair** ← threshold |
+| -0.8 | 0.310 | 0.387 | 39% | Low |
+| -1.1 | 0.250 | 0.335 | 34% | Low |
+| -2.0 | 0.119 | 0.222 | 22% | Low |
+| -3.0 | 0.047 | 0.160 | 16% | Low |
+| -5.0 | 0.007 | 0.126 | 13% | Low |
+
+**Key changes:**
+- Minimum percentage is **12%** (never 0%)
+- Maximum is **98%** for normal scores, **100%** only for raw score > 6
+- More meaningful distribution avoiding extremes
 
 ## Visual Example
 

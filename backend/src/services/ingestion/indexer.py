@@ -132,7 +132,10 @@ class Indexer:
     ) -> Dict:
         """
         Ingest a single file with all representations.
-        
+
+        Automatically deletes old chunks for the same file path before indexing.
+        This ensures files are replaced, not duplicated.
+
         Args:
             file_path: Actual path to read file from
             display_path: Client-side path for metadata (client_system_path)
@@ -140,12 +143,53 @@ class Indexer:
             org_id: Organization ID
             minio_bucket: MinIO bucket (if stored)
             minio_object_name: MinIO object key (if stored)
-            
+
         Returns:
             Dict with status and statistics
         """
         import pathlib
-        
+        from qdrant_client.models import Filter, FieldCondition, MatchValue
+
+        # 0. Delete existing chunks for this file path (ensures replacement, not duplication)
+        try:
+            logger.info(f"Checking for existing chunks for file: {display_path}")
+            existing_points = self.qdrant.scroll(
+                collection_name=self.collection_name,
+                scroll_filter=Filter(
+                    must=[
+                        FieldCondition(key="full_path", match=MatchValue(value=display_path)),
+                        FieldCondition(key="org_id", match=MatchValue(value=org_id))
+                    ]
+                ),
+                limit=10000,
+                with_payload=False
+            )[0]
+
+            if existing_points:
+                chunk_ids = [str(p.id) for p in existing_points]
+                logger.info(f"Deleting {len(chunk_ids)} existing chunks for {display_path}")
+
+                # Delete from Qdrant
+                self.qdrant.delete(
+                    collection_name=self.collection_name,
+                    points_selector=Filter(
+                        must=[
+                            FieldCondition(key="full_path", match=MatchValue(value=display_path)),
+                            FieldCondition(key="org_id", match=MatchValue(value=org_id))
+                        ]
+                    )
+                )
+
+                # Delete from Tantivy
+                if self.tantivy_client:
+                    for cid in chunk_ids:
+                        try:
+                            self.tantivy_client.delete(cid)
+                        except Exception as e:
+                            logger.warning(f"Failed to delete chunk {cid} from Tantivy: {e}")
+        except Exception as e:
+            logger.warning(f"Error checking/deleting existing chunks: {e}")
+
         path_obj = pathlib.Path(file_path)
         ast_parser = get_ast_parser()
         doc_id = str(uuid.uuid4())

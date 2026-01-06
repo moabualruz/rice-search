@@ -57,22 +57,29 @@ function getLanguage(filepath?: string): string {
 function formatRelevance(score: number): { label: string; color: string } {
   // Cross-encoder (ms-marco-MiniLM-L-12-v2) returns scores typically in range [-10, +10]
   // Positive scores = relevant, negative = less relevant
-  // We normalize to 0-100% using sigmoid-like mapping
+  // We normalize to 12-98% using scaled sigmoid mapping
 
-  // Map [-10, +10] to [0, 1] using sigmoid function
-  // This gives smooth 0-100% range with 50% at score=0
-  const normalized = 1 / (1 + Math.exp(-score));
-  const pct = Math.round(normalized * 100);
+  // Map to [0, 1] using sigmoid, then scale to [0.12, 0.98] to avoid extreme percentages
+  // Only truly perfect matches (score > 6) should approach 100%
+  const sigmoid = 1 / (1 + Math.exp(-score));
+  const scaled = sigmoid * 0.86 + 0.12; // Maps [0,1] to [0.12, 0.98]
+  let pct = Math.round(scaled * 100);
 
-  // Thresholds based on normalized scores
-  if (normalized >= 0.75)  // score > ~1.1
+  // Only show 100% for exceptional matches (raw score > 6)
+  if (score > 6) pct = 100;
+
+  // Never show less than 12%
+  if (pct < 12) pct = 12;
+
+  // Thresholds based on scaled percentages
+  if (pct >= 75)  // Very relevant
     return { label: `High (${pct}%)`, color: "text-green-400 bg-green-500/20" };
-  if (normalized >= 0.60)  // score > ~0.4
+  if (pct >= 60)  // Relevant
     return {
       label: `Good (${pct}%)`,
       color: "text-yellow-400 bg-yellow-500/20",
     };
-  if (normalized >= 0.40)  // score > -0.4
+  if (pct >= 45)  // Moderately relevant
     return {
       label: `Fair (${pct}%)`,
       color: "text-orange-400 bg-orange-500/20",
@@ -135,10 +142,10 @@ const ResultCard = memo(function ResultCard({ hit, index }: { hit: SearchResult;
         <div className="flex-1 space-y-2 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <h3
-              className="font-medium text-slate-200 text-sm truncate flex-1"
+              className="font-medium text-slate-200 text-sm truncate flex-1 font-mono"
               title={filePath}
             >
-              {filePath.split("/").pop() || filePath}
+              {filePath}
             </h3>
             <div className="flex items-center gap-2 shrink-0">
               <span

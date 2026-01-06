@@ -373,8 +373,13 @@ class MultiRetriever:
         ]
     
     def _format_results(self, fused_results: List[FusedResult]) -> List[Dict]:
-        """Convert FusedResult objects to output dicts."""
-        return [
+        """
+        Convert FusedResult objects to output dicts.
+
+        Deduplicates by full_path, keeping only the highest-scoring chunk per file.
+        """
+        # First convert to dicts
+        results = [
             {
                 "id": r.chunk_id,
                 "chunk_id": r.chunk_id,
@@ -385,6 +390,37 @@ class MultiRetriever:
             }
             for r in fused_results
         ]
+
+        # Deduplicate by full_path (or file_path as fallback)
+        # Keep highest scoring result per unique file
+        seen_paths = {}
+        deduped_results = []
+
+        for result in results:
+            # Get full path (use full_path, or fallback to file_path/client_system_path)
+            path = result.get("full_path") or result.get("file_path") or result.get("client_system_path")
+
+            if not path:
+                # No path info, keep the result anyway
+                deduped_results.append(result)
+                continue
+
+            # Check if we've seen this path
+            if path not in seen_paths:
+                seen_paths[path] = result
+                deduped_results.append(result)
+            else:
+                # Already seen - keep higher score
+                existing_score = seen_paths[path]["score"]
+                new_score = result["score"]
+
+                if new_score > existing_score:
+                    # Replace with higher scoring chunk
+                    deduped_results.remove(seen_paths[path])
+                    seen_paths[path] = result
+                    deduped_results.append(result)
+
+        return deduped_results
 
 
 # Legacy compatibility - wraps MultiRetriever in Retriever interface
