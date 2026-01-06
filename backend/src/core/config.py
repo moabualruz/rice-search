@@ -56,13 +56,17 @@ class Settings(BaseSettings):
     MODEL_TTL_SECONDS: int = 300  # Unload unused models after 5 minutes
     MODEL_AUTO_UNLOAD: bool = True
     
-    # Unified Inference - SGLang-based Model Inference Server
-    # Single service for embeddings, reranking, and LLM chat
-    # Uses OpenAI-compatible API with default model auto-selection
-    INFERENCE_URL: str = "http://localhost:3001"
+    # Ollama - Local inference server with automatic memory management
+    # Handles embeddings, reranking, and LLM with zero config
+    # Never OOMs, queues requests automatically
+    INFERENCE_URL: str = "http://localhost:11434"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
 
-    # Model names (configured in unified-inference service)
-    LLM_MODEL: str = "Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ"  # For RAG chat - optimized for code
+    # Ollama model names
+    EMBEDDING_MODEL_NAME: str = "qwen3-embedding:4b"  # Code-focused embedding with 100+ langs
+    LLM_MODEL: str = "qwen2.5-coder:1.5b"  # For RAG chat - optimized for code
+    # Reranking uses local cross-encoder (ms-marco-MiniLM-L-12-v2) via sentence-transformers
+    # Ollama doesn't natively support rerankers
     
     # ==========================================================================
     # TRIPLE RETRIEVAL SYSTEM

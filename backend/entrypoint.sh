@@ -29,5 +29,11 @@ echo "========================================="
 echo "Starting application..."
 echo "========================================="
 
+# Initialize Ollama models if starting the API server
+if [[ "$1" == "uvicorn" ]]; then
+    echo "Initializing Ollama models..."
+    python scripts/init_ollama.py
+fi
+
 # Run the actual command
 exec "$@"

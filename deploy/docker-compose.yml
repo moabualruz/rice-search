@@ -38,53 +38,19 @@ services:
       - rice-net
 
   # ---------------------------------------------------------------------------
-  # UNIFIED INFERENCE - Python Router/Orchestrator for SGLang Backends
-  # Manages multiple SGLang model instances with dynamic lifecycle
+  # OLLAMA - Automatic Memory Management Inference Server
+  # Handles LLM, embeddings with GPU/CPU auto-switching, no OOM issues
   # ---------------------------------------------------------------------------
-  unified-inference:
-    build:
-      context: ./unified-inference
-      dockerfile: Dockerfile
+  ollama:
+    image: ollama/ollama:latest
     ports:
-      - "3001:3001"      # Router API
-      - "30001-30020:30001-30020"  # SGLang backends (dynamic allocation)
+      - "11434:11434"
     volumes:
-      - ./unified-inference:/app  # Source code (hot reload)
-      - ../data/hf_cache:/root/.cache/huggingface  # HuggingFace model cache
-      - pip-cache-unified-inference:/root/.cache/pip  # Pip cache for unified-inference
+      - ../data/ollama:/root/.ollama  # Model storage
     environment:
-      # Execution mode (gpu or cpu)
-      - EXECUTION_MODE=${EXECUTION_MODE:-gpu}
-
-      # Router configuration
-      - ROUTER_HOST=0.0.0.0
-      - ROUTER_PORT=3001
-
-      # SGLang backend configuration (ENFORCED)
-      - SGLANG_MAX_RUNNING_REQUESTS=3
-      - SGLANG_MAX_TOTAL_TOKENS=0  # Elastic memory
-
-      # Model registry
-      - MODELS_CONFIG_PATH=/app/config/models.yaml
-
-      # Lifecycle management
-      - DEFAULT_IDLE_TIMEOUT=${DEFAULT_IDLE_TIMEOUT:-300}
-      - HEALTH_CHECK_INTERVAL=10
-      - STARTUP_TIMEOUT=300
-
-      # CPU offload (GPU mode only)
-      - ENABLE_CPU_OFFLOAD=${ENABLE_CPU_OFFLOAD:-true}
-      - OFFLOAD_QUEUE_THRESHOLD=3
-
-      # HuggingFace
-      - HF_HOME=/root/.cache/huggingface
-      - HF_TOKEN=${HF_TOKEN}
-
-      # GPU selection
-      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
-
-      # Logging
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - OLLAMA_NUM_PARALLEL=4  # Concurrent requests
+      - OLLAMA_MAX_LOADED_MODELS=3  # Keep 3 models in memory
+      - OLLAMA_KEEP_ALIVE=5m  # Keep models loaded for 5 minutes
     deploy:
       resources:
         reservations:
@@ -92,15 +58,15 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 120s
     restart: unless-stopped
     networks:
       - rice-net
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # TANTIVY - Rust BM25 Lexical Search Service
@@ -143,7 +109,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - INFERENCE_URL=http://unified-inference:3001  # Router with auto model selection
+      - INFERENCE_URL=http://ollama:11434  # Ollama with automatic memory management
+      - OLLAMA_BASE_URL=http://ollama:11434
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
       - RERANK_MODE=${RERANK_MODE:-rerank}
@@ -154,7 +121,7 @@ services:
     depends_on:
       - redis
       - qdrant
-      - unified-inference
+      - ollama
     networks:
       - rice-net
 
@@ -167,7 +134,8 @@ services:
       - REDIS_URL=redis://redis:6379/0
       - QDRANT_URL=http://qdrant:6333
       - MINIO_ENDPOINT=minio:9000
-      - INFERENCE_URL=http://unified-inference:3001  # Router with auto model selection
+      - INFERENCE_URL=http://ollama:11434  # Ollama with automatic memory management
+      - OLLAMA_BASE_URL=http://ollama:11434
       - TANTIVY_URL=http://tantivy:3002
       - SHARED_TMP_DIR=/shared/ingest
       - RERANK_MODE=${RERANK_MODE:-rerank}
@@ -178,7 +146,7 @@ services:
     depends_on:
       - redis
       - qdrant
-      - unified-inference
+      - ollama
     networks:
       - rice-net
 
@@ -230,7 +198,6 @@ networks:
     driver: bridge
 
 volumes:
-  pip-cache-unified-inference:  # Separate pip cache for Unified Inference (SGLang, PyTorch, SentenceTransformers)
   pip-cache-backend:  # Separate pip cache for Backend (FastAPI, LangChain, etc.)
   npm-cache:          # Persistent npm download cache for frontend
 

@@ -48,7 +48,8 @@
       "Bash(ricesearch index:*)",
       "Bash(timeout 90 bash -c 'curl -s -X POST http://localhost:8000/api/v1/search/query -H \"\"Content-Type: application/json\"\" -d \"\"{\\\\\"\"query\\\\\"\": \\\\\"\"SGLang backend\\\\\"\", \\\\\"\"limit\\\\\"\": 3}\"\" 2>&1')",
       "Bash(timeout 120 bash -c:*)",
-      "Bash(timeout:*)"
+      "Bash(timeout:*)",
+      "Bash(ricesearch --version:*)"
     ]
   }
 }
