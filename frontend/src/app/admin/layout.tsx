@@ -6,8 +6,7 @@ import { usePathname } from 'next/navigation';
 
 const navItems = [
   { href: '/admin', label: 'Dashboard', icon: '📊' },
-  { href: '/admin/models', label: 'Models', icon: '🤖' },
-  // { href: '/admin/config', label: 'Config', icon: '⚙️' }, // Deprecated, moved to Dashboard
+  // Models page removed - will be redone based on Ollama in future version
   { href: '/admin/users', label: 'Users', icon: '👥', enterprise: true },
   { href: '/admin/observability', label: 'Observability', icon: '📈' },
 ];

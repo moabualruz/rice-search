@@ -9,12 +9,14 @@ from pydantic import BaseModel
 from typing import Optional, List, Literal
 from uuid import uuid4
 import psutil
+import logging
 from datetime import datetime
-from huggingface_hub import HfApi
 
 from src.core.config import settings
 from src.services.admin.admin_store import get_admin_store
 from src.api.deps import requires_role, get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -55,242 +57,32 @@ class UserUpdate(BaseModel):
 
 
 # ============== Models Endpoints ==============
-
-@router.get("/models/search")
-async def search_models(
-    q: str, 
-    type: Literal["embedding", "reranker", "sparse", "classification"] = "embedding",
-    limit: int = 20
-):
-    """
-    Search Hugging Face Hub for compatible models.
-    """
-    api = HfApi()
-    
-    # Define filters based on type
-    filters = []
-    
-    
-    if type == "embedding":
-        # Must be compatible with sentence-transformers
-        filters.append("sentence-transformers")
-    elif type == "reranker":
-        # Industry standard: Must be a cross-encoder or explicitly tagged as reranker
-        # We don't want generic BERT models here.
-        # Note: Some older models might miss tags, but for safety in Admin UI, 
-        # we enforce this to avoid user frustration.
-        pass # We handle logical OR in the code below since HF API `tags` is AND
-    elif type == "classification":
-        # For Query Understanding (CodeBERT etc)
-        pass 
-        
-    # Execute search
-    try:
-        # Search args
-        search_args = {
-            "search": q,
-            "limit": limit,
-            "sort": "downloads",
-            "direction": -1,
-        }
-        
-        if type == "embedding":
-             search_args["library"] = "sentence-transformers"
-        
-        models = api.list_models(**search_args)
-        
-        results = []
-        for m in models:
-            # Client-side filtering for complex logic (HF API tags is strict AND)
-            
-            # 1. Reranker Logic: Must have 'cross-encoder' tag OR 'reranker' in name/tags
-            if type == "reranker":
-                tags = m.tags or []
-                is_cross_encoder = "cross-encoder" in tags
-                is_reranker_tag = "reranker" in tags
-                is_reranker_name = "reranker" in m.modelId.lower()
-                
-                if not (is_cross_encoder or is_reranker_tag or is_reranker_name):
-                    continue
-            
-            # 2. Sparse Logic: Look for SPLADE or sparse keywords
-            if type == "sparse":
-                tags = m.tags or []
-                name = m.modelId.lower()
-                is_splade = "splade" in name or "splade" in tags
-                is_sparse = "sparse" in name or "sparse" in tags
-                
-                if not (is_splade or is_sparse):
-                    continue
-
-            # 3. Classification Logic: Look for text-classification
-            if type == "classification":
-                tags = m.tags or []
-                name = m.modelId.lower()
-                is_cls = "text-classification" in tags
-                is_bert = "bert" in name or "roberta" in name
-                
-                if not (is_cls or is_bert):
-                    continue
-
-            results.append({
-                "id": m.modelId,
-                "name": m.modelId, # simplified
-                "downloads": m.downloads,
-                "likes": m.likes,
-                "tags": m.tags
-            })
-            
-        return {"models": results}
-    except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Hugging Face API Error: {str(e)}")
-
-
-# Helper
-def get_protected_models():
-    # Helper to slugify
-    def slugify(name: str) -> str:
-        return name.replace("/", "-").lower()
-
-    return {
-        slugify(settings.EMBEDDING_MODEL), 
-        slugify(settings.SPARSE_MODEL),
-        slugify(settings.RERANK_MODEL),
-        slugify(settings.QUERY_UNDERSTANDING_MODEL)
-    }
+# NOTE: Model management will be redone based on Ollama in future version
+# For now, return Ollama models directly
 
 @router.get("/models")
 async def list_models():
-    """List all models (persisted to Redis)."""
-    store = get_admin_store()
-    models = store.get_models()
-    protected_ids = get_protected_models()
-    
-    # Enrich with protected and loaded status
-    from src.services.model_manager import get_model_manager
-    manager = get_model_manager()
-    
-    result = []
-    for m in models.values():
-        m_copy = m.copy()
-        # Use model.protected if set, otherwise check against protected list
-        m_copy["protected"] = m.get("protected", False) or m["id"] in protected_ids
-        
-        # Get runtime status using model name (not id/slug)
-        model_name = m.get("name", m["id"])
-        status = manager.get_model_status(model_name)
-        m_copy["loaded"] = status.get("loaded", False)
-        
-        result.append(m_copy)
-        
-    return {"models": result}
+    """List Ollama models."""
+    try:
+        from src.services.inference import get_inference_client
+        client = get_inference_client()
+        models_data = await client.get_models()
 
+        # Format for frontend
+        models = []
+        for m in models_data.get("models", []):
+            models.append({
+                "id": m.get("name", ""),
+                "name": m.get("name", ""),
+                "size": m.get("size", 0),
+                "modified": m.get("modified_at", ""),
+                "protected": m.get("name") in [settings.EMBEDDING_MODEL_NAME, settings.LLM_MODEL]
+            })
 
-@router.get("/models/{model_id:path}")
-async def get_model(model_id: str):
-    """Get a specific model."""
-    store = get_admin_store()
-    models = store.get_models()
-    if model_id not in models:
-        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
-    
-    model = models[model_id].copy()
-    model["protected"] = model_id in get_protected_models()
-    return model
-
-
-@router.put("/models/{model_id:path}", dependencies=[Depends(requires_role("admin"))])
-async def update_model(model_id: str, updates: dict):
-    """
-    Update a model configuration and apply changes at runtime.
-    Supports toggling gpu_enabled and active status.
-    Enforces 'Single Active Model per Type' logic.
-    """
-    store = get_admin_store()
-    models = store.get_models()
-    
-    if model_id not in models:
-        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
-    
-    old_model = models[model_id]
-    
-    # Check if gpu_enabled or active changed
-    gpu_changed = "gpu_enabled" in updates and updates["gpu_enabled"] != old_model.get("gpu_enabled")
-    active_changed = "active" in updates and updates["active"] != old_model.get("active")
-    
-    if active_changed and updates["active"] is True:
-        # Enforce Single Active Model per Type
-        model_type = old_model.get("type", "embedding")
-        for mid, m in models.items():
-            if mid != model_id and m.get("type") == model_type and m.get("active"):
-                # Deactivate peer
-                m["active"] = False
-                store.set_model(mid, m)
-                
-                # Unload peer from runtime if loaded
-                from src.services.model_manager import get_model_manager
-                get_model_manager().unload_model(mid)
-
-    # Update in store
-    updated = {**old_model, **updates}
-    store.set_model(model_id, updated)
-    
-    # Apply runtime changes
-    from src.services.model_manager import get_model_manager
-    manager = get_model_manager()
-    
-    if gpu_changed or active_changed:
-        # Unload model to force reload with new settings
-        manager.unload_model(model_id)
-        
-    # Return enriched model
-    updated["protected"] = model_id in get_protected_models()
-    return {"message": "Model updated", "model": updated}
-
-
-@router.post("/models", dependencies=[Depends(requires_role("admin"))])
-async def add_model(model: dict):
-    """Add a new model (persisted to Redis)."""
-    store = get_admin_store()
-    model_id = model.get("id") or model.get("name", "").replace("/", "-").lower()
-    
-    models = store.get_models()
-    if model_id in models:
-        raise HTTPException(status_code=400, detail=f"Model {model_id} already exists")
-    
-    new_model = {
-        "id": model_id,
-        "name": model.get("name", model_id),
-        "type": model.get("type", "embedding"),
-        "active": model.get("active", False),
-        "gpu_enabled": model.get("gpu_enabled", False)
-    }
-    
-    store.set_model(model_id, new_model)
-    
-    new_model["protected"] = model_id in get_protected_models()
-    return {"message": f"Model {model_id} added", "model": new_model}
-
-
-@router.delete("/models/{model_id:path}", dependencies=[Depends(requires_role("admin"))])
-async def delete_model(model_id: str):
-    """Delete a model (persisted to Redis)."""
-    store = get_admin_store()
-    models = store.get_models()
-    
-    if model_id not in models:
-        raise HTTPException(status_code=404, detail=f"Model {model_id} not found")
-    
-    # Don't allow deleting core models
-    protected_models = get_protected_models()
-    
-    # Check if model_id matches any protected model (or is a known alias)
-    # Also strict check for system default ID
-    if model_id in protected_models:
-        raise HTTPException(status_code=400, detail=f"Cannot delete system default model: {model_id}")
-    
-    store.delete_model(model_id)
-    return {"message": f"Model {model_id} deleted"}
+        return {"models": models}
+    except Exception as e:
+        logger.error(f"Failed to list Ollama models: {e}")
+        return {"models": []}
 
 
 # ============== Config Endpoints ==============
@@ -556,93 +348,41 @@ async def toggle_mcp():
 @router.get("/inference/status")
 async def get_inference_status():
     """
-    Get health status of all inference servers (TEI, Triton, vLLM).
+    Get health status of Ollama inference server.
     Used by Admin UI to display model serving infrastructure status.
     """
     status = {
-        "use_inference_servers": settings.USE_INFERENCE_SERVERS,
         "servers": {}
     }
-    
-    # TEI Embeddings
+
+    # Ollama (Embeddings + LLM)
     try:
-        from src.services.inference import get_tei_embed_client
-        client = get_tei_embed_client()
-        healthy = client.health_check()
-        status["servers"]["tei_embeddings"] = {
-            "url": settings.TEI_EMBED_REST_URL,
+        from src.services.inference import get_inference_client
+        client = get_inference_client()
+        healthy = await client.health_check()
+        models = await client.get_models() if healthy else {}
+
+        status["servers"]["ollama"] = {
+            "url": settings.OLLAMA_BASE_URL,
             "status": "healthy" if healthy else "down",
-            "model_type": "dense_embedding"
+            "model_types": ["embedding", "llm"],
+            "models": {
+                "embedding": settings.EMBEDDING_MODEL_NAME,
+                "llm": settings.LLM_MODEL
+            },
+            "available_models": [m.get("name") for m in models.get("models", [])]
         }
     except Exception as e:
-        status["servers"]["tei_embeddings"] = {
-            "url": settings.TEI_EMBED_REST_URL,
+        status["servers"]["ollama"] = {
+            "url": settings.OLLAMA_BASE_URL,
             "status": "error",
             "error": str(e)
         }
-    
-    # TEI Reranker
-    try:
-        from src.services.inference import get_tei_rerank_client
-        client = get_tei_rerank_client()
-        healthy = client.health_check()
-        status["servers"]["tei_reranker"] = {
-            "url": settings.TEI_RERANK_REST_URL,
-            "status": "healthy" if healthy else "down",
-            "model_type": "reranker"
-        }
-    except Exception as e:
-        status["servers"]["tei_reranker"] = {
-            "url": settings.TEI_RERANK_REST_URL,
-            "status": "error",
-            "error": str(e)
-        }
-    
-    # Triton (SPLADE)
-    try:
-        from src.services.inference import get_triton_client
-        client = get_triton_client()
-        healthy = client.health_check()
-        status["servers"]["triton_splade"] = {
-            "url": f"grpc://{settings.TRITON_URL}",
-            "status": "healthy" if healthy else "down",
-            "model_type": "sparse_embedding"
-        }
-    except Exception as e:
-        status["servers"]["triton_splade"] = {
-            "url": f"grpc://{settings.TRITON_URL}",
-            "status": "error",
-            "error": str(e)
-        }
-    
-    # vLLM (RAG Chat)
-    try:
-        from src.services.inference import get_vllm_client
-        client = get_vllm_client()
-        healthy = client.health_check()
-        model_info = client.get_model_info() if healthy else None
-        status["servers"]["vllm"] = {
-            "url": settings.VLLM_URL,
-            "status": "healthy" if healthy else "down",
-            "model_type": "llm",
-            "model": model_info.get("data", [{}])[0].get("id") if model_info else None
-        }
-    except Exception as e:
-        status["servers"]["vllm"] = {
-            "url": settings.VLLM_URL,
-            "status": "error",
-            "error": str(e)
-        }
-    
+
     # Overall status
-    statuses = [s.get("status") for s in status["servers"].values()]
-    if all(s == "healthy" for s in statuses):
-        status["overall"] = "healthy"
-    elif any(s == "healthy" for s in statuses):
-        status["overall"] = "partial"
-    else:
-        status["overall"] = "down"
-    
+    ollama_status = status["servers"]["ollama"].get("status")
+    status["overall"] = "healthy" if ollama_status == "healthy" else "down"
+
     return status
 
 

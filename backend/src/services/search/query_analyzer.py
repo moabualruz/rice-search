@@ -1,8 +1,8 @@
 """
-Query Analyzer Service - vLLM-based.
+Query Analyzer Service - Ollama-based.
 
-ALL query classification is delegated to vLLM (CodeLlama).
-Uses pattern matching for fast analysis, with vLLM for complex queries.
+ALL query classification is delegated to Ollama (qwen2.5-coder:1.5b).
+Uses pattern matching for fast analysis, with Ollama for complex queries.
 No in-process model loading - backend only orchestrates service calls.
 """
 
@@ -143,30 +143,43 @@ def analyze_query(query: str, use_llm: bool = False) -> QueryAnalysis:
 
 def classify_with_llm(query: str) -> Optional[QueryIntent]:
     """
-    Classify query intent using vLLM (CodeLlama).
-    
-    Uses vLLM's chat API with a classification prompt.
-    
+    Classify query intent using Ollama LLM (qwen2.5-coder:1.5b).
+
+    Uses Ollama's chat API with a classification prompt.
+
     Raises:
-        RuntimeError: If vLLM service is unavailable
+        RuntimeError: If Ollama service is unavailable
     """
-    from src.services.inference import get_vllm_client
-    
+    from src.services.inference import get_inference_client
+
     categories = [intent.value for intent in QueryIntent]
-    
+
     try:
-        client = get_vllm_client()
-        result = client.classify_query(query, categories)
-        
+        client = get_inference_client()
+
+        # Build classification prompt
+        prompt = f"""Classify the intent of this search query: "{query}"
+
+Categories: {', '.join(categories)}
+
+Respond with ONLY the category name, nothing else."""
+
+        import asyncio
+        result = asyncio.run(client.chat(
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=10,
+            temperature=0.0
+        ))
+
         # Parse result
         result_lower = result.lower().strip()
         for intent in QueryIntent:
             if intent.value in result_lower:
                 return intent
-        
+
         return None
     except Exception as e:
-        logger.error(f"vLLM classification failed: {e}")
+        logger.error(f"LLM classification failed: {e}")
         raise RuntimeError(f"Query classification service unavailable: {e}")
 
 
