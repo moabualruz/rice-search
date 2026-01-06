@@ -1,0 +1,4 @@
+{
+  "query": "test query",
+  "documents": ["doc 1", "doc 2"]
+}

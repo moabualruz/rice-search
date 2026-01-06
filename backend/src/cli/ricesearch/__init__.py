@@ -1,0 +1,1 @@
+# Rice Search Client package

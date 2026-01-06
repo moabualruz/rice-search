@@ -2,314 +2,280 @@
 
 <img src=".branding/logo.svg" alt="Rice Search" width="120">
 
-# **🔍Rice Search Platform🔎**
+# Rice Search
 
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
-**Intelligent hybrid code search with adaptive retrieval**
+**Intelligent hybrid search platform with adaptive retrieval**
+
+[Getting Started](docs/getting-started.md) • [Documentation](docs/README.md) • [API Reference](docs/api.md) • [CLI Guide](docs/cli.md)
 
 </div>
 
 ## Overview
 
-Rice Search is a fully local, self-hosted code search platform combining BM25 keyword search with semantic embeddings. Unlike static hybrid search, Rice Search uses **retrieval intelligence** to adapt its search strategy based on query characteristics.
+Rice Search is a **fully local, self-hosted** hybrid search platform that combines lexical keyword search (BM25) with semantic vector search. Built for code search and document retrieval, it uses intelligent query routing to automatically select the optimal search strategy based on query intent.
+
+### Why Rice Search?
+
+- **🎯 Adaptive Retrieval** - Automatically routes queries to the best search strategy (sparse-only, balanced, dense-heavy, or deep-rerank)
+- **🔒 Fully Local** - All data and processing stays on your machine, no external API calls
+- **🧠 Multi-Modal Search** - Combines BM25, SPLADE sparse embeddings, and BM42 hybrid vectors
+- **🌳 AST-Aware** - Understands code structure across 7+ languages (Python, JS/TS, Go, Rust, Java, C++)
+- **⚡ Fast CLI** - Rust-based command-line tool with file watching and auto-indexing
+- **🔌 MCP Support** - Integrates with Claude Desktop and other AI assistants via Model Context Protocol
 
 ## Key Features
 
-### Intelligent Retrieval
-- **Intent Classification** - Detects query type (navigational, factual, exploratory, analytical)
-- **Adaptive Strategy** - Routes queries to optimal retrieval path:
-  - `sparse-only` - Fast BM25 for exact lookups
-  - `balanced` - Standard hybrid for general queries
-  - `dense-heavy` - Semantic-focused for concept searches
-  - `deep-rerank` - Multi-pass reranking for complex queries
-- **Multi-Pass Reranking** - Two-stage neural reranking with early exit for efficiency
-- **Query Expansion** - Automatic synonym expansion for better recall
+### Intelligent Search
 
-### Post-Processing Pipeline
-- **Semantic Deduplication** - Removes near-duplicate chunks (configurable threshold)
-- **MMR Diversity** - Maximal Marginal Relevance ensures varied results
-- **File Aggregation** - Groups chunks by file with representative selection
+- **Triple Retrieval System**
+  - BM25 lexical search via Tantivy (Rust)
+  - SPLADE learned sparse embeddings
+  - BM42 Qdrant-native hybrid vectors
+  - Results fused with Reciprocal Rank Fusion (RRF)
 
-### Infrastructure
-- **Fully Local** - No external API calls, all data stays on your machine
-- **GPU Optional** - CPU by default, GPU acceleration available
-- **MCP Support** - Model Context Protocol for AI assistant integration
-- **ricegrep CLI** - Fast command-line search with watch mode
+- **Adaptive Query Routing**
+  - Intent classification (navigational, factual, exploratory, analytical)
+  - Automatic strategy selection based on query characteristics
+  - Configurable per-query retriever toggling
+
+- **Advanced Ranking**
+  - Two-stage reranking with cross-encoder
+  - Optional LLM-based reranking for complex queries
+  - Deduplication by file path (highest-scoring chunk per file)
+
+### Code-Aware Indexing
+
+- **AST Parsing** with Tree-sitter - Semantic chunking at function/class boundaries
+- **Multi-Language Support** - Python, JavaScript, TypeScript, Go, Rust, Java, C++
+- **Smart Chunking** - 1000 chars with 200 char overlap, preserves context
+- **File Path Indexing** - Search by filename or full path
+
+### Developer Experience
+
+- **REST API** - FastAPI with OpenAPI documentation
+- **Web UI** - Modern Next.js 14 interface with code highlighting
+- **Rust CLI** (`ricesearch`) - Fast search and file watching
+- **Python CLI** - Embedded in backend for advanced use cases
+- **Docker Compose** - One-command deployment with all services
+
+## Quick Start
+
+### Prerequisites
+
+- **Docker & Docker Compose** - For running services
+- **10GB disk space** - For vector database and model cache
+- **8GB RAM minimum** - 16GB recommended
+
+### 1. Clone and Start
+
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/rice-search.git
+cd rice-search
+
+# Start all services
+make up
+
+# View logs
+make logs
+```
+
+Services will start on:
+- **Frontend**: http://localhost:3000
+- **API**: http://localhost:8000
+- **API Docs**: http://localhost:8000/docs
+
+### 2. Install CLI
+
+```bash
+# Install the ricesearch CLI tool
+cd backend
+pip install -e .
+
+# Verify installation
+ricesearch --version
+```
+
+### 3. Index Your Code
+
+```bash
+# Index the current directory
+ricesearch index ./backend
+
+# Or watch for changes (auto-reindex)
+ricesearch watch ./backend --org-id myproject
+```
+
+### 4. Search
+
+**Via CLI:**
+```bash
+# Search indexed code
+ricesearch search "authentication" --limit 10
+
+# Search for specific files
+ricesearch search "config.yaml"
+```
+
+**Via Web UI:**
+Open http://localhost:3000 and enter your search query.
+
+**Via API:**
+```bash
+curl -X POST http://localhost:8000/api/v1/search/query \
+  -H "Content-Type: application/json" \
+  -d '{"query": "user authentication", "limit": 5, "mode": "search"}'
+```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Clients: Web UI (:3000) | ricegrep CLI | MCP | REST API    │
-└─────────────────────────────┬───────────────────────────────┘
-                              │
-                    ┌─────────▼─────────┐
-                    │    Rice API       │
-                    │  (NestJS :8080)   │
-                    │                   │
-                    │ ┌───────────────┐ │
-                    │ │  Intelligence │ │  ← Intent + Strategy
-                    │ │    Layer      │ │
-                    │ └───────────────┘ │
-                    │ ┌───────────────┐ │
-                    │ │   Retrieval   │ │  ← Hybrid Search
-                    │ │    Layer      │ │
-                    │ └───────────────┘ │
-                    │ ┌───────────────┐ │
-                    │ │   PostRank    │ │  ← Dedup + Diversity
-                    │ │   Pipeline    │ │
-                    │ └───────────────┘ │
-                    └─────────┬─────────┘
-                              │
-        ┌─────────────────────┼─────────────────────┐
-        │                     │                     │
-  ┌─────▼─────┐       ┌───────▼───────┐     ┌──────▼──────┐
-  │  Tantivy  │       │    Milvus     │     │  Infinity   │
-  │  (BM25)   │       │  (Vectors)    │     │ (Embed/Rank)│
-  └───────────┘       └───────────────┘     └─────────────┘
+│ FRONTEND (Next.js)              │ BACKEND API (FastAPI)     │
+│ Port: 3000                      │ Port: 8000                │
+└─────────────────────────────────┴───────────────────────────┘
+                         │
+┌─────────────────────────────────────────────────────────────┐
+│ INFRASTRUCTURE                                              │
+│  Qdrant (6333)  Redis (6379)  MinIO (9000/9001)            │
+└─────────────────────────────────────────────────────────────┘
+                         │
+┌─────────────────────────────────────────────────────────────┐
+│ INFERENCE SERVICES                                          │
+│  Ollama (11434)  - Embeddings/Rerank/LLM                   │
+│  Tantivy (3002)  - BM25 Rust Service                       │
+└─────────────────────────────────────────────────────────────┘
+                         │
+┌─────────────────────────────────────────────────────────────┐
+│ WORKERS                                                     │
+│  Celery Worker - Async indexing tasks                      │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Quick Start
+**Technology Stack:**
+- **Backend**: Python 3.12, FastAPI, Celery
+- **Frontend**: Next.js 14, React 18, TypeScript
+- **Search**: Tantivy (Rust), Qdrant, SPLADE, BM42
+- **Inference**: Ollama (qwen3-embedding:4b, qwen2.5-coder:1.5b)
+- **Storage**: Redis, MinIO, Qdrant
+- **CLI**: Rust (clap, tokio, notify)
 
-### Prerequisites
-- Docker & Docker Compose
-- 8GB+ RAM (16GB recommended)
-- For GPU mode: NVIDIA GPU + nvidia-container-toolkit
-
-### 1. Setup & Start
-
-```bash
-git clone <repo> && cd rice-search
-cp .env.example .env                    # Defaults to local dev mode
-```
-
-**Option A: Local Development** (default - run API/WebUI locally with hot reload):
-```bash
-docker-compose up -d                    # Starts infrastructure only
-cd api && bun install && bun run start:local     # API on :8080
-cd web-ui && bun install && bun run dev:local    # Web UI on :3000
-```
-
-**Option B: Full Docker Platform** (everything in containers):
-```bash
-docker-compose --profile gpu --profile full up -d  # GPU mode
-# OR
-docker-compose --profile cpu --profile full up -d  # CPU mode (no GPU)
-# Wait ~3 minutes for model downloads on first run
-```
-
-### 2. Index Your Code
-
-```bash
-# Using Python script
-python scripts/reindex.py /path/to/your/repo
-
-# Or via API
-curl -X POST http://localhost:8080/v1/stores/default/index \
-  -H "Content-Type: application/json" \
-  -d '{"files": [{"path": "src/main.py", "content": "..."}]}'
-```
-
-### 3. Search
-
-**Web UI**: http://localhost:3000
-
-**API**:
-```bash
-curl -X POST http://localhost:8080/v1/stores/default/search \
-  -H "Content-Type: application/json" \
-  -d '{"query": "authentication handler"}'
-```
-
-**ricegrep CLI**:
-```bash
-cd ricegrep && npm install -g .
-ricegrep "auth middleware"
-```
-
-## Search API
+## Project Structure
 
 ```
-POST /v1/stores/{store}/search
+rice-search/
+├── backend/           # Python FastAPI backend
+│   ├── src/
+│   │   ├── api/      # REST API endpoints
+│   │   ├── services/ # Business logic (search, ingestion, inference)
+│   │   ├── cli/      # CLI tools (ricesearch, MCP)
+│   │   ├── worker/   # Celery worker
+│   │   └── core/     # Configuration, settings manager
+│   ├── tests/        # Unit, integration, E2E tests
+│   └── settings.yaml # Centralized configuration
+├── frontend/         # Next.js 14 web application
+│   └── src/
+│       ├── app/      # Pages (search, admin, stores)
+│       └── components/ # UI components
+├── rust-tantivy/     # Rust BM25 search service
+│   └── src/          # Axum HTTP server + Tantivy
+├── client/           # Rust CLI client (alternative to Python CLI)
+│   └── src/          # Search, watch commands
+├── deploy/           # Docker orchestration
+│   ├── docker-compose.yml           # Main services
+│   └── docker-compose.enterprise.yml # Keycloak, Jaeger
+├── docs/             # Documentation (you are here)
+└── Makefile          # Build commands
 ```
 
-```json
-{
-  "query": "search text",
-  "top_k": 20,
-  "filters": {
-    "path_prefix": "src/",
-    "languages": ["typescript"]
-  },
-  
-  "sparse_weight": 0.5,
-  "dense_weight": 0.5,
-  "enable_reranking": true,
-  
-  "enable_dedup": true,
-  "dedup_threshold": 0.85,
-  "enable_diversity": true,
-  "diversity_lambda": 0.7,
-  "group_by_file": false,
-  "enable_expansion": true
-}
-```
+## Documentation
 
-Response includes intelligence metadata:
-```json
-{
-  "results": [...],
-  "intelligence": {
-    "intent": "exploratory",
-    "difficulty": "medium", 
-    "strategy": "dense-heavy",
-    "confidence": 0.85
-  },
-  "reranking": {
-    "pass1_applied": true,
-    "pass2_applied": false,
-    "early_exit": true
-  },
-  "postrank": {
-    "dedup": { "removed": 5 },
-    "diversity": { "avg_diversity": 0.72 }
-  }
-}
-```
+| Document | Description |
+|----------|-------------|
+| [Getting Started](docs/getting-started.md) | Installation, setup, first search |
+| [Architecture](docs/architecture.md) | System design, components, data flow |
+| [Configuration](docs/configuration.md) | Settings reference, environment variables |
+| [CLI Guide](docs/cli.md) | Command-line usage (`ricesearch`) |
+| [API Reference](docs/api.md) | REST API endpoints |
+| [Development](docs/development.md) | Dev workflow, testing, debugging |
+| [Deployment](docs/deployment.md) | Production deployment, scaling |
+| [Testing](docs/testing.md) | Unit, integration, E2E tests |
+| [Troubleshooting](docs/troubleshooting.md) | Common issues, debugging |
+| [Security](docs/security.md) | Authentication, authorization |
 
-## ricegrep CLI
+**Full documentation index:** [docs/README.md](docs/README.md)
 
-```bash
-ricegrep "query"              # Basic search
-ricegrep -k 50 "query"        # More results
-ricegrep --no-rerank "query"  # Skip reranking
-ricegrep --no-dedup "query"   # Keep duplicates
-ricegrep --group-by-file      # Group results by file
-ricegrep -v "query"           # Verbose with stats
-ricegrep watch                # Watch mode for indexing
-ricegrep mcp                  # MCP server mode
-```
-
-## MCP Integration
-
-Rice Search supports the Model Context Protocol for AI assistant integration.
-
-**Available Tools:**
-- `code_search` - Hybrid search with all options
-- `index_files` - Index code files
-- `delete_files` - Remove files from index
-- `list_stores` - List search indexes
-- `get_store_stats` - Index statistics
-
-**Configuration:**
-```json
-{
-  "mcpServers": {
-    "rice-search": {
-      "url": "http://localhost:8080/mcp",
-      "transport": "http"
-    }
-  }
-}
-```
-
-Or use ricegrep as MCP server:
-```bash
-ricegrep install-claude-code   # Auto-configure for Claude
-ricegrep install-opencode      # Auto-configure for OpenCode
-```
-
-## GPU vs CPU Mode
-
-The `.env.example` defaults to GPU dev mode (infrastructure only, for local development).
-
-```bash
-# GPU dev mode (default) - run API/WebUI locally
-docker-compose up -d
-
-# GPU full mode - everything in Docker
-docker-compose --profile gpu --profile full up -d
-
-# CPU full mode - works everywhere, slower embeddings
-docker-compose --profile cpu --profile full up -d
-```
-
-**GPU Requirements:** NVIDIA GPU + nvidia-container-toolkit
-
-## Configuration
-
-### Models (via .env)
-
-```bash
-# Embeddings (1536d, code-optimized)
-EMBED_MODEL=jinaai/jina-code-embeddings-1.5b
-
-# Reranker (fast, code-aware)
-RERANK_MODEL=jinaai/jina-reranker-v2-base-multilingual
-
-# Dimension must match embedding model
-EMBEDDING_DIM=1536
-```
-
-### Service Ports
+## Service Ports
 
 | Service | Port | Description |
 |---------|------|-------------|
-| API | 8080 | REST API + MCP |
-| Web UI | 3000 | Search interface |
-| Milvus | 19530 | Vector database |
-| MinIO | 9001 | Storage console |
+| Frontend | 3000 | Web UI |
+| Backend API | 8000 | REST API |
+| Ollama | 11434 | LLM & embeddings |
+| Tantivy | 3002 | BM25 search |
+| Qdrant | 6333 | Vector database |
+| Redis | 6379 | Task queue & cache |
+| MinIO | 9000 | Object storage |
+| MinIO Console | 9001 | Admin UI |
 
-## Data Persistence
+## Configuration Highlights
 
-All data in `./data/`:
-```
-./data/
-├── milvus/         # Vector index
-├── tantivy/        # BM25 index  
-├── api/            # Store metadata
-└── infinity-cache/ # Model cache
-```
+**Embedding Model:** qwen3-embedding:4b (2560 dimensions)
+**LLM Model:** qwen2.5-coder:1.5b (code-focused)
+**Reranker:** cross-encoder/ms-marco-MiniLM-L-12-v2
 
-Reset: `rm -rf ./data && docker-compose down -v`
+All settings configurable via `backend/settings.yaml` or environment variables.
+See [Configuration Guide](docs/configuration.md) for details.
 
 ## Development
 
-The default `.env.example` is configured for local development:
-
 ```bash
-# 1. Copy env and start infrastructure (dev mode is default)
-cp .env.example .env
-docker-compose up -d
+# Install dependencies
+make install
 
-# 2. Run API locally with hot reload (:8080)
-cd api && bun install && bun run start:local
+# Run tests
+make test
 
-# 3. Run Web UI locally with hot reload (:3000)
-cd web-ui && bun install && bun run dev:local
+# Run E2E tests
+make e2e
 
-# Type checking
-cd api && bun run typecheck
-cd ricegrep && bun run typecheck
+# View API logs
+make api-logs
+
+# View worker logs
+make worker-logs
 ```
 
-### Docker Compose Profiles
+See [Development Guide](docs/development.md) for detailed setup instructions.
 
-| Command | Description |
-|---------|-------------|
-| `docker-compose up -d` | GPU infra + Attu (default from .env - for local dev) |
-| `docker-compose --profile gpu --profile full up -d` | Full GPU platform in Docker |
-| `docker-compose --profile cpu --profile dev up -d` | CPU infra + Attu (for local dev, no GPU) |
-| `docker-compose --profile cpu --profile full up -d` | Full CPU platform in Docker |
+## Contributing
+
+Contributions are welcome! See [CONTRIBUTING.md](docs/development.md) for:
+- Local development setup
+- Code style guidelines
+- Testing requirements
+- Pull request process
+
+**Note:** The current CONTRIBUTING.md is outdated and being replaced by the Development Guide.
 
 ## License
 
-CC BY-NC-SA 4.0
+CC BY-NC-SA 4.0 - See [LICENSE.md](LICENSE.md)
 
 ## Credits
 
-- [Tantivy](https://github.com/quickwit-oss/tantivy) - BM25 search
-- [Milvus](https://milvus.io/) - Vector database
-- [Infinity](https://github.com/michaelfeil/infinity) - Embedding/reranking server
-- [Jina AI](https://jina.ai/) - Code-optimized models
+Built with:
+- [FastAPI](https://fastapi.tiangolo.com/)
+- [Qdrant](https://qdrant.tech/)
+- [Tantivy](https://github.com/quickwit-oss/tantivy)
+- [Ollama](https://ollama.ai/)
+- [Next.js](https://nextjs.org/)
+- [Sentence Transformers](https://www.sbert.net/)
+
+---
+
+<div align="center">
+Made with ❤️ by the Rice Search Team
+</div>
