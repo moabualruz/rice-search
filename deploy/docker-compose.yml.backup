@@ -1,0 +1,211 @@
+services:
+  # ---------------------------------------------------------------------------
+  # INFRASTRUCTURE
+  # ---------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - ../data/qdrant:/qdrant/storage
+    restart: always
+    networks:
+      - rice-net
+
+  redis:
+    image: redis:8-alpine
+    ports:
+      - "6379:6379" 
+    volumes:
+      - ../data/redis:/data
+    restart: always
+    networks:
+      - rice-net
+
+  minio:
+    image: minio/minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - ../data/minio:/data
+    restart: always
+    networks:
+      - rice-net
+
+  # ---------------------------------------------------------------------------
+  # BENTOML - Unified Model Inference (LLM, Embeddings, Rerank)
+  # Single service with vLLM, Sentence Transformers, Cross-Encoder
+  # ---------------------------------------------------------------------------
+  bentoml:
+    build:
+      context: ./bentoml
+      dockerfile: Dockerfile
+    ports:
+      - "3001:3001"  # BentoML API
+    volumes:
+      - ../data/hf_cache:/root/.cache/huggingface
+      - pip-cache-bentoml:/root/.cache/pip  # Separate pip cache for bentoml
+      - ./bentoml:/app  # Mount source code for live updates!
+    environment:
+      - CUDA_VISIBLE_DEVICES=0
+      - HF_HOME=/root/.cache/huggingface
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-BAAI/bge-base-en-v1.5}
+      - RERANK_MODEL=${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      - LLM_MODEL=${LLM_MODEL:-Qwen/Qwen2.5-Coder-1.5B-Instruct-AWQ}
+      - HF_TOKEN=${HF_TOKEN}
+      # Memory tuning - max_total_tokens sets KV cache size (pre-allocated!)
+      - MAX_TOTAL_TOKENS=${MAX_TOTAL_TOKENS:-4096}  # Context window (4096=~4GB KV cache)
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - rice-net
+
+  # ---------------------------------------------------------------------------
+  # TANTIVY - Rust BM25 Lexical Search Service
+  # ---------------------------------------------------------------------------
+  tantivy:
+    build:
+      context: ../rust-tantivy
+      dockerfile: Dockerfile
+    ports:
+      - "3002:3002"
+    volumes:
+      - ../data/tantivy:/data  # Persistent BM25 index (file-based for easy reset)
+    environment:
+      - RUST_LOG=info
+      - TANTIVY_DATA_DIR=/data
+      - PORT=3002
+      - HOST=0.0.0.0
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - rice-net
+
+  # ---------------------------------------------------------------------------
+  # PYTHON BACKEND (API & WORKER)
+  # ---------------------------------------------------------------------------
+
+  backend-api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: uvicorn src.main:app --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - MINIO_ENDPOINT=minio:9000
+      - BENTOML_URL=http://bentoml:3001
+      - TANTIVY_URL=http://tantivy:3002
+      - SHARED_TMP_DIR=/shared/ingest
+      - RERANK_MODE=${RERANK_MODE:-rerank}
+    volumes:
+      - ../backend:/app
+      - ../data/ingest-shared:/shared/ingest  # Shared ingestion temp files (file-based)
+      - pip-cache-backend:/root/.cache/pip  # Separate pip cache for backend
+    depends_on:
+      - redis
+      - qdrant
+      - bentoml
+    networks:
+      - rice-net
+
+  backend-worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    command: python src/worker/start_worker.py
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - MINIO_ENDPOINT=minio:9000
+      - BENTOML_URL=http://bentoml:3001
+      - TANTIVY_URL=http://tantivy:3002
+      - SHARED_TMP_DIR=/shared/ingest
+      - RERANK_MODE=${RERANK_MODE:-rerank}
+    volumes:
+      - ../backend:/app
+      - ../data/ingest-shared:/shared/ingest  # Shared ingestion temp files (file-based)
+      - pip-cache-backend:/root/.cache/pip  # Shared with backend-api (same dependencies)
+    depends_on:
+      - redis
+      - qdrant
+      - bentoml
+    networks:
+      - rice-net
+
+  # ---------------------------------------------------------------------------
+  # FRONTEND (NEXT.JS)
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../frontend:/app
+      - /app/node_modules
+      - npm-cache:/root/.npm  # Persistent npm cache
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+    extra_hosts:
+      - "localhost:host-gateway"
+    networks:
+      - rice-net
+
+  # ---------------------------------------------------------------------------
+  # TESTS (Optional)
+  # ---------------------------------------------------------------------------
+  tests-e2e:
+    profiles: ["test"]
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.e2e
+    working_dir: /app
+    volumes:
+      - ../backend:/app
+    environment:
+      - FRONTEND_URL=http://frontend:3000
+      - REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+    command: pytest --no-cov tests/e2e
+    depends_on:
+      - frontend
+      - backend-api
+    networks:
+      - rice-net
+
+networks:
+  rice-net:
+    driver: bridge
+
+volumes:
+  pip-cache-bentoml:  # Separate pip cache for BentoML (SGLang, PyTorch, etc.)
+  pip-cache-backend:  # Separate pip cache for Backend (FastAPI, LangChain, etc.)
+  npm-cache:          # Persistent npm download cache for frontend
+

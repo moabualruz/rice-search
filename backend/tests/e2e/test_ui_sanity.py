@@ -1,0 +1,25 @@
+import pytest
+import os
+import re
+from playwright.sync_api import Page, expect
+
+@pytest.mark.e2e
+def test_frontend_loads(page: Page):
+    """
+    Sanity check: Frontend is accessible and renders title.
+    """
+    # Default to 'http://frontend:3000' for Docker, 'http://localhost:3000' for local
+    base_url = os.getenv("FRONTEND_URL", "http://frontend:3000")
+    
+    try:
+        page.goto(base_url, timeout=10000) # 10s timeout
+    except Exception as e:
+        pytest.fail(f"Failed to load frontend at {base_url}: {e}")
+
+    # Check title
+    # Expect 'rice ?earch' branding
+    # Note: ? is a regex special character, so we escape it
+    expect(page).to_have_title(re.compile(r"rice \?earch", re.IGNORECASE))
+    
+    # Check body for branding as fallback verification (optional, but good for debugging)
+    # expect(page.locator("body")).to_contain_text("rice ?earch")

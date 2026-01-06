@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/playwright/python:v1.57.0-noble
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+
+# Copy dependency definition
+COPY pyproject.toml .
+
+# Install dependencies (including dev/e2e)
+# Upgrade pip to avoid resolution issues (v23 -> v25)
+RUN pip install --upgrade pip
+# We use --mount=type=cache for faster rebuilds
+RUN --mount=type=cache,target=/root/.cache/pip pip install -e .[dev]
+
+# Copy the rest of the application
+COPY . .
+
+# Default command
+CMD ["pytest", "tests/e2e"]

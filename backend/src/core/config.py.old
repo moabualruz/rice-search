@@ -1,0 +1,100 @@
+from typing import List
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    PROJECT_NAME: str = "Rice Search"
+    API_V1_STR: str = "/api/v1"
+    
+    # Infrastructure
+    QDRANT_URL: str = "http://localhost:6333"
+    REDIS_URL: str = "redis://localhost:6379/0"
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+    
+    # Authentication
+    AUTH_ENABLED: bool = False
+
+    # CORS
+    BACKEND_CORS_ORIGINS: List[str] = ["http://localhost:3000", "http://localhost:8000"]
+
+    # Embedding Model (V3 Spec: Code-optimized)
+    EMBEDDING_MODEL: str = "jina-embeddings-v3"  # Multilingual, code-aware embedding model
+    EMBEDDING_DIM: int = 1024  # Jina v3 embedding dimension
+
+    # Hybrid Search (Phase 9)
+    SPARSE_MODEL: str = "naver/splade-cocondenser-ensembledistil"
+    SPARSE_ENABLED: bool = True
+    RRF_K: int = 60
+
+    # MCP Protocol (Phase 10)
+    MCP_ENABLED: bool = False
+    MCP_TRANSPORT: str = "stdio"  # stdio, tcp, sse
+    MCP_TCP_HOST: str = "0.0.0.0"
+    MCP_TCP_PORT: int = 9090
+    MCP_SSE_PORT: int = 9091
+
+    # AST Parsing (Phase 12)
+    AST_PARSING_ENABLED: bool = True
+    AST_LANGUAGES: List[str] = ["py", "js", "ts", "go", "rs", "java", "cpp"]
+    AST_MAX_CHUNK_LINES: int = 200
+
+    # Reranking (REQ-SRCH-03 - V3 Spec)
+    RERANK_ENABLED: bool = True
+    RERANK_MODE: str = "llm"  # "tei" = dedicated TEI reranker, "llm" = use vLLM for reranking
+    RERANK_MODEL: str = "jinaai/jina-reranker-v2-base-multilingual"
+    QUERY_UNDERSTANDING_MODEL: str = "microsoft/codebert-base"
+    RERANK_TOP_K: int = 10
+
+    # Query Understanding (REQ-SRCH-01)
+    QUERY_ANALYSIS_ENABLED: bool = True
+    QUERY_MODEL: str = "microsoft/codebert-base"
+
+    # Hardware Acceleration
+    FORCE_GPU: bool = True  # Force GPU usage for all models/services if available
+    # System Optimization (Phase 5)
+    MODEL_TTL_SECONDS: int = 300  # Unload unused models after 5 minutes
+    MODEL_AUTO_UNLOAD: bool = True
+    
+    # Ollama - Local inference server with automatic memory management
+    # Handles embeddings, reranking, and LLM with zero config
+    # Never OOMs, queues requests automatically
+    INFERENCE_URL: str = "http://localhost:11434"
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
+
+    # Ollama model names
+    EMBEDDING_MODEL_NAME: str = "qwen3-embedding:4b"  # Code-focused embedding with 100+ langs
+    LLM_MODEL: str = "qwen2.5-coder:1.5b"  # For RAG chat - optimized for code
+    # Reranking uses local cross-encoder (ms-marco-MiniLM-L-12-v2) via sentence-transformers
+    # Ollama doesn't natively support rerankers
+    
+    # ==========================================================================
+    # TRIPLE RETRIEVAL SYSTEM
+    # ==========================================================================
+    
+    # Tantivy BM25 Service
+    TANTIVY_URL: str = "http://localhost:3002"
+    BM25_ENABLED: bool = True
+    
+    # SPLADE Neural Sparse
+    SPLADE_MODEL: str = "naver/splade-cocondenser-ensembledistil"
+    SPLADE_ENABLED: bool = True
+    SPLADE_DEVICE: str = "gpu"  # gpu | cpu
+    SPLADE_PRECISION: str = "fp16"  # fp16 | fp32
+    SPLADE_BATCH_SIZE: int = 32
+    SPLADE_MAX_TOKENS: int = 512
+    
+    # BM42 Hybrid (Qdrant-native)
+    BM42_ENABLED: bool = True
+    BM42_MODEL: str = "Qdrant/bm42-all-minilm-l6-v2-attentions"
+    
+    # Default search flags (all enabled)
+    DEFAULT_USE_BM25: bool = True
+    DEFAULT_USE_SPLADE: bool = True
+    DEFAULT_USE_BM42: bool = True
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+

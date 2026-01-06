@@ -1,0 +1,1 @@
+{"models":[{"id":"dense","name":"jinaai/jina-embeddings-v2-base-code","type":"embedding","active":true,"gpu_enabled":false},{"id":"sparse","name":"naver/splade-v3","type":"sparse_embedding","active":true,"gpu_enabled":true},{"id":"reranker","name":"jinaai/jina-reranker-v2-base-multilingual","type":"reranker","active":true,"gpu_enabled":true}]}
