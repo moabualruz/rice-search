@@ -23,7 +23,7 @@ Complete guide to the `ricesearch` command-line interface for indexing and searc
 
 - **Python 3.12+**
 - **Rice Search backend running** (see [Getting Started](getting-started.md))
-- **Backend API accessible** at http://localhost:8000 (default)
+- **Backend API accessible** at <http://localhost:8000> (default)
 
 ### Install CLI
 
@@ -87,7 +87,7 @@ ricesearch search "authentication"
    Auth API endpoints...
 ```
 
-### Options
+### Search Options
 
 ```bash
 ricesearch search [OPTIONS] <query>
@@ -163,6 +163,7 @@ Results include:
 - **Snippet** - Relevant text excerpt from the file
 
 **Score ranges:**
+
 - **80-98%** - Highly relevant (exact matches, strong semantic similarity)
 - **50-79%** - Moderately relevant (partial matches, related concepts)
 - **12-49%** - Weakly relevant (tangential matches)
@@ -197,7 +198,7 @@ ricesearch watch ./backend
 [INFO] Watching for changes... (Ctrl+C to stop)
 ```
 
-### Options
+### Watch Options
 
 ```bash
 ricesearch watch [OPTIONS] [path]
@@ -260,7 +261,7 @@ ricesearch watch ./rust-tantivy --org-id rust
 
 Watch automatically detects and indexes:
 
-- **Code**: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.go`, `.rs`, `.java`, `.cpp`, `.c`, `.h`, `.hpp`
+**Code**: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.go`, `.rs`, `.java`, `.cpp`, `.c`, `.h`, `.hpp`
 - **Docs**: `.md`, `.txt`, `.rst`, `.adoc`
 - **Config**: `.yaml`, `.yml`, `.json`, `.toml`, `.ini`
 - **Scripts**: `.sh`, `.bash`, `.zsh`, `.ps1`
@@ -313,15 +314,14 @@ ricesearch config set color_output false
 | `backend_url` | `http://localhost:8000` | Backend API endpoint |
 | `org_id` | `public` | Default organization ID |
 | `hybrid_search` | `true` | Enable hybrid search by default |
-| `color_output` | `true` | Enable colored terminal output |
+| `default_limit` | `10` | Default number of results |
+| `user_id` | `admin-1` | User ID for requests |
 
 ### Configuration File Location
 
-Settings are stored in:
-- **Linux/macOS**: `~/.config/ricesearch/config.json`
-- **Windows**: `%APPDATA%\ricesearch\config.json`
+- **Linux/macOS/Windows**: `~/.ricesearch/config.yaml`
 
-You can also edit this file directly (JSON format).
+You can also edit this file directly (YAML format).
 
 ---
 
@@ -348,22 +348,19 @@ ricesearch --version
 
 ## Configuration File
 
-### config.json
+### config.yaml
 
-The CLI stores persistent configuration in `config.json`:
+The CLI stores persistent configuration in `config.yaml`:
 
-```json
-{
-  "backend_url": "http://localhost:8000",
-  "org_id": "public",
-  "hybrid_search": true,
-  "color_output": true
-}
+```yaml
+backend_url: "http://localhost:8000"
+org_id: "public"
+hybrid_search: true
+default_limit: 10
+user_id: "admin-1"
 ```
 
-**File location:**
-- Linux/macOS: `~/.config/ricesearch/config.json`
-- Windows: `%APPDATA%\ricesearch\config.json`
+**File location:** `~/.ricesearch/config.yaml`
 
 ### Environment Variables
 
@@ -726,6 +723,7 @@ ricesearch version                           # Version info
 ```
 
 **Key Features:**
+
 - Fast search with hybrid retrieval (BM25 + semantic)
 - Auto-indexing with file watching
 - Respects `.riceignore` and `.gitignore`

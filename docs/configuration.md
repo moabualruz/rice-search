@@ -21,13 +21,14 @@ Complete reference for configuring Rice Search, including settings files, enviro
 
 Rice Search uses a **three-layer configuration system** with the following priority:
 
-```
+```bash
 1. Runtime Settings (Redis)         ← Highest priority
 2. Environment Variables (.env)
 3. Settings File (settings.yaml)    ← Lowest priority
 ```
 
 **How it works:**
+
 - Settings are loaded from `backend/settings.yaml` at startup
 - Environment variables override YAML settings
 - Runtime changes (via API/CLI) are stored in Redis and take precedence
@@ -61,6 +62,7 @@ search:
 ```
 
 **When to use:**
+
 - Setting project defaults
 - Defining application structure
 - Committing shared configuration to Git
@@ -76,10 +78,11 @@ Override YAML settings per environment (dev, staging, prod):
 EMBEDDING_MODEL=jinaai/jina-embeddings-v3
 EMBEDDING_DIM=1024
 LLM_MODEL=google/codegemma-7b-it
-RERANK_MODE=rerank
+RERANK_MODE=local
 ```
 
 **When to use:**
+
 - Environment-specific settings (dev vs prod)
 - Secrets and credentials (not in Git)
 - Docker deployment configuration
@@ -102,6 +105,7 @@ settings.set("models.embedding.dimension", 1024)
 ```
 
 **When to use:**
+
 - Live updates without restarting services
 - A/B testing different configurations
 - Dynamic feature toggling
@@ -167,6 +171,7 @@ models:
 ```
 
 **Supported models:**
+
 - `qwen3-embedding:4b` → 2560 dimensions
 - `jinaai/jina-embeddings-v3` → 1024 dimensions
 - `BAAI/bge-base-en-v1.5` → 768 dimensions
@@ -201,7 +206,7 @@ models:
 models:
   reranker:
     enabled: true                    # Enable reranking
-    mode: "rerank"                   # "rerank" (cross-encoder) or "llm"
+    mode: "local"                    # "local" (cross-encoder) or "llm"
     model: "cross-encoder/ms-marco-MiniLM-L-12-v2"
     top_k: 50                        # Rerank top K candidates
     doc_preview_length: 200          # Preview length for LLM mode
@@ -391,7 +396,7 @@ LLM_TEMPERATURE=0.7
 
 # Reranker
 RERANK_ENABLED=true
-RERANK_MODE=rerank
+RERANK_MODE=local
 RERANK_MODEL=cross-encoder/ms-marco-MiniLM-L-12-v2
 
 # Sparse Models
@@ -602,6 +607,7 @@ inference:
 ```
 
 **After changing the model:**
+
 1. Delete Qdrant collection: `curl -X DELETE http://localhost:6333/collections/rice_chunks`
 2. Restart services: `make down && make up`
 3. Re-index files: `ricesearch watch ./backend`
@@ -868,7 +874,7 @@ QDRANT_API_KEY=your-qdrant-key
 ### Dimension Mismatch Error
 
 **Problem:**
-```
+```text
 RuntimeError: vector dimension mismatch (expected 2560, got 768)
 ```
 
@@ -935,7 +941,7 @@ docker exec deploy-backend-api-1 cat /app/backend/settings.yaml
 ## Summary
 
 **Configuration Hierarchy:**
-```
+```text
 Runtime (Redis) > Environment Variables (.env) > Settings File (settings.yaml)
 ```
 

@@ -40,7 +40,7 @@ Rice Search is a **hybrid search platform** that combines:
 
 ### Service Layer Diagram
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │ CLIENT LAYER                                                │
 │  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐   │
@@ -98,12 +98,12 @@ Rice Search is a **hybrid search platform** that combines:
 │  │         - Rust-based lexical search                 │   │
 │  │         - Fast BM25 ranking                          │   │
 │  └──────────────────────────────────────────────────────┘   │
-└───────────────────────────────────────────────────────────────┘
+101: └───────────────────────────────────────────────────────────────┘
 ```
 
 ### Service Communication
 
-```
+```text
 Frontend (3000)
   └─HTTP→ Backend API (8000)
           ├─gRPC→ Qdrant (6333)
@@ -129,7 +129,7 @@ Celery Worker
 
 ### Backend Components
 
-```
+```text
 backend/src/
 ├── api/                         # REST API Layer
 │   └── v1/endpoints/
@@ -149,6 +149,7 @@ backend/src/
 │   │   ├── parser.py            # File parsing
 │   │   └── ast_parser.py        # AST-aware parsing (Tree-sitter)
 │   ├── retrieval/
+│   │   ├── fusion.py            # RRF Fusion logic
 │   │   ├── splade_encoder.py    # SPLADE sparse vectors
 │   │   ├── bm42_encoder.py      # BM42 hybrid vectors
 │   │   └── tantivy_client.py    # BM25 client
@@ -157,7 +158,7 @@ backend/src/
 │   ├── inference/
 │   │   └── ollama_client.py     # Ollama LLM/embedding client
 │   └── mcp/
-│       ├── server.py            # MCP server (stdio/tcp)
+│       ├── mcp_server.py        # MCP server (stdio/tcp)
 │       └── tools.py             # MCP tool handlers
 │
 ├── tasks/                       # Async Task Layer
@@ -189,7 +190,7 @@ backend/src/
 
 ### Indexing Flow
 
-```
+```text
 1. User uploads file or CLI watches directory
    └─HTTP POST /api/v1/ingest/file
       └─ File saved to /tmp/ingest
@@ -216,7 +217,7 @@ backend/src/
 
 ### Search Flow (Standard)
 
-```
+```text
 1. User submits query
    └─POST /api/v1/search/query
       {"query": "authentication", "limit": 10}
@@ -248,7 +249,7 @@ backend/src/
 
 ### Search Flow (RAG Mode)
 
-```
+```text
 1. User submits RAG query
    └─POST /api/v1/search/query
       {"query": "How does auth work?", "mode": "rag"}
@@ -278,7 +279,7 @@ backend/src/
 Each retriever excels at different query types:
 
 | Retriever | Strength | Example Query |
-|-----------|----------|---------------|
+| :--- | :--- | :--- |
 | **BM25** | Exact keyword matches, file names | `"settings.yaml"`, `"def authenticate"` |
 | **SPLADE** | Learned sparse representations | `"user login"` → matches "authentication" |
 | **BM42** | Hybrid sparse+dense | `"config management"` → semantic + keyword |
@@ -397,9 +398,9 @@ Document {
 
 ## Search Pipeline
 
-### Pipeline Stages
+### Search Pipeline Stages
 
-```
+```text
 Query Input
   ↓
 ┌─────────────────────────────────┐
@@ -461,9 +462,9 @@ Results Output
 
 ## Indexing Pipeline
 
-### Pipeline Stages
+### Indexing Pipeline Stages
 
-```
+```text
 File Input (upload or watch)
   ↓
 ┌─────────────────────────────────┐

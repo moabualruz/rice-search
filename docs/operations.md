@@ -58,6 +58,7 @@ docker compose -f deploy/docker-compose.yml logs -f backend-api
 ### Metrics Endpoints
 
 **Backend Metrics (Prometheus format):**
+
 ```bash
 curl http://localhost:8000/metrics
 
@@ -70,6 +71,7 @@ curl http://localhost:8000/metrics
 ```
 
 **System Metrics:**
+
 ```bash
 # Container stats
 docker stats
@@ -84,7 +86,7 @@ du -sh data/*
 ### Key Performance Indicators (KPIs)
 
 | Metric | Target | Alert Threshold |
-|--------|--------|-----------------|
+| :--- | :--- | :--- |
 | API Response Time (P95) | <500ms | >1s |
 | Search QPS | 10+ | <1 |
 | Indexing Throughput | 100 files/min | <10 |
@@ -120,8 +122,8 @@ docker compose -f deploy/docker-compose.yml logs --since 2023-01-01 backend-api
 
 ```yaml
 # backend/settings.yaml
-app:
-  log_level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 ```
 
 ### Log Rotation
@@ -148,6 +150,7 @@ sudo systemctl restart docker
 ### Database Optimization
 
 **Qdrant:**
+
 ```bash
 # Optimize collection
 curl -X POST http://localhost:6333/collections/rice_chunks/index
@@ -157,6 +160,7 @@ curl http://localhost:6333/collections/rice_chunks
 ```
 
 **Tantivy:**
+
 ```bash
 # Compact index
 docker exec deploy-tantivy-1 /app/compact-index
@@ -166,6 +170,7 @@ docker exec deploy-tantivy-1 du -sh /data
 ```
 
 **Redis:**
+
 ```bash
 # Get memory info
 docker exec deploy-redis-1 redis-cli INFO memory
@@ -194,7 +199,7 @@ nvidia-smi -l 1
 
 ### Weekly Tasks
 
-**1. Check Disk Space**
+#### 1. Check Disk Space
 ```bash
 df -h
 du -sh data/*
@@ -203,7 +208,7 @@ du -sh data/*
 docker system prune -a
 ```
 
-**2. Review Logs**
+#### 2. Review Logs
 ```bash
 # Check for errors
 docker compose -f deploy/docker-compose.yml logs | grep ERROR
@@ -212,7 +217,7 @@ docker compose -f deploy/docker-compose.yml logs | grep ERROR
 docker compose -f deploy/docker-compose.yml logs | grep WARNING
 ```
 
-**3. Update Metrics Dashboard**
+#### 3. Update Metrics Dashboard
 ```bash
 # Check Grafana dashboards
 # Review P95 latency, error rates, throughput
@@ -220,7 +225,7 @@ docker compose -f deploy/docker-compose.yml logs | grep WARNING
 
 ### Monthly Tasks
 
-**1. Update Dependencies**
+#### 1. Update Dependencies
 ```bash
 # Pull latest images
 docker compose -f deploy/docker-compose.yml pull
@@ -232,7 +237,7 @@ docker compose -f deploy/docker-compose.yml build
 docker compose -f deploy/docker-compose.yml up -d
 ```
 
-**2. Database Maintenance**
+#### 2. Database Maintenance
 ```bash
 # Optimize Qdrant
 curl -X POST http://localhost:6333/collections/rice_chunks/index
@@ -241,7 +246,7 @@ curl -X POST http://localhost:6333/collections/rice_chunks/index
 docker exec deploy-redis-1 redis-cli BGSAVE
 ```
 
-**3. Backup Verification**
+#### 3. Backup Verification
 ```bash
 # Test restore process
 ./restore.sh /backup/rice-search-YYYYMMDD
@@ -249,7 +254,7 @@ docker exec deploy-redis-1 redis-cli BGSAVE
 
 ### Quarterly Tasks
 
-**1. Security Audit**
+#### 1. Security Audit
 ```bash
 # Scan for vulnerabilities
 docker scout cves --only-fixed
@@ -258,7 +263,8 @@ docker scout cves --only-fixed
 sudo certbot renew
 ```
 
-**2. Capacity Review**
+#### 2. Capacity Review
+
 - Review storage growth
 - Check memory trends
 - Plan for scaling if needed
@@ -269,7 +275,7 @@ sudo certbot renew
 
 ### Runbook
 
-**1. Service Down**
+#### 1. Service Down
 ```bash
 # Check which service
 docker compose -f deploy/docker-compose.yml ps
@@ -284,7 +290,7 @@ docker compose -f deploy/docker-compose.yml restart <service>
 docker compose -f deploy/docker-compose.yml up -d --build <service>
 ```
 
-**2. High Latency**
+#### 2. High Latency
 ```bash
 # Check metrics
 curl http://localhost:8000/metrics | grep duration
@@ -299,7 +305,7 @@ curl http://localhost:11434/api/tags
 docker compose -f deploy/docker-compose.yml restart backend-api
 ```
 
-**3. Out of Memory**
+#### 3. Out of Memory
 ```bash
 # Check memory usage
 docker stats
@@ -318,7 +324,7 @@ curl -X PUT http://localhost:8000/api/v1/settings/model_management.ttl_seconds \
 docker compose -f deploy/docker-compose.yml restart
 ```
 
-**4. Disk Full**
+#### 4. Disk Full
 ```bash
 # Check disk usage
 df -h
@@ -341,6 +347,7 @@ rm -rf /backup/rice-search-old*
 ### Storage Growth
 
 **Estimate storage needs:**
+
 ```
 Qdrant: ~1KB per chunk
 Tantivy: ~500B per chunk
@@ -354,6 +361,7 @@ Example:
 ```
 
 **Monitor growth:**
+
 ```bash
 # Weekly snapshot
 du -sh data/* >> storage-growth.log
@@ -369,6 +377,7 @@ du -sh data/* >> storage-growth.log
 - Ollama: 8GB (with models loaded)
 
 **Scaling formula:**
+
 ```
 Total RAM needed = (
   Backend instances × 2GB +
@@ -424,9 +433,8 @@ docker system prune -a
 
 For more details:
 - [Deployment](deployment.md) - Initial setup
-- [Monitoring](monitoring.md) - Metrics & dashboards
-- [Troubleshooting](troubleshooting.md) - Common issues
 - [Configuration](configuration.md) - Settings tuning
+- [Troubleshooting](troubleshooting.md) - Common issues
 
 ---
 

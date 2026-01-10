@@ -105,6 +105,7 @@ make up
 ```
 
 **First run will take 5-10 minutes:**
+
 - Docker images download (~5GB)
 - Ollama downloads embedding model (~2GB)
 - Services initialize
@@ -130,9 +131,9 @@ docker compose -f deploy/docker-compose.yml ps
 ### 3. Access the Web Interface
 
 Open your browser to:
-- **Frontend UI**: http://localhost:3000
-- **API Documentation**: http://localhost:8000/docs
-- **Health Check**: http://localhost:8000/health
+- **Frontend UI**: <http://localhost:3000>
+- **API Documentation**: <http://localhost:8000/docs>
+- **Health Check**: <http://localhost:8000/health>
 
 **Expected health check response:**
 ```json
@@ -211,6 +212,7 @@ ricesearch watch ./backend --org-id myproject
 ```
 
 **What gets indexed:**
+
 - Supported file types: `.py`, `.js`, `.ts`, `.go`, `.rs`, `.java`, `.cpp`, `.md`, `.txt`
 - Respects `.gitignore` and `.riceignore` patterns
 - Files are chunked intelligently (AST-aware for code)
@@ -234,7 +236,7 @@ curl http://localhost:8000/api/v1/files/list
 
 ### Via Web UI (Easiest)
 
-1. Open http://localhost:3000
+1. Open <http://localhost:3000>
 2. Enter a query in the search box (e.g., "configuration settings")
 3. Click **Search** or press Enter
 4. View results with:
@@ -244,6 +246,7 @@ curl http://localhost:8000/api/v1/files/list
    - Expandable file previews
 
 **Search Modes:**
+
 - **Search**: Returns ranked results (default)
 - **RAG**: Returns AI-generated answer with sources
 
@@ -346,6 +349,7 @@ make down
 ```
 
 **Data is preserved** in `data/` directory:
+
 - `data/qdrant/` - Vector database
 - `data/tantivy/` - BM25 indexes
 - `data/ollama/` - Model cache
@@ -469,6 +473,7 @@ For detailed troubleshooting, see [Troubleshooting Guide](troubleshooting.md).
 ## Summary
 
 You've successfully:
+
 - ✅ Installed Rice Search
 - ✅ Started all services
 - ✅ Indexed your first files

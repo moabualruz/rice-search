@@ -20,12 +20,12 @@ Complete reference for the Rice Search REST API.
 ## Base URL
 
 **Development:**
-```
+```text
 http://localhost:8000/api/v1
 ```
 
 **Production:**
-```
+```text
 https://your-domain.com/api/v1
 ```
 
@@ -38,6 +38,7 @@ All endpoints are prefixed with `/api/v1`.
 ### Current Implementation
 
 Authentication is **optional** by default. When `auth.enabled: false` in settings:
+
 - All requests are treated as authenticated
 - Default `org_id` is `"public"`
 - No tokens or headers required
@@ -45,6 +46,7 @@ Authentication is **optional** by default. When `auth.enabled: false` in setting
 ### Enabling Authentication
 
 When `auth.enabled: true` in settings.yaml:
+
 - Requests must include authentication headers
 - User must have appropriate `org_id` and roles
 - Admin endpoints require `admin` role
@@ -215,6 +217,7 @@ curl http://localhost:8000/api/v1/search/config
 Upload and index a file.
 
 **Request:**
+
 - **Content-Type:** `multipart/form-data`
 - **Fields:**
   - `file`: File to upload (binary)
@@ -230,6 +233,7 @@ Upload and index a file.
 ```
 
 **Status Codes:**
+
 - `202 Accepted` - File queued for indexing
 - `400 Bad Request` - Invalid file or missing parameters
 - `500 Internal Server Error` - Indexing failed
@@ -245,6 +249,7 @@ curl -X POST http://localhost:8000/api/v1/ingest/file \
 ```
 
 **Supported File Types:**
+
 - Code: `.py`, `.js`, `.ts`, `.tsx`, `.jsx`, `.go`, `.rs`, `.java`, `.cpp`, `.c`, `.h`
 - Docs: `.md`, `.txt`, `.rst`, `.adoc`
 - Config: `.yaml`, `.yml`, `.json`, `.toml`, `.ini`
@@ -309,6 +314,7 @@ Get content of a specific indexed file.
 ```
 
 **Status Codes:**
+
 - `200 OK` - File content returned
 - `404 Not Found` - File not indexed or not found
 
@@ -361,6 +367,7 @@ curl "http://localhost:8000/api/v1/settings?prefix=search"
 Get a specific setting by key.
 
 **Path Parameter:**
+
 - `key`: Setting key in dot notation (e.g., `models.embedding.dimension`)
 
 **Response:**
@@ -381,6 +388,7 @@ curl http://localhost:8000/api/v1/settings/models.embedding.dimension
 Update a setting at runtime (requires admin role).
 
 **Path Parameter:**
+
 - `key`: Setting key to update
 
 **Request Body:**
@@ -454,6 +462,7 @@ curl -X POST http://localhost:8000/api/v1/settings/bulk \
 Delete a setting (requires admin role).
 
 **Path Parameter:**
+
 - `key`: Setting key to delete
 
 **Response:**
@@ -493,6 +502,7 @@ curl -X POST http://localhost:8000/api/v1/settings/reload
 Get settings as nested dictionary.
 
 **Path Parameter:**
+
 - `prefix`: Prefix to filter (e.g., `"models"`)
 
 **Response:**
@@ -638,6 +648,7 @@ All errors return JSON with `detail` field:
 **Current Implementation:** No rate limiting
 
 **Planned:** Rate limiting will be added based on:
+
 - IP address
 - API key (when auth enabled)
 - Configurable limits per endpoint
@@ -764,11 +775,12 @@ console.log(results);
 
 ## API Documentation (Interactive)
 
-**Swagger UI:** http://localhost:8000/docs
+**Swagger UI:** <http://localhost:8000/docs>
 
-**ReDoc:** http://localhost:8000/redoc
+**ReDoc:** <http://localhost:8000/redoc>
 
 The interactive documentation provides:
+
 - All endpoints with request/response schemas
 - Try-it-out functionality
 - Schema definitions
@@ -816,6 +828,7 @@ curl -X PUT http://localhost:8000/api/v1/settings/search.hybrid.rrf_k \
 ```
 
 For more details:
+
 - [Getting Started](getting-started.md) - Setup and first API calls
 - [CLI Guide](cli.md) - Command-line alternative
 - [Configuration](configuration.md) - Settings reference

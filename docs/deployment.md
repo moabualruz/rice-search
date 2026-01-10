@@ -22,6 +22,7 @@ Production deployment guide for Rice Search.
 Rice Search is designed for **self-hosted deployment** using Docker Compose.
 
 **Deployment Models:**
+
 1. **Single Server** - All services on one machine (recommended for <10k files)
 2. **Multi-Server** - Distributed services (for >10k files or high concurrency)
 3. **Kubernetes** - Future support (currently Docker Compose only)
@@ -33,7 +34,7 @@ Rice Search is designed for **self-hosted deployment** using Docker Compose.
 **Server Requirements:**
 
 | Component | Minimum | Recommended |
-|-----------|---------|-------------|
+| :--- | :--- | :--- |
 | CPU | 4 cores | 8+ cores |
 | RAM | 8GB | 16GB+ |
 | Disk | 50GB SSD | 100GB+ SSD |
@@ -41,12 +42,14 @@ Rice Search is designed for **self-hosted deployment** using Docker Compose.
 | OS | Ubuntu 22.04+ | Ubuntu 22.04 LTS |
 
 **Software:**
+
 - Docker 20.10+
 - Docker Compose 2.x
 - Git (for cloning)
 - Nginx (for reverse proxy)
 
 **Network:**
+
 - Public IP or domain name
 - Ports 80, 443 open (HTTP/HTTPS)
 - Internal ports: 3000, 8000, 6333, 6379, 9000, 11434
@@ -78,12 +81,14 @@ nano deploy/.env
 ```
 
 **Production .env:**
+
 ```bash
 # Models
 EMBEDDING_MODEL=jinaai/jina-embeddings-v3
 EMBEDDING_DIM=1024
 LLM_MODEL=google/codegemma-7b-it
 RERANK_MODEL=BAAI/bge-reranker-base
+RERANK_MODE=local
 
 # Infrastructure
 QDRANT_URL=http://qdrant:6333
@@ -108,6 +113,7 @@ nano backend/settings.yaml
 ```
 
 **Production settings:**
+
 ```yaml
 app:
   debug: false  # IMPORTANT: Disable debug mode
@@ -379,6 +385,7 @@ scrape_configs:
 ### Grafana Dashboard
 
 Import pre-built dashboard (future):
+
 - Request latency
 - Search QPS
 - Indexing throughput
@@ -386,7 +393,8 @@ Import pre-built dashboard (future):
 
 ### Centralized Logging
 
-**Option 1: Docker logs**
+#### Option 1: Docker logs
+
 ```bash
 # View logs
 docker compose -f deploy/docker-compose.yml logs -f
@@ -395,7 +403,8 @@ docker compose -f deploy/docker-compose.yml logs -f
 docker compose -f deploy/docker-compose.yml logs > logs.txt
 ```
 
-**Option 2: Loki + Promtail**
+#### Option 2: Loki + Promtail
+
 ```yaml
 # docker-compose.yml (add)
 services:
@@ -532,6 +541,7 @@ services:
 ### Database Scaling
 
 **Qdrant Cluster:**
+
 ```yaml
 services:
   qdrant-1:
@@ -595,6 +605,7 @@ services:
 ## Summary
 
 **Production Deployment Checklist:**
+
 - [ ] Update settings.yaml (debug: false, auth: true)
 - [ ] Configure .env with production values
 - [ ] Set up SSL/TLS certificates
@@ -607,6 +618,7 @@ services:
 - [ ] Document runbook for team
 
 **Quick Deploy:**
+
 ```bash
 # 1. Clone repo
 git clone <repo> && cd rice-search

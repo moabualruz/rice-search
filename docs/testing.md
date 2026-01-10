@@ -31,30 +31,26 @@ Rice Search follows **Test-Driven Development (TDD)** principles:
 
 ## Test Structure
 
-```
+```text
 backend/tests/
-├── unit/                   # Unit tests (fast, isolated)
-│   ├── test_chunker.py     # Text chunking logic
-│   ├── test_parser.py      # File parsing
-│   └── test_config.py      # Configuration
-│
-├── integration/            # Integration tests (services required)
-│   ├── test_search_services.py    # Search end-to-end
-│   ├── test_ingestion.py          # Indexing pipeline
-│   └── test_qdrant_client.py      # Database integration
-│
 ├── e2e/                    # End-to-end tests (full system)
-│   └── test_ui_workflow.py        # UI automation (Playwright)
+│   └── test_ui_workflow.py
 │
 ├── load/                   # Load & performance tests
-│   └── locustfile.py               # Locust load tests
+│   └── locustfile.py
+│
+├── test_*.py               # Unit and Integration tests (flat)
+│   ├── test_chunker.py
+│   ├── test_search_services.py
+│   └── ...
 │
 ├── conftest.py             # Pytest fixtures
 └── pytest.ini              # Pytest configuration
 ```
 
 **Frontend Tests:**
-```
+
+```text
 frontend/__tests__/
 ├── components/             # Component tests (Jest + React Testing Library)
 ├── pages/                  # Page tests
@@ -68,25 +64,29 @@ frontend/__tests__/
 ### Backend Tests
 
 **All Tests:**
+
 ```bash
 cd backend
 pytest
 ```
 
 **Unit Tests Only:**
+
 ```bash
-pytest tests/unit/ -v
+pytest -m unit -v
 ```
 
 **Integration Tests:**
+
 ```bash
 # Requires services running
 docker compose -f deploy/docker-compose.yml up -d
 
-pytest tests/integration/ -v
+pytest -m integration -v
 ```
 
 **End-to-End Tests:**
+
 ```bash
 # Requires full system running
 make up
@@ -95,16 +95,19 @@ pytest tests/e2e/ -v
 ```
 
 **Specific Test File:**
+
 ```bash
 pytest tests/test_search_services.py -v
 ```
 
 **Specific Test:**
+
 ```bash
 pytest tests/test_search_services.py::test_hybrid_search -v
 ```
 
 **By Keyword:**
+
 ```bash
 pytest -k "search" -v
 ```
@@ -142,6 +145,7 @@ npm test -- SearchBar.test.tsx
 **Purpose:** Test individual functions/classes in isolation.
 
 **Characteristics:**
+
 - ✅ Fast (<1ms per test)
 - ✅ No external dependencies (mock everything)
 - ✅ Deterministic (same input = same output)
@@ -467,7 +471,7 @@ open htmlcov/index.html
 ### Coverage Targets
 
 | Component | Target |
-|-----------|--------|
+| :--- | :--- |
 | Core services | >90% |
 | API endpoints | >80% |
 | Utilities | >85% |
@@ -475,7 +479,7 @@ open htmlcov/index.html
 
 ### Example Coverage Report
 
-```
+```text
 Name                                    Stmts   Miss  Cover
 -----------------------------------------------------------
 src/services/search/retriever.py          150     10    93%
@@ -553,6 +557,7 @@ TOTAL                                     1500    150    90%
 5. **Mock External Dependencies**
    ```python
    from unittest.mock import patch
+
 
    def test_ollama_embedding(monkeypatch):
        # Mock Ollama API call
@@ -651,7 +656,8 @@ jobs:
 ## Summary
 
 **Test Pyramid:**
-```
+
+```text
         E2E (few, slow)
        /              \
       /  Integration   \
@@ -663,12 +669,13 @@ jobs:
 ```
 
 **Quick Commands:**
+
 ```bash
 # Unit tests
-pytest tests/unit/
+pytest -m unit
 
 # Integration tests
-pytest tests/integration/
+pytest -m integration
 
 # E2E tests
 pytest tests/e2e/
@@ -681,6 +688,7 @@ locust -f tests/load/locustfile.py
 ```
 
 **Test Writing Checklist:**
+
 - [ ] Write test before implementation (TDD)
 - [ ] Test passes with implementation
 - [ ] Test fails when implementation is broken

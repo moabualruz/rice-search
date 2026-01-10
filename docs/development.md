@@ -195,7 +195,7 @@ git push origin fix/issue-123
 ### 3. Code Review Process
 
 1. **Self-Review**
-   - Run linters: `make lint`
+   - Run linters: `flake8 backend/src` (backend), `npm run lint` (frontend)
    - Run tests: `make test`
    - Check coverage: `pytest --cov`
 
@@ -301,7 +301,7 @@ black backend/src backend/tests
 black --check backend/src
 
 # Lint
-ruff check backend/src
+flake8 backend/src
 ```
 
 **Standards:**
@@ -620,7 +620,7 @@ Closes #123
 ### Pull Request Checklist
 
 - [ ] Tests pass (`make test`)
-- [ ] Linting passes (`make lint`)
+- [ ] Linting passes (`flake8`, `npm run lint`)
 - [ ] Documentation updated
 - [ ] Commit messages follow format
 - [ ] No merge conflicts
@@ -797,7 +797,7 @@ make up          # Start all services
 make down        # Stop all services
 make logs        # View all logs
 make test        # Run backend tests
-make lint        # Lint code
+# Lint manually: flake8 (backend), npm run lint (frontend)
 make api-logs    # View API logs
 make worker-logs # View worker logs
 ```

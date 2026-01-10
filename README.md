@@ -22,7 +22,7 @@ Rice Search is a **fully local, self-hosted** hybrid search platform that combin
 - **🔒 Fully Local** - All data and processing stays on your machine, no external API calls
 - **🧠 Multi-Modal Search** - Combines BM25, SPLADE sparse embeddings, and BM42 hybrid vectors
 - **🌳 AST-Aware** - Understands code structure across 7+ languages (Python, JS/TS, Go, Rust, Java, C++)
-- **⚡ Fast CLI** - Rust-based command-line tool with file watching and auto-indexing
+- **⚡ Fast CLI** - Python-based command-line tool with file watching and auto-indexing (Rust version experimental)
 - **🔌 MCP Support** - Integrates with Claude Desktop and other AI assistants via Model Context Protocol
 
 ## Key Features
@@ -56,8 +56,8 @@ Rice Search is a **fully local, self-hosted** hybrid search platform that combin
 
 - **REST API** - FastAPI with OpenAPI documentation
 - **Web UI** - Modern Next.js 14 interface with code highlighting
-- **Rust CLI** (`ricesearch`) - Fast search and file watching
-- **Python CLI** - Embedded in backend for advanced use cases
+- **Python CLI** (`ricesearch`) - Full-featured command-line tool for indexing and searching
+- **Rust CLI** (Experimental) - Alternative low-latency client
 - **Docker Compose** - One-command deployment with all services
 
 ## Quick Start
@@ -83,9 +83,10 @@ make logs
 ```
 
 Services will start on:
-- **Frontend**: http://localhost:3000
-- **API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
+
+- **Frontend**: <http://localhost:3000>
+- **API**: <http://localhost:8000>
+- **API Docs**: <http://localhost:8000/docs>
 
 ### 2. Install CLI
 
@@ -120,7 +121,8 @@ ricesearch search "config.yaml"
 ```
 
 **Via Web UI:**
-Open http://localhost:3000 and enter your search query.
+
+Open <http://localhost:3000> and enter your search query.
 
 **Via API:**
 ```bash
@@ -155,12 +157,13 @@ curl -X POST http://localhost:8000/api/v1/search/query \
 ```
 
 **Technology Stack:**
+
 - **Backend**: Python 3.12, FastAPI, Celery
 - **Frontend**: Next.js 14, React 18, TypeScript
 - **Search**: Tantivy (Rust), Qdrant, SPLADE, BM42
 - **Inference**: Ollama (qwen3-embedding:4b, qwen2.5-coder:1.5b)
 - **Storage**: Redis, MinIO, Qdrant
-- **CLI**: Rust (clap, tokio, notify)
+- **CLI**: Python (Typer, Rich, Watchdog)
 
 ## Project Structure
 
@@ -253,6 +256,7 @@ See [Development Guide](docs/development.md) for detailed setup instructions.
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](docs/development.md) for:
+
 - Local development setup
 - Code style guidelines
 - Testing requirements
@@ -267,6 +271,7 @@ CC BY-NC-SA 4.0 - See [LICENSE.md](LICENSE.md)
 ## Credits
 
 Built with:
+
 - [FastAPI](https://fastapi.tiangolo.com/)
 - [Qdrant](https://qdrant.tech/)
 - [Tantivy](https://github.com/quickwit-oss/tantivy)
@@ -277,5 +282,5 @@ Built with:
 ---
 
 <div align="center">
-Made with ❤️ by the Rice Search Team
+Created by the Rice Team
 </div>
